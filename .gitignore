@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+target/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+*.key
+*.pem
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Logs
+*.log
+logs/
+
+# Tauri
+src-tauri/target/
+
+# Go
+src-vpn/vendor/
+
+# IPFS
+src-ipfs/data/
