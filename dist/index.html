@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#1e88e5">
+  <title>Unkillable Messenger</title>
+  <link rel="manifest" href="/manifest.json">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;overflow:hidden}
+    .app{display:flex;height:100vh}
+
+    /* Sidebar */
+    .sidebar{width:72px;background:#111;display:flex;flex-direction:column;align-items:center;padding:16px 0;gap:4px;border-right:1px solid #222;flex-shrink:0}
+    .logo{font-size:28px;margin-bottom:12px;cursor:pointer}
+    .tab{width:56px;height:56px;background:none;border:none;color:#666;border-radius:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:all .2s}
+    .tab:hover{background:#1a1a1a;color:#aaa}
+    .tab.active{background:#1e3a5f;color:#4fc3f7}
+    .tab .icon{font-size:20px}
+    .tab .label{font-size:9px}
+    .tab .badge{background:#f44336;color:#fff;font-size:8px;padding:1px 4px;border-radius:6px;position:absolute;top:6px;right:6px}
+    .tab-wrap{position:relative}
+    .online-dot{width:6px;height:6px;border-radius:50%;background:#4caf50;position:absolute;bottom:8px;right:12px}
+
+    /* Content */
+    .content{flex:1;overflow:hidden;display:flex;flex-direction:column}
+    .tab-content{display:none;flex:1;flex-direction:column}
+    .tab-content.active{display:flex}
+
+    /* Chat */
+    .messages{flex:1;overflow-y:auto;padding:16px}
+    .msg{margin-bottom:12px;max-width:80%}
+    .msg.me{margin-left:auto}
+    .msg-bubble{padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;word-wrap:break-word}
+    .msg.me .msg-bubble{background:#1e88e5;color:#fff;border-bottom-right-radius:4px}
+    .msg.other .msg-bubble{background:#1a1a1a;border:1px solid #222;border-bottom-left-radius:4px}
+    .msg.system .msg-bubble{background:transparent;color:#555;font-size:12px;text-align:center}
+    .msg-time{font-size:10px;color:#555;margin-top:4px}
+    .msg.me .msg-time{text-align:right}
+    .msg-sender{font-size:11px;color:#1e88e5;margin-bottom:2px}
+    .welcome{text-align:center;margin-top:30vh;opacity:.4}
+    .welcome h3{margin-bottom:8px;font-size:18px}
+    .welcome p{font-size:13px;line-height:1.5}
+    .typing{padding:4px 16px;font-size:11px;color:#555;min-height:20px}
+    .input-bar{display:flex;padding:12px;border-top:1px solid #222;gap:8px;background:#0a0a0a}
+    .input-bar input{flex:1;padding:12px 16px;background:#1a1a1a;border:1px solid #333;border-radius:12px;color:#e0e0e0;font-size:14px;outline:none}
+    .input-bar input:focus{border-color:#1e88e5}
+    .input-bar button{padding:12px 20px;background:#1e88e5;color:#fff;border:none;border-radius:12px;cursor:pointer;font-size:16px;transition:all .2s}
+    .input-bar button:hover{background:#1565c0}
+
+    /* Identity */
+    .identity-panel{padding:24px;max-width:500px;overflow-y:auto}
+    .id-card{background:#111;border-radius:14px;padding:20px;border:1px solid #222;margin-bottom:16px}
+    .id-card h3{font-size:13px;color:#888;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+    .id-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+    .id-row label{font-size:11px;color:#555;width:40px;flex-shrink:0}
+    .id-row .val{flex:1;font-family:monospace;font-size:12px;color:#4fc3f7;background:#0a0a0a;padding:8px 12px;border-radius:8px;word-break:break-all}
+    .id-row .copy-btn{padding:6px 12px;background:#1a1a1a;border:1px solid #333;color:#888;border-radius:8px;cursor:pointer;font-size:11px}
+    .id-row .copy-btn:hover{background:#222;color:#e0e0e0}
+    .seed-box{background:#1a0a0a;border:1px solid #f44336;border-radius:10px;padding:16px;margin-top:12px}
+    .seed-box p{font-size:11px;color:#f44336;margin-bottom:8px}
+    .seed-words{font-family:monospace;font-size:13px;color:#e0e0e0;line-height:1.8}
+    .conn-status{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#111;border-radius:10px;font-size:12px;margin-bottom:16px}
+    .conn-dot{width:8px;height:8px;border-radius:50%}
+    .conn-dot.on{background:#4caf50}
+    .conn-dot.off{background:#f44336}
+    .conn-dot.trying{background:#ff9800;animation:pulse 1s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+    /* VPN */
+    .vpn-panel{padding:24px;max-width:500px;overflow-y:auto}
+    .header-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:24px}
+    .header-row h1{font-size:20px;font-weight:600}
+    .status{font-size:13px;padding:4px 10px;border-radius:8px;background:#111}
+    .status.ok{color:#4caf50}
+    .status.off{color:#666}
+    .status.warn{color:#ff9800}
+    .share-section{text-align:center;margin:32px 0}
+    .share-btn{font-size:16px;padding:14px 36px;background:linear-gradient(135deg,#1e88e5,#1565c0);color:#fff;border:none;border-radius:14px;cursor:pointer;transition:all .3s;font-weight:500}
+    .share-btn:hover{transform:scale(1.05);box-shadow:0 4px 20px rgba(30,136,229,.3)}
+    .share-btn:active{transform:scale(.98)}
+    .share-btn.active{background:linear-gradient(135deg,#c62828,#b71c1c)}
+    .share-btn:disabled{opacity:.5;cursor:wait;transform:none}
+    .hint{margin-top:10px;color:#555;font-size:12px}
+    .peers{margin-top:24px}
+    .peers h3{font-size:13px;color:#888;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+    .peer-item{display:flex;align-items:center;gap:10px;padding:10px;background:#111;border-radius:10px;margin-bottom:8px;border:1px solid #1a1a1a}
+    .peer-dot{width:8px;height:8px;border-radius:50%;background:#4caf50}
+    .peer-dot.offline{background:#555}
+    .peer-name{font-size:13px;flex:1}
+    .peer-ip{font-size:11px;color:#555}
+    .empty-peers{color:#333;font-size:12px;padding:20px;text-align:center}
+    .peer-remove{padding:4px 10px;background:#1a1a1a;border:1px solid #333;color:#f44336;border-radius:6px;cursor:pointer;font-size:11px;transition:all .2s}
+    .peer-remove:hover{background:#f44336;color:#fff;border-color:#f44336}
+    .add-form-msg{font-size:12px;padding:4px 0;margin-top:4px}
+
+    /* Channels */
+    .channels-panel{padding:24px}
+    .channels-panel h1{font-size:20px;margin-bottom:24px}
+    .channel-card{padding:16px;background:#111;border-radius:12px;border:1px solid #1a1a1a;margin-bottom:10px;cursor:pointer;transition:all .2s}
+    .channel-card:hover{border-color:#1e88e5;background:#151515}
+    .channel-name{font-size:14px;font-weight:500;margin-bottom:4px}
+    .channel-desc{font-size:12px;color:#666}
+    .channel-meta{font-size:11px;color:#444;margin-top:8px}
+
+    /* Toast */
+    .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);padding:10px 20px;background:#1e88e5;color:#fff;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:100;white-space:nowrap}
+    .toast.show{opacity:1}
+
+    /* Mobile */
+    @media(max-width:600px){
+      .sidebar{width:56px;padding:8px 0}
+      .tab{width:44px;height:44px}
+      .tab .label{display:none}
+      .logo{font-size:22px;margin-bottom:8px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav class="sidebar">
+      <div class="logo" onclick="showTab('identity',document.querySelector('[data-tab=identity]'))">🔥</div>
+      <div class="tab-wrap">
+        <button class="tab active" data-tab="chat" onclick="showTab('chat',this)" title="Чат">
+          <span class="icon">💬</span><span class="label">Чат</span>
+        </button>
+      </div>
+      <div class="tab-wrap">
+        <button class="tab" data-tab="vpn" onclick="showTab('vpn',this)" title="VPN">
+          <span class="icon">🌐</span><span class="label">VPN</span>
+        </button>
+      </div>
+      <div class="tab-wrap">
+        <button class="tab" data-tab="channels" onclick="showTab('channels',this)" title="Каналы">
+          <span class="icon">📡</span><span class="label">Каналы</span>
+        </button>
+      </div>
+      <div class="tab-wrap">
+        <button class="tab" data-tab="identity" onclick="showTab('identity',this)" title="Профиль">
+          <span class="icon">👤</span><span class="label">Я</span>
+        </button>
+      </div>
+    </nav>
+
+    <div class="content">
+      <!-- CHAT -->
+      <div id="tab-chat" class="tab-content active">
+        <div class="messages" id="msg-list">
+          <div class="welcome">
+            <h3>💬 Мессенджер</h3>
+            <p>Nostr-протокол · P2P · Без цензуры<br>Открой с другого устройства чтобы начать</p>
+          </div>
+        </div>
+        <div class="typing" id="typing-indicator"></div>
+        <div class="input-bar">
+          <input id="msg-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}" />
+          <button onclick="sendMsg()">➤</button>
+        </div>
+      </div>
+
+      <!-- VPN -->
+      <div id="tab-vpn" class="tab-content">
+        <div class="vpn-panel">
+          <div class="header-row">
+            <h1>🌐 Поделись интернет</h1>
+            <span class="status off" id="vpn-status">⚪ Отключено</span>
+          </div>
+          <div class="share-section">
+            <button class="share-btn" id="vpn-btn" onclick="toggleVpn()">🚀 Поделись интернетом</button>
+            <p class="hint">Нажми — друзья смогут подключиться через тебя</p>
+          </div>
+
+          <!-- Add Friend Form -->
+          <div class="id-card" style="margin-top:8px">
+            <h3>➕ Добавить друга</h3>
+            <div style="margin-bottom:10px">
+              <input id="peer-name" placeholder="Имя друга" style="width:100%;padding:10px 14px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:13px;outline:none" />
+            </div>
+            <div style="margin-bottom:10px">
+              <input id="peer-pubkey" placeholder="Публичный ключ" style="width:100%;padding:10px 14px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:13px;font-family:monospace;outline:none" />
+            </div>
+            <div style="margin-bottom:12px">
+              <input id="peer-endpoint" placeholder="Endpoint (ip:port)" style="width:100%;padding:10px 14px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:13px;outline:none" />
+            </div>
+            <button onclick="addPeerFromForm()" style="width:100%;padding:12px;background:#1e88e5;color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s">Добавить</button>
+          </div>
+
+          <!-- Peer List -->
+          <div class="peers" style="margin-top:16px">
+            <h3>Подключённые пиры</h3>
+            <div id="peer-list">
+              <div class="empty-peers">Пока никто не подключён</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CHANNELS -->
+      <div id="tab-channels" class="tab-content">
+        <div class="channels-panel">
+          <h1>📡 Каналы</h1>
+          <div class="channel-card" onclick="toast('Каналы — Phase 2')">
+            <div class="channel-name">🏛 Новости платформы</div>
+            <div class="channel-desc">Обновления и анонсы</div>
+            <div class="channel-meta">128 подписчиков</div>
+          </div>
+          <div class="channel-card" onclick="toast('Каналы — Phase 2')">
+            <div class="channel-name">💡 Идеи и фичи</div>
+            <div class="channel-desc">Обсуждение новых функций</div>
+            <div class="channel-meta">64 подписчика</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- IDENTITY -->
+      <div id="tab-identity" class="tab-content">
+        <div class="identity-panel">
+          <div class="conn-status" id="conn-status">
+            <div class="conn-dot trying" id="conn-dot"></div>
+            <span id="conn-text">Подключение...</span>
+          </div>
+          <div class="id-card">
+            <h3>🔑 Твой ID</h3>
+            <div class="id-row">
+              <label>npub</label>
+              <div class="val" id="my-npub">загрузка...</div>
+              <button class="copy-btn" onclick="copyId('my-npub')">📋</button>
+            </div>
+          </div>
+          <div class="id-card">
+            <h3>👥 Онлайн</h3>
+            <div id="online-list" style="font-size:13px;color:#666">загрузка...</div>
+          </div>
+          <div class="id-card" id="seed-card" style="display:none">
+            <h3>⚠️ Seed Phrase — запиши!</h3>
+            <div class="seed-box">
+              <p>Это единственный способ восстановить аккаунт. Запиши на бумаге!</p>
+              <div class="seed-words" id="seed-words"></div>
+            </div>
+            <button class="copy-btn" style="margin-top:12px" onclick="copyId('seed-words')">📋 Копировать seed</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ========== GLOBALS ==========
+    let myId = '';
+    let ws = null;
+    let msgCount = 0;
+    let reconnectDelay = 1000;
+
+    // ========== TABS ==========
+    function showTab(name, btn) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(d => d.classList.remove('active'));
+      document.getElementById('tab-' + name).classList.add('active');
+      if (btn) btn.classList.add('active');
+      if (name === 'chat') document.getElementById('msg-input').focus();
+    }
+
+    // ========== IDENTITY ==========
+    async function loadIdentity() {
+      try {
+        const r = await fetch('/api/identity');
+        const d = await r.json();
+        myId = d.npub;
+        document.getElementById('my-npub').textContent = d.npub;
+        if (d.isNew && d.mnemonic) {
+          document.getElementById('seed-card').style.display = 'block';
+          document.getElementById('seed-words').textContent = d.mnemonic;
+        }
+        connectWS();
+      } catch(e) {
+        console.error('Identity failed:', e);
+        setTimeout(loadIdentity, 3000);
+      }
+    }
+
+    // ========== WEBSOCKET ==========
+    function connectWS() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const url = proto + '//' + location.host + '/ws?userId=' + encodeURIComponent(myId);
+      ws = new WebSocket(url);
+
+      ws.onopen = () => {
+        setConn('on', 'Подключён');
+        reconnectDelay = 1000;
+        toast('✅ Подключён к чату');
+      };
+
+      ws.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'chat') {
+            addMsg(msg.from, msg.text, msg.from === myId);
+          } else if (msg.type === 'join') {
+            addSystemMsg(msg.from + ' подключился');
+            refreshOnline();
+          } else if (msg.type === 'leave') {
+            addSystemMsg(msg.from + ' отключился');
+            refreshOnline();
+          } else if (msg.type === 'typing') {
+            document.getElementById('typing-indicator').textContent = msg.from.substring(0,8) + '... печатает';
+            clearTimeout(window._typingTimeout);
+            window._typingTimeout = setTimeout(() => {
+              document.getElementById('typing-indicator').textContent = '';
+            }, 2000);
+          }
+        } catch(err) {}
+      };
+
+      ws.onclose = () => {
+        setConn('off', 'Отключён. Переподключение...');
+        setTimeout(() => {
+          reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+          connectWS();
+        }, reconnectDelay);
+      };
+
+      ws.onerror = () => {
+        setConn('off', 'Ошибка подключения');
+      };
+    }
+
+    function setConn(state, text) {
+      const dot = document.getElementById('conn-dot');
+      const txt = document.getElementById('conn-text');
+      dot.className = 'conn-dot ' + state;
+      txt.textContent = text;
+    }
+
+    // ========== CHAT ==========
+    const msgList = document.getElementById('msg-list');
+    const msgInput = document.getElementById('msg-input');
+
+    function addMsg(from, text, isMe) {
+      if (msgCount === 0) msgList.innerHTML = '';
+      msgCount++;
+      const time = new Date().toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit'});
+      const div = document.createElement('div');
+      div.className = 'msg ' + (isMe ? 'me' : 'other');
+      const sender = isMe ? '' : '<div class="msg-sender">' + escHtml(from.substring(0,12)) + '...</div>';
+      div.innerHTML = sender + '<div class="msg-bubble">' + escHtml(text) + '</div><div class="msg-time">' + time + '</div>';
+      msgList.appendChild(div);
+      msgList.scrollTop = msgList.scrollHeight;
+    }
+
+    function addSystemMsg(text) {
+      if (msgCount === 0) msgList.innerHTML = '';
+      msgCount++;
+      const div = document.createElement('div');
+      div.className = 'msg system';
+      div.innerHTML = '<div class="msg-bubble">' + escHtml(text) + '</div>';
+      msgList.appendChild(div);
+      msgList.scrollTop = msgList.scrollHeight;
+    }
+
+    function sendMsg() {
+      const text = msgInput.value.trim();
+      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+      const msg = {type:'chat', from:myId, to:'broadcast', text:text, ts:Date.now()/1000|0};
+      ws.send(JSON.stringify(msg));
+      addMsg(myId, text, true);
+      msgInput.value = '';
+      msgInput.focus();
+    }
+
+    function escHtml(s) {
+      return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    // ========== ONLINE USERS ==========
+    async function refreshOnline() {
+      try {
+        const r = await fetch('/api/online');
+        const d = await r.json();
+        const el = document.getElementById('online-list');
+        if (d.count === 0) {
+          el.innerHTML = '<span style="color:#555">Только ты онлайн</span>';
+        } else {
+          el.innerHTML = d.users.map(u => '<div style="padding:4px 0">🟢 ' + escHtml(u.substring(0,16)) + '...</div>').join('');
+        }
+      } catch(e) {}
+    }
+
+    // ========== VPN ==========
+    let vpnSharing = false;
+    let vpnTimer = null;
+    let vpnSeconds = 0;
+
+    function toggleVpn() {
+      const btn = document.getElementById('vpn-btn');
+      const status = document.getElementById('vpn-status');
+
+      if (vpnSharing) {
+        vpnSharing = false;
+        clearInterval(vpnTimer);
+        vpnSeconds = 0;
+        btn.textContent = '🚀 Поделись интернетом';
+        btn.classList.remove('active');
+        status.textContent = '⚪ Отключено';
+        status.className = 'status off';
+        toast('Точка доступа остановлена');
+        fetch('/api/vpn/rpc', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({method:'stop_exit_node'})}).catch(()=>{});
+      } else {
+        vpnSharing = true;
+        btn.textContent = '⏳ Запуск...';
+        btn.disabled = true;
+        status.textContent = '🟡 Подключение...';
+        status.className = 'status warn';
+        fetch('/api/vpn/rpc', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({method:'start_exit_node'})}).catch(()=>{});
+
+        setTimeout(() => {
+          btn.textContent = '⏹ Остановить точку';
+          btn.classList.add('active');
+          btn.disabled = false;
+          status.textContent = '🟢 Делю интернет (0:00)';
+          status.className = 'status ok';
+          toast('✅ Точка доступа запущена!');
+
+          vpnTimer = setInterval(() => {
+            vpnSeconds++;
+            const m = Math.floor(vpnSeconds / 60);
+            const s = vpnSeconds % 60;
+            status.textContent = '🟢 Делю интернет (' + m + ':' + String(s).padStart(2,'0') + ')';
+            // Refresh peers from API every 10 seconds
+            if (vpnSeconds % 10 === 0) loadPeers();
+          }, 1000);
+        }, 1500);
+      }
+    }
+
+    // ========== Peer Management ==========
+    async function loadPeers() {
+      try {
+        const r = await fetch('/api/peers');
+        const d = await r.json();
+        renderPeers(d.peers || []);
+      } catch(e) {
+        console.error('Failed to load peers:', e);
+      }
+    }
+
+    function renderPeers(peers) {
+      const pl = document.getElementById('peer-list');
+      if (!peers || peers.length === 0) {
+        pl.innerHTML = '<div class="empty-peers">Пока никто не подключён</div>';
+        return;
+      }
+      pl.innerHTML = peers.map(p => {
+        const dotClass = p.online ? 'peer-dot' : 'peer-dot offline';
+        const ip = p.allowedIPs || p.endpoint || '';
+        return '<div class="peer-item" data-peer-id="' + escHtml(p.id) + '">' +
+          '<div class="' + dotClass + '"></div>' +
+          '<div class="peer-name">' + escHtml(p.name || p.id) + '</div>' +
+          '<div class="peer-ip">' + escHtml(ip) + '</div>' +
+          '<button class="peer-remove" onclick="removePeer(\'' + escHtml(p.id) + '\', this)">✕</button>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function addPeerFromForm() {
+      const name = document.getElementById('peer-name').value.trim();
+      const pubKey = document.getElementById('peer-pubkey').value.trim();
+      const endpoint = document.getElementById('peer-endpoint').value.trim();
+
+      if (!pubKey) {
+        toast('❌ Публичный ключ обязателен');
+        return;
+      }
+
+      try {
+        const r = await fetch('/api/peers', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: name, publicKey: pubKey, endpoint: endpoint})
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          toast('❌ ' + (d.error && d.error.message ? d.error.message : 'Ошибка'));
+          return;
+        }
+        renderPeers(d.peers || []);
+        document.getElementById('peer-name').value = '';
+        document.getElementById('peer-pubkey').value = '';
+        document.getElementById('peer-endpoint').value = '';
+        toast('✅ ' + (name || 'Пир') + ' добавлен!');
+      } catch(e) {
+        toast('❌ Ошибка добавления пира');
+      }
+    }
+
+    async function removePeer(peerId, btn) {
+      if (!confirm('Удалить пира ' + peerId + '?')) return;
+      try {
+        const r = await fetch('/api/peers', {
+          method: 'DELETE',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({peerId: peerId})
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          toast('❌ ' + (d.error && d.error.message ? d.error.message : 'Ошибка'));
+          return;
+        }
+        renderPeers(d.peers || []);
+        toast('🗑 Пир удалён');
+      } catch(e) {
+        toast('❌ Ошибка удаления пира');
+      }
+    }
+
+    // ========== TOAST ==========
+    function toast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2500);
+    }
+
+    function copyId(elId) {
+      const text = document.getElementById(elId).textContent;
+      navigator.clipboard.writeText(text).then(() => toast('📋 Скопировано!')).catch(() => toast('❌ Не удалось скопировать'));
+    }
+
+    // ========== PWA ==========
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+
+    // ========== INIT ==========
+    loadIdentity();
+    loadPeers();
+    setInterval(refreshOnline, 10000);
+  </script>
+</body>
+</html>

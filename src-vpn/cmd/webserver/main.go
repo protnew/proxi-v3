@@ -91,7 +91,7 @@ func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			origin = "*"
 		}
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 
@@ -358,6 +358,18 @@ func main() {
 		}
 	}))
 	http.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
+	http.HandleFunc("/api/peers", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			handlePeersGet(w, r)
+		case "POST":
+			handlePeersAdd(w, r)
+		case "DELETE":
+			handlePeersRemove(w, r)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
+		}
+	}))
 	// WebSocket + Identity
 	http.HandleFunc("/ws", handleWS)
 	http.HandleFunc("/api/identity", apiChain(handleIdentityGet))
