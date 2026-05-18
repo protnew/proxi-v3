@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/identity"
 
 	"golang.org/x/time/rate"
@@ -63,41 +64,9 @@ func getMessages(since int64) []Message {
 	return filtered
 }
 
-// ========== VPN simulated state ==========
+// ========== VPN Manager ==========
 
-type VPNStatus struct {
-	State      string `json:"state"`
-	PublicKey  string `json:"publicKey"`
-	IPAddress  string `json:"ipAddress"`
-	Uptime     int64  `json:"uptime"`
-	PeersCount int    `json:"peersCount"`
-	IsExitNode bool   `json:"isExitNode"`
-}
-
-var (
-	vpnState      = "disconnected"
-	vpnStart      time.Time
-	vpnPubKey     = "demo-pk-unkillable-messenger-v0.1.0"
-	vpnIsExitNode = false
-	vpnMutex      sync.RWMutex
-)
-
-func getVPNStatus() VPNStatus {
-	vpnMutex.RLock()
-	defer vpnMutex.RUnlock()
-	uptime := int64(0)
-	if vpnState == "sharing" || vpnState == "connected" {
-		uptime = int64(time.Since(vpnStart).Seconds())
-	}
-	return VPNStatus{
-		State:      vpnState,
-		PublicKey:  vpnPubKey,
-		IPAddress:  "10.77.0.1",
-		Uptime:     uptime,
-		PeersCount: 0,
-		IsExitNode: vpnIsExitNode,
-	}
-}
+var vpnMgr *vpn.Manager
 
 // ========== Rate limiter ==========
 
@@ -218,12 +187,12 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
-	vpn := getVPNStatus()
+	vpnStatus := vpnMgr.GetStatus()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "running",
 		"version": "0.1.0",
-		"vpn":     vpn.State,
-		"vpnInfo": vpn,
+		"vpn":     string(vpnStatus.State),
+		"vpnInfo": vpnStatus,
 	})
 }
 
@@ -304,86 +273,10 @@ func handleVpnRPC(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	var req struct {
-		Method string          `json:"method"`
-		Params json.RawMessage `json:"params"`
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"jsonrpc": "2.0",
-			"error":   map[string]interface{}{"code": -32700, "message": "parse error"},
-		})
-		return
-	}
-
-	var result interface{}
-	vpnMutex.Lock()
-
-	switch req.Method {
-	case "get_status":
-		vpnMutex.Unlock()
-		result = getVPNStatus()
-
-	case "get_public_key":
-		vpnMutex.Unlock()
-		result = map[string]string{"publicKey": vpnPubKey}
-
-	case "start_exit_node":
-		vpnState = "sharing"
-		vpnIsExitNode = true
-		vpnStart = time.Now()
-		vpnMutex.Unlock()
-		result = map[string]string{"status": "sharing"}
-		log.Println("🔗 VPN exit node started (simulated)")
-
-	case "stop_exit_node":
-		vpnState = "disconnected"
-		vpnIsExitNode = false
-		vpnMutex.Unlock()
-		result = map[string]string{"status": "stopped"}
-		log.Println("🔌 VPN exit node stopped")
-
-	case "connect_to_exit_node":
-		vpnState = "connected"
-		vpnStart = time.Now()
-		vpnMutex.Unlock()
-		result = map[string]string{"status": "connected"}
-		log.Println("📡 Connected to exit node (simulated)")
-
-	case "disconnect":
-		vpnState = "disconnected"
-		vpnMutex.Unlock()
-		result = map[string]string{"status": "disconnected"}
-		log.Println("🔌 VPN disconnected")
-
-	case "add_peer":
-		var params struct {
-			Name      string `json:"name"`
-			PublicKey string `json:"publicKey"`
-			Endpoint  string `json:"endpoint"`
-		}
-		json.Unmarshal(req.Params, &params)
-		vpnMutex.Unlock()
-		result = map[string]string{"status": "added"}
-		log.Printf("👤 Peer added: %s (%s)", params.Name, truncate(params.PublicKey, 16))
-
-	case "remove_peer":
-		vpnMutex.Unlock()
-		result = map[string]string{"status": "removed"}
-
-	default:
-		vpnMutex.Unlock()
-		writeJSON(w, http.StatusOK, map[string]interface{}{
-			"jsonrpc": "2.0",
-			"error":   map[string]interface{}{"code": -32601, "message": fmt.Sprintf("method not found: %s", req.Method)},
-		})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"jsonrpc": "2.0",
-		"result":  result,
-	})
+	resp := vpnMgr.HandleRPC(body)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
 }
 
 // ========== Utils ==========
@@ -426,6 +319,14 @@ func main() {
 
 	// Initialize chat hub
 	initHub()
+
+	// Initialize VPN Manager
+	var vpnErr error
+	vpnMgr, vpnErr = vpn.NewManager(getDataDir() + "/vpn")
+	if vpnErr != nil {
+		log.Fatalf("❌ Failed to initialize VPN Manager: %v", vpnErr)
+	}
+	log.Println("🔒 VPN Manager initialized")
 
 	// Initialize identity
 	idPath := getDataDir() + "/identity.json"
