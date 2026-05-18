@@ -9,60 +9,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/identity"
+	"github.com/unkillable-messenger/vpn/store"
 
 	"golang.org/x/time/rate"
 )
 
-// ========== In-memory message store (MVP) ==========
+// ========== SQLite-backed store ==========
 
-type Message struct {
-	ID        string `json:"id"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Text      string `json:"text"`
-	Timestamp int64  `json:"timestamp"`
-}
-
-var (
-	messages   []Message
-	msgMutex   sync.RWMutex
-	msgCounter int
-)
-
-func addMessage(from, to, text string) Message {
-	msgMutex.Lock()
-	defer msgMutex.Unlock()
-	msgCounter++
-	msg := Message{
-		ID:        fmt.Sprintf("msg-%d", msgCounter),
-		From:      from,
-		To:        to,
-		Text:      text,
-		Timestamp: time.Now().Unix(),
-	}
-	messages = append(messages, msg)
-	return msg
-}
-
-func getMessages(since int64) []Message {
-	msgMutex.RLock()
-	defer msgMutex.RUnlock()
-	if since == 0 {
-		return messages
-	}
-	var filtered []Message
-	for _, m := range messages {
-		if m.Timestamp > since {
-			filtered = append(filtered, m)
-		}
-	}
-	return filtered
-}
+var db *store.Store
 
 // ========== VPN Manager ==========
 
@@ -201,9 +159,20 @@ func handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("since"); v != "" {
 		fmt.Sscanf(v, "%d", &since)
 	}
-	msgs := getMessages(since)
+	npub := r.URL.Query().Get("npub")
+	limit := 200
+	if v := r.URL.Query().Get("limit"); v != "" {
+		fmt.Sscanf(v, "%d", &limit)
+	}
+
+	msgs, err := db.GetMessages(limit, since, npub)
+	if err != nil {
+		log.Printf("ERROR: db.GetMessages: %v", err)
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to load messages")
+		return
+	}
 	if msgs == nil {
-		msgs = []Message{}
+		msgs = []store.Message{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"messages": msgs,
@@ -250,7 +219,20 @@ func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		req.To = "broadcast"
 	}
 
-	msg := addMessage(req.From, req.To, req.Text)
+	msg := store.Message{
+		ID:        fmt.Sprintf("msg-%d", time.Now().UnixNano()),
+		From:      req.From,
+		To:        req.To,
+		Text:      req.Text,
+		Encrypted: false,
+		Timestamp: time.Now().Unix(),
+	}
+
+	// Persist to SQLite
+	if err := db.SaveMessage(msg); err != nil {
+		log.Printf("WARNING: failed to save message to db: %v", err)
+	}
+
 	writeJSON(w, http.StatusCreated, msg)
 
 	log.Printf("💬 Message from %s to %s: %s", req.From, req.To, truncate(req.Text, 50))
@@ -317,8 +299,13 @@ func main() {
 		log.Printf("📁 Serving static files from %s", distDir)
 	}
 
-	// Initialize chat hub
-	initHub()
+	// Initialize SQLite store
+	var dbErr error
+	db, dbErr = store.NewStore(getDataDir() + "/messenger.db")
+	if dbErr != nil {
+		log.Fatalf("❌ Failed to initialize SQLite store: %v", dbErr)
+	}
+	log.Println("💾 SQLite store initialized")
 
 	// Initialize VPN Manager
 	var vpnErr error
@@ -328,15 +315,25 @@ func main() {
 	}
 	log.Println("🔒 VPN Manager initialized")
 
-	// Initialize identity
-	idPath := getDataDir() + "/identity.json"
-	if _, err := os.Stat(idPath); err == nil {
-		privKey, err := identity.LoadIdentity(idPath)
-		if err == nil {
-			npub := identity.PubKeyToNpub(privKey.PubKey())
-			log.Printf("🔑 Identity loaded: %s", npub)
+	// Initialize identity — try DB first, fall back to file
+	npub, _, _, idErr := db.LoadIdentity()
+	if idErr != nil {
+		// No identity in DB yet; try loading from legacy file
+		idPath := getDataDir() + "/identity.json"
+		privKey, fileErr := identity.LoadIdentity(idPath)
+		if fileErr == nil {
+			// Migrate file-based identity to DB
+			npub = identity.PubKeyToNpub(privKey.PubKey())
+			nsec := identity.PrivKeyToNsec(privKey)
+			_ = db.SaveIdentity(npub, nsec, "")
+			log.Printf("🔑 Identity migrated from file to DB: %s", npub)
 		}
+	} else {
+		log.Printf("🔑 Identity loaded from DB: %s", npub)
 	}
+
+	// Initialize chat hub
+	initHub()
 
 	fs := http.FileServer(http.Dir(distDir))
 
@@ -353,6 +350,16 @@ func main() {
 			handleMessagesGet(w, r)
 		case "POST":
 			handleMessagesPost(w, r)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
+		}
+	}))
+	http.HandleFunc("/api/channels", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			handleChannelsGet(w, r)
+		case "POST":
+			handleChannelsPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}

@@ -200,15 +200,22 @@
       <div id="tab-channels" class="tab-content">
         <div class="channels-panel">
           <h1>📡 Каналы</h1>
-          <div class="channel-card" onclick="toast('Каналы — Phase 2')">
-            <div class="channel-name">🏛 Новости платформы</div>
-            <div class="channel-desc">Обновления и анонсы</div>
-            <div class="channel-meta">128 подписчиков</div>
+
+          <!-- Create Channel Form -->
+          <div class="id-card" style="margin-bottom:20px">
+            <h3>➕ Создать канал</h3>
+            <div style="margin-bottom:10px">
+              <input id="ch-name" placeholder="Название канала" style="width:100%;padding:10px 14px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:13px;outline:none" />
+            </div>
+            <div style="margin-bottom:12px">
+              <input id="ch-desc" placeholder="Описание (необязательно)" style="width:100%;padding:10px 14px;background:#0a0a0a;border:1px solid #333;border-radius:8px;color:#e0e0e0;font-size:13px;outline:none" />
+            </div>
+            <button onclick="createChannel()" style="width:100%;padding:12px;background:#1e88e5;color:#fff;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s">Создать</button>
           </div>
-          <div class="channel-card" onclick="toast('Каналы — Phase 2')">
-            <div class="channel-name">💡 Идеи и фичи</div>
-            <div class="channel-desc">Обсуждение новых функций</div>
-            <div class="channel-meta">64 подписчика</div>
+
+          <!-- Channel List -->
+          <div id="channel-list">
+            <div class="empty-peers">Загрузка каналов...</div>
           </div>
         </div>
       </div>
@@ -515,6 +522,72 @@
       }
     }
 
+    // ========== CHANNELS ==========
+    async function loadChannels() {
+      try {
+        const r = await fetch('/api/channels');
+        const d = await r.json();
+        renderChannels(d.channels || []);
+      } catch(e) {
+        console.error('Failed to load channels:', e);
+        document.getElementById('channel-list').innerHTML = '<div class="empty-peers">Ошибка загрузки каналов</div>';
+      }
+    }
+
+    function renderChannels(channels) {
+      const el = document.getElementById('channel-list');
+      if (!channels || channels.length === 0) {
+        el.innerHTML = '<div class="empty-peers">Пока нет каналов — создай первый!</div>';
+        return;
+      }
+      el.innerHTML = channels.map(ch => {
+        const subText = ch.subscribers + ' подписчик' + (ch.subscribers === 1 ? '' : ch.subscribers < 5 ? 'а' : 'ов');
+        const creatorShort = ch.creator ? ch.creator.substring(0, 12) + '...' : 'unknown';
+        return '<div class="channel-card" data-channel-id="' + escHtml(ch.id) + '">' +
+          '<div class="channel-name">' + escHtml(ch.name) + '</div>' +
+          (ch.description ? '<div class="channel-desc">' + escHtml(ch.description) + '</div>' : '') +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">' +
+            '<div class="channel-meta">' + subText + ' · ' + creatorShort + '</div>' +
+            '<button onclick="subscribeChannel(\'' + escHtml(ch.id) + '\', this)" style="padding:4px 12px;background:#1e88e5;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px">Подписаться</button>' +
+          '</div>' +
+          '</div>';
+      }).join('');
+    }
+
+    async function createChannel() {
+      const name = document.getElementById('ch-name').value.trim();
+      const desc = document.getElementById('ch-desc').value.trim();
+      if (!name) {
+        toast('❌ Введите название канала');
+        return;
+      }
+      try {
+        const r = await fetch('/api/channels', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: name, description: desc, creator: myId || 'anonymous'})
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          toast('❌ ' + (d.error && d.error.message ? d.error.message : 'Ошибка'));
+          return;
+        }
+        document.getElementById('ch-name').value = '';
+        document.getElementById('ch-desc').value = '';
+        toast('✅ Канал «' + name + '» создан!');
+        loadChannels();
+      } catch(e) {
+        toast('❌ Ошибка создания канала');
+      }
+    }
+
+    function subscribeChannel(channelId, btn) {
+      btn.textContent = '✓ Подписан';
+      btn.disabled = true;
+      btn.style.background = '#333';
+      toast('📡 Вы подписались на канал');
+    }
+
     // ========== TOAST ==========
     function toast(msg) {
       const t = document.getElementById('toast');
@@ -536,6 +609,7 @@
     // ========== INIT ==========
     loadIdentity();
     loadPeers();
+    loadChannels();
     setInterval(refreshOnline, 10000);
   </script>
 </body>

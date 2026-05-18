@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
+	"github.com/unkillable-messenger/vpn/store"
 
 	"nhooyr.io/websocket"
 )
@@ -46,40 +48,45 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 
 // handleIdentityGet returns current user's identity (generates if needed)
 func handleIdentityGet(w http.ResponseWriter, r *http.Request) {
-	identityPath := getDataDir() + "/identity.json"
-
-	privKey, err := identity.LoadIdentity(identityPath)
-	if err != nil {
-		privKey, _, err = identity.GenerateKeyPair()
-		if err != nil {
-			writeError(w, 500, "KEYGEN_ERROR", "Failed to generate keys")
-			return
-		}
-
-		if err := identity.SaveIdentity(privKey, identityPath); err != nil {
-			log.Printf("WARNING: failed to save identity: %v", err)
-		}
-
-		mnemonic, _ := identity.GenerateMnemonic()
-		nsec := identity.PrivKeyToNsec(privKey)
-		npub := identity.PubKeyToNpub(privKey.PubKey())
-
+	// Try loading from DB first
+	npub, nsec, seedPhrase, err := db.LoadIdentity()
+	if err == nil && npub != "" {
 		writeJSON(w, 200, map[string]interface{}{
 			"npub":     npub,
 			"nsec":     nsec,
-			"mnemonic": mnemonic,
-			"isNew":    true,
+			"isNew":    false,
+			"mnemonic": seedPhrase,
 		})
 		return
 	}
 
-	nsec := identity.PrivKeyToNsec(privKey)
-	npub := identity.PubKeyToNpub(privKey.PubKey())
+	// No identity in DB — generate new one
+	privKey, _, genErr := identity.GenerateKeyPair()
+	if genErr != nil {
+		writeError(w, 500, "KEYGEN_ERROR", "Failed to generate keys")
+		return
+	}
+
+	mnemonic, _ := identity.GenerateMnemonic()
+	nsec = identity.PrivKeyToNsec(privKey)
+	npub = identity.PubKeyToNpub(privKey.PubKey())
+
+	// Save to SQLite
+	if saveErr := db.SaveIdentity(npub, nsec, mnemonic); saveErr != nil {
+		log.Printf("WARNING: failed to save identity to db: %v", saveErr)
+	}
+
+	// Also save to legacy file for backward compat
+	identityPath := getDataDir() + "/identity.json"
+	if fileErr := identity.SaveIdentity(privKey, identityPath); fileErr != nil {
+		log.Printf("WARNING: failed to save identity file: %v", fileErr)
+	}
 
 	writeJSON(w, 200, map[string]interface{}{
-		"npub":  npub,
-		"nsec":  nsec,
-		"isNew": false,
+		"npub":     npub,
+		"nsec":     nsec,
+		"mnemonic": mnemonic,
+		"isNew":    true,
 	})
 }
 
@@ -224,4 +231,73 @@ func randomHex(n int) string {
 	b := make([]byte, n)
 	rand.Read(b)
 	return fmt.Sprintf("%x", b)[:n*2]
+}
+
+// ========== Channel Handlers ==========
+
+// handleChannelsGet — GET /api/channels — список каналов
+func handleChannelsGet(w http.ResponseWriter, r *http.Request) {
+	channels, err := db.GetChannels()
+	if err != nil {
+		log.Printf("ERROR: db.GetChannels: %v", err)
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to load channels")
+		return
+	}
+	if channels == nil {
+		channels = []store.Channel{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"channels": channels,
+		"count":    len(channels),
+	})
+}
+
+// handleChannelsPost — POST /api/channels — создать канал
+func handleChannelsPost(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
+		return
+	}
+	defer r.Body.Close()
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Creator     string `json:"creator"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
+		return
+	}
+
+	if strings.TrimSpace(req.Name) == "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Channel name is required")
+		return
+	}
+	if len(req.Name) > 100 {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Channel name too long (max 100 chars)")
+		return
+	}
+	if req.Creator == "" {
+		req.Creator = "anonymous"
+	}
+
+	ch := store.Channel{
+		ID:          fmt.Sprintf("ch-%d", time.Now().UnixNano()),
+		Name:        req.Name,
+		Description: req.Description,
+		Creator:     req.Creator,
+		Subscribers: 1,
+		CreatedAt:   time.Now().Unix(),
+	}
+
+	if err := db.SaveChannel(ch); err != nil {
+		log.Printf("ERROR: db.SaveChannel: %v", err)
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to save channel")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, ch)
+	log.Printf("📡 Channel created: %s by %s", req.Name, truncate(req.Creator, 16)+"...")
 }
