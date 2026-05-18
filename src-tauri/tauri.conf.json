@@ -9,14 +9,12 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "title": "Unkillable Messenger",
     "windows": [
       {
         "title": "Unkillable Messenger",
         "width": 1000,
         "height": 700,
-        "resizable": true,
-        "fullscreen": false
+        "resizable": true
       }
     ],
     "security": {
