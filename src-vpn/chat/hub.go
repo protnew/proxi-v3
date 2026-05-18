@@ -63,7 +63,20 @@ func (h *ChatHub) Register(c *Client) {
 	c.hub = h
 	h.clients[c.UserID] = c
 
-	// Announce join.
+	// Send welcome to the new client directly.
+	welcome, _ := (&Message{
+		Type: TypeJoin,
+		From: "system",
+		To:   c.UserID,
+		Text: "connected",
+		Ts:   time.Now().Unix(),
+	}).Encode()
+	select {
+	case c.Send <- welcome:
+	default:
+	}
+
+	// Announce join to everyone else.
 	joinMsg, _ := (&Message{
 		Type: TypeJoin,
 		From: c.UserID,
