@@ -1,9 +1,9 @@
 package vpn
 
 import (
-    "bytes"
     "context"
     "crypto/rand"
+    "encoding/base64"
     "encoding/hex"
     "encoding/json"
     "fmt"
@@ -13,6 +13,8 @@ import (
     "path/filepath"
     "sync"
     "time"
+
+    "golang.org/x/crypto/curve25519"
 )
 
 // VPNState — состояние VPN
@@ -125,38 +127,39 @@ func (m *Manager) loadOrGenerateKeys() error {
     return os.WriteFile(keyFile, []byte(m.privKey), 0600)
 }
 
-// generateKeyPair — генерация WireGuard ключевой пары
+// generateKeyPair — генерация WireGuard ключевой пары (curve25519, без wg CLI)
 func (m *Manager) generateKeyPair() (private, public string, err error) {
-    // Используем wg command если доступен
-    privKey, err := exec.Command("wg", "genkey").Output()
-    if err == nil {
-        private = string(privKey)
-        pubOut, err2 := exec.Command("wg", "pubkey").Output()
-        if err2 == nil {
-            public = string(pubOut)
-            return
-        }
+    var privateKey [32]byte
+    if _, err = rand.Read(privateKey[:]); err != nil {
+        return "", "", err
     }
+    // WireGuard: clamp private key
+    privateKey[0] &= 248
+    privateKey[31] = (privateKey[31] & 127) | 64
 
-    // Fallback: генерируем ключ через crypto/rand
-    key := make([]byte, 32)
-    if _, err = rand.Read(key); err != nil {
-        return
-    }
-    private = hex.EncodeToString(key)
-    public = hex.EncodeToString(key) // Упрощённо — в production нужен Curve25519
+    var publicKey [32]byte
+    curve25519.ScalarBaseMult(&publicKey, &privateKey)
+
+    private = base64.StdEncoding.EncodeToString(privateKey[:])
+    public = base64.StdEncoding.EncodeToString(publicKey[:])
     return
 }
 
-// derivePublicKey — получение публичного ключа из приватного
+// derivePublicKey — получение публичного ключа из приватного (curve25519)
 func (m *Manager) derivePublicKey(privKey string) (string, error) {
-    cmd := exec.Command("wg", "pubkey")
-    cmd.Stdin = bytes.NewBufferString(privKey)
-    out, err := cmd.Output()
+    keyBytes, err := base64.StdEncoding.DecodeString(privKey)
     if err != nil {
-        return privKey, nil // fallback
+        // try hex
+        keyBytes, err = hex.DecodeString(privKey)
+        if err != nil {
+            return privKey, nil // fallback
+        }
     }
-    return string(out), nil
+    var privateKey [32]byte
+    copy(privateKey[:], keyBytes)
+    var publicKey [32]byte
+    curve25519.ScalarBaseMult(&publicKey, &privateKey)
+    return base64.StdEncoding.EncodeToString(publicKey[:]), nil
 }
 
 // StartExitNode — начать делиться интернетом (стать exit node)
@@ -217,6 +220,9 @@ func (m *Manager) StopExitNode() error {
 
 // ConnectToExitNode — подключиться к exit node друга
 func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint string) error {
+    if len(peerPubKey) < 16 {
+        return fmt.Errorf("public key too short (min 16 chars, got %d)", len(peerPubKey))
+    }
     m.mu.Lock()
     defer m.mu.Unlock()
 
@@ -293,6 +299,9 @@ func (m *Manager) GetStatus() Status {
 
 // AddPeer — добавить друга (ручной exchange)
 func (m *Manager) AddPeer(name, pubKey, endpoint string) error {
+    if len(pubKey) < 16 {
+        return fmt.Errorf("public key too short (min 16 chars, got %d)", len(pubKey))
+    }
     m.mu.Lock()
     defer m.mu.Unlock()
 
