@@ -2,18 +2,16 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
-  export let vpnStatus;
-  export let toggleVpn;
-
-  let peers = [];
-  let myPublicKey = '';
-  let loading = false;
+  let vpnStatus = $state('disconnected');
+  let myPublicKey = $state('');
+  let loading = $state(false);
+  let peers = $state([]);
 
   onMount(async () => {
     try {
       const status = await invoke('vpn_status');
       if (status.state) {
-        $state = status.state;
+        vpnStatus = status.state;
       }
       const key = await invoke('vpn_get_public_key');
       myPublicKey = key || '';
@@ -29,7 +27,6 @@
         await invoke('vpn_stop_exit_node');
         vpnStatus = 'disconnected';
       } else {
-        // Start VPN process first if needed
         await invoke('vpn_start');
         await invoke('vpn_start_exit_node');
         vpnStatus = 'sharing';
@@ -55,7 +52,7 @@
   </div>
 
   <div class="share-section">
-    <button class="share-btn" class:active={vpnStatus === 'sharing'} on:click={shareInternet} disabled={loading}>
+    <button class="share-btn" class:active={vpnStatus === 'sharing'} onclick={shareInternet} disabled={loading}>
       {#if loading}
         ⏳ ...
       {:else if vpnStatus === 'sharing'}
@@ -72,7 +69,7 @@
       <h3>Твой публичный ключ</h3>
       <div class="key-row">
         <code class="key">{myPublicKey.substring(0, 20)}...{myPublicKey.substring(myPublicKey.length - 8)}</code>
-        <button class="copy-btn" on:click={copyKey}>📋</button>
+        <button class="copy-btn" onclick={copyKey}>📋</button>
       </div>
       <p class="hint">Поделись с другом — он добавит тебя как пир</p>
     </div>

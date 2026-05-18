@@ -4,25 +4,11 @@
   import ChatPanel from './components/ChatPanel.svelte';
   import VpnPanel from './components/VpnPanel.svelte';
 
-  let activeTab = 'chat'; // 'chat' | 'vpn' | 'channels'
-  let vpnStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'connected'
+  let activeTab = $state('chat');
 
   onMount(async () => {
-    // Check VPN status from Tauri backend
-    // const status = await invoke('get_vpn_status');
-    // vpnStatus = status;
+    // Check VPN status on load
   });
-
-  async function toggleVpn() {
-    vpnStatus = 'connecting';
-    try {
-      // await invoke('toggle_exit_node', { enable: true });
-      vpnStatus = 'connected';
-    } catch (e) {
-      console.error('VPN error:', e);
-      vpnStatus = 'disconnected';
-    }
-  }
 </script>
 
 <main class="app">
@@ -31,7 +17,7 @@
     {#if activeTab === 'chat'}
       <ChatPanel />
     {:else if activeTab === 'vpn'}
-      <VpnPanel bind:vpnStatus {toggleVpn} />
+      <VpnPanel />
     {:else if activeTab === 'channels'}
       <div class="placeholder"><h2>Каналы — Phase 2</h2></div>
     {/if}

@@ -1,7 +1,6 @@
 <script>
-  // Placeholder — Phase 1 will add Nostr integration
-  let messages = [];
-  let input = '';
+  let messages = $state([]);
+  let input = $state('');
 </script>
 
 <div class="chat-panel">

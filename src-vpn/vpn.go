@@ -1,6 +1,7 @@
 package vpn
 
 import (
+    "bytes"
     "context"
     "crypto/rand"
     "encoding/hex"

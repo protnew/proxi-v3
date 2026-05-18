@@ -1,5 +1,6 @@
 <script>
-  export let activeTab;
+  let { activeTab = $bindable('chat') } = $props();
+
   const tabs = [
     { id: 'chat', icon: '💬', label: 'Чат' },
     { id: 'vpn', icon: '🌐', label: 'VPN' },
@@ -12,7 +13,7 @@
   {#each tabs as tab}
     <button
       class="tab {activeTab === tab.id ? 'active' : ''}"
-      on:click={() => activeTab = tab.id}
+      onclick={() => activeTab = tab.id}
       title={tab.label}
     >
       <span class="icon">{tab.icon}</span>
