@@ -1,24 +1,19 @@
 <script>
-  import { onMount } from 'svelte';
   import Sidebar from './components/Sidebar.svelte';
   import ChatPanel from './components/ChatPanel.svelte';
   import VpnPanel from './components/VpnPanel.svelte';
 
   let activeTab = $state('chat');
-
-  onMount(async () => {
-    // Check VPN status on load
-  });
 </script>
 
 <main class="app">
-  <Sidebar bind:activeTab />
+  <Sidebar activeTab={activeTab} onswitch={(tab) => activeTab = tab} />
   <div class="content">
     {#if activeTab === 'chat'}
       <ChatPanel />
     {:else if activeTab === 'vpn'}
       <VpnPanel />
-    {:else if activeTab === 'channels'}
+    {:else}
       <div class="placeholder"><h2>Каналы — Phase 2</h2></div>
     {/if}
   </div>

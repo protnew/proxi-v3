@@ -1,22 +1,20 @@
 <script>
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { initApi, api } from '../lib/api.js';
 
   let vpnStatus = $state('disconnected');
   let myPublicKey = $state('');
   let loading = $state(false);
-  let peers = $state([]);
 
   onMount(async () => {
+    initApi();
     try {
-      const status = await invoke('vpn_status');
-      if (status.state) {
-        vpnStatus = status.state;
-      }
-      const key = await invoke('vpn_get_public_key');
+      const status = await api('vpn_status');
+      if (status && status.state) vpnStatus = status.state;
+      const key = await api('vpn_get_public_key');
       myPublicKey = key || '';
     } catch (e) {
-      console.log('VPN not started yet:', e);
+      vpnStatus = 'unavailable';
     }
   });
 
@@ -24,35 +22,42 @@
     loading = true;
     try {
       if (vpnStatus === 'sharing') {
-        await invoke('vpn_stop_exit_node');
+        await api('vpn_stop_exit_node');
         vpnStatus = 'disconnected';
       } else {
-        await invoke('vpn_start');
-        await invoke('vpn_start_exit_node');
+        await api('vpn_start');
+        await api('vpn_start_exit_node');
         vpnStatus = 'sharing';
       }
     } catch (e) {
-      console.error('VPN error:', e);
       vpnStatus = 'error';
     }
     loading = false;
   }
 
   function copyKey() {
-    navigator.clipboard.writeText(myPublicKey);
+    if (myPublicKey) navigator.clipboard.writeText(myPublicKey);
   }
 </script>
 
 <div class="vpn-panel">
   <div class="header">
     <h1>🌐 Поделись интернет</h1>
-    <div class="status" class:connected={vpnStatus === 'sharing' || vpnStatus === 'connected'} class:connecting={vpnStatus === 'connecting'} class:error={vpnStatus === 'error'}>
-      {#if vpnStatus === 'sharing'}🟢 Делю интернет{:else if vpnStatus === 'connected'}🟢 Подключён{:else if vpnStatus === 'connecting'}🟡 Подключение...{:else if vpnStatus === 'error'}🔴 Ошибка{:else}⚪ Отключено{/if}
+    <div>
+      {#if vpnStatus === 'sharing' || vpnStatus === 'connected'}
+        <span class="status connected">🟢 {vpnStatus === 'sharing' ? 'Делю интернет' : 'Подключён'}</span>
+      {:else if vpnStatus === 'unavailable'}
+        <span class="status error">⚠️ Только в десктоп-приложении</span>
+      {:else if vpnStatus === 'error'}
+        <span class="status error">🔴 Ошибка</span>
+      {:else}
+        <span class="status">⚪ Отключено</span>
+      {/if}
     </div>
   </div>
 
   <div class="share-section">
-    <button class="share-btn" class:active={vpnStatus === 'sharing'} onclick={shareInternet} disabled={loading}>
+    <button class="share-btn {vpnStatus === 'sharing' ? 'active' : ''}" onclick={shareInternet} disabled={loading}>
       {#if loading}
         ⏳ ...
       {:else if vpnStatus === 'sharing'}
@@ -77,9 +82,7 @@
 
   <div class="peers">
     <h3>Друзья онлайн</h3>
-    {#if peers.length === 0}
-      <div class="empty">Добавь друзей — их публичные ключи появятся здесь</div>
-    {/if}
+    <div class="empty">Добавь друзей — их ключи появятся здесь</div>
   </div>
 </div>
 
@@ -89,13 +92,12 @@
   .header h1 { font-size: 22px; font-weight: 600; }
   .status { font-size: 14px; }
   .status.connected { color: #4caf50; }
-  .status.connecting { color: #ff9800; }
   .status.error { color: #f44336; }
   .share-section { text-align: center; margin: 40px 0; }
   .share-btn {
     font-size: 18px; padding: 16px 40px;
     background: linear-gradient(135deg, #1e88e5, #1565c0);
-    color: white; border: none; border-radius: 16px;
+    color: #fff; border: none; border-radius: 16px;
     cursor: pointer; transition: all 0.3s;
   }
   .share-btn:hover { transform: scale(1.05); }
