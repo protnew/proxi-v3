@@ -28,7 +28,7 @@ var vpnMgr *vpn.Manager
 
 // ========== Rate limiter ==========
 
-var limiter = rate.NewLimiter(2, 5) // 2 req/s, burst 5
+var limiter = rate.NewLimiter(100, 200) // 100 req/s, burst 200
 
 func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
