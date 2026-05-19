@@ -451,20 +451,32 @@ func (s *Store) MarkAllRead(userNpub string, beforeTimestamp int64) error {
 	if err != nil {
 		return fmt.Errorf("mark all read query: %w", err)
 	}
-	defer rows.Close()
 
-	now := nowUnix()
+	var msgIDs []string
 	for rows.Next() {
 		var msgID string
 		if err := rows.Scan(&msgID); err != nil {
+			rows.Close()
 			return fmt.Errorf("scan message id: %w", err)
 		}
-		s.db.Exec(
+		msgIDs = append(msgIDs, msgID)
+	}
+	rows.Close()
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("rows error: %w", err)
+	}
+
+	now := nowUnix()
+	for _, msgID := range msgIDs {
+		if _, err := s.db.Exec(
 			`INSERT OR REPLACE INTO read_receipts (message_id, user_npub, read_at) VALUES (?, ?, ?)`,
 			msgID, userNpub, now,
-		)
+		); err != nil {
+			return fmt.Errorf("mark read %s: %w", msgID, err)
+		}
 	}
-	return rows.Err()
+	return nil
 }
 
 // ---------------------------------------------------------------------------
