@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -14,12 +15,15 @@ type Store struct {
 
 // Message represents a stored chat message.
 type Message struct {
-	ID        string `json:"id"`
-	From      string `json:"from"`
-	To        string `json:"to"`        // "broadcast" для публичных, npub для DM
-	Text      string `json:"text"`      // plaintext или encrypted base64
-	Encrypted bool   `json:"encrypted"` // true = E2E encrypted
-	Timestamp int64  `json:"timestamp"`
+	ID            string `json:"id"`
+	From          string `json:"from"`
+	To            string `json:"to"`                   // "broadcast" для публичных, npub для DM
+	Text          string `json:"text"`                 // plaintext или encrypted base64
+	Encrypted     bool   `json:"encrypted"`            // true = E2E encrypted
+	Timestamp     int64  `json:"timestamp"`
+	ReplyTo       string `json:"replyTo,omitempty"`    // ID сообщения-ответа
+	ForwardedFrom string `json:"forwardedFrom,omitempty"` // npub автора пересланного
+	Attachments   string `json:"attachments,omitempty"`   // JSON array of file IDs
 }
 
 // Channel represents a public channel.
@@ -96,12 +100,58 @@ func (s *Store) migrate() error {
 			nsec         TEXT NOT NULL DEFAULT '',
 			seed_phrase  TEXT NOT NULL DEFAULT ''
 		)`,
+
+		// --- Telegram features tables ---
+
+		`CREATE TABLE IF NOT EXISTS reactions (
+			message_id TEXT NOT NULL,
+			user_npub TEXT NOT NULL,
+			emoji     TEXT NOT NULL,
+			created_at INTEGER NOT NULL,
+			PRIMARY KEY (message_id, user_npub)
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS read_receipts (
+			message_id TEXT NOT NULL,
+			user_npub  TEXT NOT NULL,
+			read_at    INTEGER NOT NULL,
+			PRIMARY KEY (message_id, user_npub)
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS user_profiles (
+			npub         TEXT PRIMARY KEY,
+			display_name TEXT DEFAULT '',
+			avatar_url   TEXT DEFAULT '',
+			bio          TEXT DEFAULT '',
+			updated_at   INTEGER NOT NULL
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS file_metadata (
+			id         TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			size       INTEGER NOT NULL,
+			type       TEXT NOT NULL DEFAULT '',
+			uploaded_by TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL
+		)`,
 	}
 	for _, q := range stmts {
 		if _, err := s.db.Exec(q); err != nil {
 			return fmt.Errorf("exec %q: %w", q, err)
 		}
 	}
+
+	// Add new columns to messages table if they don't exist yet
+	alterStmts := []string{
+		`ALTER TABLE messages ADD COLUMN reply_to TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN forwarded_from TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT ''`,
+	}
+	for _, q := range alterStmts {
+		// Ignore errors — column may already exist
+		s.db.Exec(q)
+	}
+
 	return nil
 }
 
@@ -112,9 +162,10 @@ func (s *Store) migrate() error {
 // SaveMessage persists a message.
 func (s *Store) SaveMessage(msg Message) error {
 	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		msg.ID, msg.From, msg.To, msg.Text, boolToInt(msg.Encrypted), msg.Timestamp,
+		msg.ReplyTo, msg.ForwardedFrom, msg.Attachments,
 	)
 	if err != nil {
 		return fmt.Errorf("save message %s: %w", msg.ID, err)
@@ -127,7 +178,7 @@ func (s *Store) SaveMessage(msg Message) error {
 // given npub is either sender or recipient.
 func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, error) {
 	rows, err := s.db.Query(
-		`SELECT id, sender, recipient, text, encrypted, timestamp
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments
 		 FROM messages
 		 WHERE timestamp > ?
 		   AND (recipient = 'broadcast'
@@ -146,7 +197,8 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 	for rows.Next() {
 		var m Message
 		var enc int
-		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp); err != nil {
+		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
+			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Encrypted = enc != 0
@@ -290,4 +342,313 @@ func boolToInt(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+// ---------------------------------------------------------------------------
+// Reactions
+// ---------------------------------------------------------------------------
+
+// AddReaction adds or updates a reaction (emoji) from a user on a message.
+func (s *Store) AddReaction(messageID, userNpub, emoji string) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO reactions (message_id, user_npub, emoji, created_at)
+		 VALUES (?, ?, ?, ?)`,
+		messageID, userNpub, emoji, nowUnix(),
+	)
+	if err != nil {
+		return fmt.Errorf("add reaction: %w", err)
+	}
+	return nil
+}
+
+// RemoveReaction removes a user's reaction from a message.
+func (s *Store) RemoveReaction(messageID, userNpub string) error {
+	_, err := s.db.Exec(
+		`DELETE FROM reactions WHERE message_id = ? AND user_npub = ?`,
+		messageID, userNpub,
+	)
+	if err != nil {
+		return fmt.Errorf("remove reaction: %w", err)
+	}
+	return nil
+}
+
+// GetReactions returns all reactions for a message.
+func (s *Store) GetReactions(messageID string) ([]map[string]interface{}, error) {
+	rows, err := s.db.Query(
+		`SELECT user_npub, emoji, created_at FROM reactions WHERE message_id = ?`,
+		messageID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get reactions: %w", err)
+	}
+	defer rows.Close()
+
+	var result []map[string]interface{}
+	for rows.Next() {
+		var npub, emoji string
+		var createdAt int64
+		if err := rows.Scan(&npub, &emoji, &createdAt); err != nil {
+			return nil, fmt.Errorf("scan reaction: %w", err)
+		}
+		result = append(result, map[string]interface{}{
+			"userNpub":  npub,
+			"emoji":     emoji,
+			"createdAt": createdAt,
+		})
+	}
+	return result, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Read Receipts
+// ---------------------------------------------------------------------------
+
+// MarkRead marks a message as read by a user.
+func (s *Store) MarkRead(messageID, userNpub string) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO read_receipts (message_id, user_npub, read_at)
+		 VALUES (?, ?, ?)`,
+		messageID, userNpub, nowUnix(),
+	)
+	if err != nil {
+		return fmt.Errorf("mark read: %w", err)
+	}
+	return nil
+}
+
+// GetReadReceipts returns list of npubs who read the message.
+func (s *Store) GetReadReceipts(messageID string) ([]string, error) {
+	rows, err := s.db.Query(
+		`SELECT user_npub FROM read_receipts WHERE message_id = ?`,
+		messageID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get read receipts: %w", err)
+	}
+	defer rows.Close()
+
+	var npubs []string
+	for rows.Next() {
+		var npub string
+		if err := rows.Scan(&npub); err != nil {
+			return nil, fmt.Errorf("scan read receipt: %w", err)
+		}
+		npubs = append(npubs, npub)
+	}
+	return npubs, rows.Err()
+}
+
+// MarkAllRead marks all messages before a timestamp as read by a user.
+func (s *Store) MarkAllRead(userNpub string, beforeTimestamp int64) error {
+	// Get all message IDs for this user before the given timestamp
+	rows, err := s.db.Query(
+		`SELECT id FROM messages
+		 WHERE timestamp <= ?
+		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)`,
+		beforeTimestamp, userNpub, userNpub,
+	)
+	if err != nil {
+		return fmt.Errorf("mark all read query: %w", err)
+	}
+	defer rows.Close()
+
+	now := nowUnix()
+	for rows.Next() {
+		var msgID string
+		if err := rows.Scan(&msgID); err != nil {
+			return fmt.Errorf("scan message id: %w", err)
+		}
+		s.db.Exec(
+			`INSERT OR REPLACE INTO read_receipts (message_id, user_npub, read_at) VALUES (?, ?, ?)`,
+			msgID, userNpub, now,
+		)
+	}
+	return rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// User Profiles
+// ---------------------------------------------------------------------------
+
+// SaveProfile creates or updates a user profile.
+func (s *Store) SaveProfile(npub, displayName, avatarURL, bio string) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO user_profiles (npub, display_name, avatar_url, bio, updated_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		npub, displayName, avatarURL, bio, nowUnix(),
+	)
+	if err != nil {
+		return fmt.Errorf("save profile: %w", err)
+	}
+	return nil
+}
+
+// GetProfile returns a user's profile.
+func (s *Store) GetProfile(npub string) (map[string]interface{}, error) {
+	var displayName, avatarURL, bio string
+	var updatedAt int64
+	err := s.db.QueryRow(
+		`SELECT display_name, avatar_url, bio, updated_at FROM user_profiles WHERE npub = ?`,
+		npub,
+	).Scan(&displayName, &avatarURL, &bio, &updatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get profile: %w", err)
+	}
+	return map[string]interface{}{
+		"npub":        npub,
+		"displayName": displayName,
+		"avatarUrl":   avatarURL,
+		"bio":         bio,
+		"updatedAt":   updatedAt,
+	}, nil
+}
+
+// SearchProfiles searches user profiles by display name or npub.
+func (s *Store) SearchProfiles(query string) ([]map[string]interface{}, error) {
+	rows, err := s.db.Query(
+		`SELECT npub, display_name, avatar_url, bio, updated_at
+		 FROM user_profiles
+		 WHERE display_name LIKE ? OR npub LIKE ?
+		 ORDER BY updated_at DESC
+		 LIMIT 50`,
+		"%"+query+"%", "%"+query+"%",
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search profiles: %w", err)
+	}
+	defer rows.Close()
+
+	var profiles []map[string]interface{}
+	for rows.Next() {
+		var npub, displayName, avatarURL, bio string
+		var updatedAt int64
+		if err := rows.Scan(&npub, &displayName, &avatarURL, &bio, &updatedAt); err != nil {
+			return nil, fmt.Errorf("scan profile: %w", err)
+		}
+		profiles = append(profiles, map[string]interface{}{
+			"npub":        npub,
+			"displayName": displayName,
+			"avatarUrl":   avatarURL,
+			"bio":         bio,
+			"updatedAt":   updatedAt,
+		})
+	}
+	return profiles, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Search Messages
+// ---------------------------------------------------------------------------
+
+// SearchMessages performs a text search across messages visible to the given npub.
+func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message, error) {
+	rows, err := s.db.Query(
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments
+		 FROM messages
+		 WHERE text LIKE ?
+		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)
+		 ORDER BY timestamp DESC
+		 LIMIT ?`,
+		"%"+query+"%", npub, npub, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("search messages: %w", err)
+	}
+	defer rows.Close()
+
+	var msgs []Message
+	for rows.Next() {
+		var m Message
+		var enc int
+		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
+			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments); err != nil {
+			return nil, fmt.Errorf("scan message: %w", err)
+		}
+		m.Encrypted = enc != 0
+		msgs = append(msgs, m)
+	}
+	return msgs, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// File Metadata
+// ---------------------------------------------------------------------------
+
+// FileMeta represents metadata for an uploaded file.
+type FileMeta struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Size       int64  `json:"size"`
+	Type       string `json:"type"`
+	UploadedBy string `json:"uploadedBy"`
+	CreatedAt  int64  `json:"createdAt"`
+}
+
+// SaveFileMeta persists file metadata.
+func (s *Store) SaveFileMeta(fm FileMeta) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO file_metadata (id, name, size, type, uploaded_by, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		fm.ID, fm.Name, fm.Size, fm.Type, fm.UploadedBy, fm.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save file meta: %w", err)
+	}
+	return nil
+}
+
+// GetFileMeta returns metadata for a single file.
+func (s *Store) GetFileMeta(id string) (*FileMeta, error) {
+	var fm FileMeta
+	err := s.db.QueryRow(
+		`SELECT id, name, size, type, uploaded_by, created_at FROM file_metadata WHERE id = ?`,
+		id,
+	).Scan(&fm.ID, &fm.Name, &fm.Size, &fm.Type, &fm.UploadedBy, &fm.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get file meta: %w", err)
+	}
+	return &fm, nil
+}
+
+// ListFileMeta returns metadata for all uploaded files.
+func (s *Store) ListFileMeta() ([]FileMeta, error) {
+	rows, err := s.db.Query(
+		`SELECT id, name, size, type, uploaded_by, created_at FROM file_metadata ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list file meta: %w", err)
+	}
+	defer rows.Close()
+
+	var files []FileMeta
+	for rows.Next() {
+		var fm FileMeta
+		if err := rows.Scan(&fm.ID, &fm.Name, &fm.Size, &fm.Type, &fm.UploadedBy, &fm.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan file meta: %w", err)
+		}
+		files = append(files, fm)
+	}
+	return files, rows.Err()
+}
+
+// DeleteFileMeta removes file metadata by ID.
+func (s *Store) DeleteFileMeta(id string) error {
+	res, err := s.db.Exec(`DELETE FROM file_metadata WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete file meta %s: %w", id, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("file %s not found", id)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// time helper
+// ---------------------------------------------------------------------------
+
+func nowUnix() int64 {
+	return time.Now().Unix()
 }

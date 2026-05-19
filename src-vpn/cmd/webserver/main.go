@@ -382,6 +382,18 @@ func main() {
 	http.HandleFunc("/api/identity", apiChain(handleIdentityGet))
 	http.HandleFunc("/api/online", apiChain(handleOnlineUsers))
 
+	// File upload/download
+	http.HandleFunc("/api/files/upload", apiChain(handleFileUpload))
+	http.HandleFunc("/api/files/", handleFileGet) // no rate limit for downloads
+	// Reactions
+	http.HandleFunc("/api/reactions", apiChain(handleReactions))
+	// Read receipts
+	http.HandleFunc("/api/read-receipts", apiChain(handleReadReceipts))
+	// Profiles
+	http.HandleFunc("/api/profiles", apiChain(handleProfiles))
+	// Search
+	http.HandleFunc("/api/search", apiChain(handleSearch))
+
 	// Static files + SPA fallback
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Security headers for all responses
