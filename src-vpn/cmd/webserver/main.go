@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/store"
 
@@ -339,6 +340,12 @@ func main() {
 	// Auto-connect VPN peers on startup
 	go autoConnectPeers()
 
+	// Start scheduled messages sender (every 60 seconds)
+	go scheduledMessagesLoop()
+
+	// Start dead man's switch checker (every hour)
+	go deadMansSwitchLoop()
+
 	fs := http.FileServer(http.Dir(distDir))
 
 	// API routes with middleware chain
@@ -399,6 +406,9 @@ func main() {
 	http.HandleFunc("/api/search", apiChain(handleSearch))
 	http.HandleFunc("/api/messages/edit", apiChain(handleEditMessage))
 	http.HandleFunc("/api/messages/delete", apiChain(handleDeleteMessage))
+	http.HandleFunc("/api/messages/schedule", apiChain(handleScheduleMessage))
+	http.HandleFunc("/api/switch/setup", apiChain(handleSwitchSetup))
+	http.HandleFunc("/api/switch/check-in", apiChain(handleSwitchCheckIn))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -478,4 +488,195 @@ func autoConnectPeers() {
 	} else if len(peers) > 0 {
 		log.Printf("🔌 Auto-connect: 0/%d peers connected (will retry on demand)", len(peers))
 	}
+}
+
+// scheduledMessagesLoop checks every 60 seconds for pending scheduled messages.
+func scheduledMessagesLoop() {
+	ticker := time.NewTicker(60 * time.Second)
+	defer ticker.Stop()
+	for range ticker.C {
+		if db == nil || hub == nil {
+			continue
+		}
+		msgs, err := db.GetPendingScheduled()
+		if err != nil {
+			log.Printf("📅 Scheduled: error: %v", err)
+			continue
+		}
+		for _, sm := range msgs {
+			// Send via WS
+			chatMsg := &chat.Message{
+				Type: "chat",
+				From: sm.Sender,
+				To:   sm.Recipient,
+				Text: sm.Text,
+				Ts:   time.Now().Unix(),
+			}
+			encoded, _ := chatMsg.Encode()
+			if sm.Recipient == "broadcast" || sm.Recipient == "" {
+				hub.Broadcast(encoded, "")
+			} else {
+				hub.SendTo(sm.Recipient, encoded)
+			}
+			db.MarkScheduledSent(sm.ID)
+			log.Printf("📅 Scheduled sent: %s → %s", sm.ID, sm.Recipient)
+		}
+	}
+}
+
+// deadMansSwitchLoop checks every hour for expired switches.
+func deadMansSwitchLoop() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		if db == nil || hub == nil {
+			continue
+		}
+		switches, err := db.GetExpiredSwitches()
+		if err != nil {
+			log.Printf("💀 Switch: error: %v", err)
+			continue
+		}
+		for _, dms := range switches {
+			chatMsg := &chat.Message{
+				Type: "chat",
+				From: "💀 dead-mans-switch",
+				To:   dms.Recipient,
+				Text: dms.MessageText,
+				Ts:   time.Now().Unix(),
+			}
+			encoded, _ := chatMsg.Encode()
+			hub.Broadcast(encoded, "")
+			db.MarkSwitchTriggered(dms.ID)
+			log.Printf("💀 Switch triggered: %s (user %s, %d days inactive)", dms.ID, dms.UserNpub[:12], dms.IntervalDays)
+		}
+	}
+}
+
+// handleScheduleMessage — POST /api/messages/schedule
+func handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Text      string `json:"text"`
+		SendAt    int64  `json:"sendAt"`
+		Recipient string `json:"recipient"`
+		Sender    string `json:"sender"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.Text == "" || req.SendAt == 0 {
+		writeError(w, 400, "BAD_REQUEST", "text and sendAt required")
+		return
+	}
+	if req.SendAt <= time.Now().Unix() {
+		writeError(w, 400, "BAD_REQUEST", "sendAt must be in the future")
+		return
+	}
+	if req.Recipient == "" {
+		req.Recipient = "broadcast"
+	}
+	if req.Sender == "" {
+		req.Sender = "anonymous"
+	}
+
+	sm := store.ScheduledMessage{
+		ID:        fmt.Sprintf("sched-%d-%s", time.Now().UnixNano(), randomHex(4)),
+		Sender:    req.Sender,
+		Recipient: req.Recipient,
+		Text:      req.Text,
+		SendAt:    req.SendAt,
+		Status:    "pending",
+		CreatedAt: time.Now().Unix(),
+	}
+	if err := db.SaveScheduledMessage(sm); err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+
+	sendAtTime := time.Unix(req.SendAt, 0).Format("02.01.2006 15:04")
+	writeJSON(w, 200, map[string]interface{}{
+		"status":   "scheduled",
+		"id":       sm.ID,
+		"sendAt":   req.SendAt,
+		"sendAtTime": sendAtTime,
+	})
+	log.Printf("📅 Scheduled: %s → %s at %s", sm.ID, req.Recipient, sendAtTime)
+}
+
+// handleSwitchSetup — POST /api/switch/setup
+func handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		UserNpub     string `json:"userNpub"`
+		MessageText  string `json:"messageText"`
+		Recipient    string `json:"recipient"`
+		IntervalDays int    `json:"intervalDays"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.UserNpub == "" || req.MessageText == "" {
+		writeError(w, 400, "BAD_REQUEST", "userNpub and messageText required")
+		return
+	}
+	if req.IntervalDays < 1 {
+		req.IntervalDays = 7
+	}
+	if req.Recipient == "" {
+		req.Recipient = "broadcast"
+	}
+
+	dms := store.DeadMansSwitch{
+		ID:           fmt.Sprintf("dms-%d-%s", time.Now().UnixNano(), randomHex(4)),
+		UserNpub:     req.UserNpub,
+		MessageText:  req.MessageText,
+		Recipient:    req.Recipient,
+		IntervalDays: req.IntervalDays,
+		LastCheckIn:  time.Now().Unix(),
+		CreatedAt:    time.Now().Unix(),
+	}
+	if err := db.SaveDeadMansSwitch(dms); err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"status":       "created",
+		"id":           dms.ID,
+		"intervalDays": req.IntervalDays,
+	})
+	log.Printf("💀 Switch created: %s (user %s, %d days)", dms.ID, req.UserNpub[:12], req.IntervalDays)
+}
+
+// handleSwitchCheckIn — POST /api/switch/check-in
+func handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		UserNpub string `json:"userNpub"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.UserNpub == "" {
+		writeError(w, 400, "BAD_REQUEST", "userNpub required")
+		return
+	}
+	if err := db.CheckInDeadMansSwitch(req.UserNpub); err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"status": "checked_in"})
 }

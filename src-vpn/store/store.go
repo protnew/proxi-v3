@@ -154,6 +154,35 @@ func (s *Store) migrate() error {
 		s.db.Exec(q)
 	}
 
+	// Scheduled messages table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS scheduled_messages (
+			id TEXT PRIMARY KEY,
+			sender TEXT NOT NULL,
+			recipient TEXT NOT NULL DEFAULT 'broadcast',
+			text TEXT NOT NULL,
+			send_at INTEGER NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			created_at INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+		return fmt.Errorf("create scheduled_messages: %w", err)
+	}
+
+	// Dead man's switch table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS dead_mans_switch (
+			id TEXT PRIMARY KEY,
+			user_npub TEXT NOT NULL,
+			message_text TEXT NOT NULL,
+			recipient TEXT NOT NULL DEFAULT 'broadcast',
+			interval_days INTEGER NOT NULL DEFAULT 7,
+			last_check_in INTEGER NOT NULL DEFAULT 0,
+			triggered INTEGER NOT NULL DEFAULT 0,
+			created_at INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+		return fmt.Errorf("create dead_mans_switch: %w", err)
+	}
+
 	return nil
 }
 
@@ -740,4 +769,136 @@ func (s *Store) DeleteFileMeta(id string) error {
 
 func nowUnix() int64 {
 	return time.Now().Unix()
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled Messages
+// ---------------------------------------------------------------------------
+
+// ScheduledMessage represents a pending message to be sent at a future time.
+type ScheduledMessage struct {
+	ID        string `json:"id"`
+	Sender    string `json:"sender"`
+	Recipient string `json:"recipient"`
+	Text      string `json:"text"`
+	SendAt    int64  `json:"sendAt"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+// SaveScheduledMessage persists a scheduled message.
+func (s *Store) SaveScheduledMessage(msg ScheduledMessage) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO scheduled_messages (id, sender, recipient, text, send_at, status, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		msg.ID, msg.Sender, msg.Recipient, msg.Text, msg.SendAt, msg.Status, msg.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save scheduled message %s: %w", msg.ID, err)
+	}
+	return nil
+}
+
+// GetPendingScheduled returns all pending messages where send_at <= now.
+func (s *Store) GetPendingScheduled() ([]ScheduledMessage, error) {
+	now := time.Now().Unix()
+	rows, err := s.db.Query(
+		`SELECT id, sender, recipient, text, send_at, status, created_at
+		 FROM scheduled_messages WHERE status = 'pending' AND send_at <= ?`, now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get pending scheduled: %w", err)
+	}
+	defer rows.Close()
+
+	var msgs []ScheduledMessage
+	for rows.Next() {
+		var m ScheduledMessage
+		if err := rows.Scan(&m.ID, &m.Sender, &m.Recipient, &m.Text, &m.SendAt, &m.Status, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan scheduled: %w", err)
+		}
+		msgs = append(msgs, m)
+	}
+	return msgs, rows.Err()
+}
+
+// MarkScheduledSent updates a scheduled message status to 'sent'.
+func (s *Store) MarkScheduledSent(id string) error {
+	_, err := s.db.Exec(`UPDATE scheduled_messages SET status = 'sent' WHERE id = ?`, id)
+	return err
+}
+
+// ---------------------------------------------------------------------------
+// Dead Man's Switch
+// ---------------------------------------------------------------------------
+
+// DeadMansSwitch represents a message that will be sent if the user doesn't check in.
+type DeadMansSwitch struct {
+	ID           string `json:"id"`
+	UserNpub     string `json:"userNpub"`
+	MessageText  string `json:"messageText"`
+	Recipient    string `json:"recipient"`
+	IntervalDays int    `json:"intervalDays"`
+	LastCheckIn  int64  `json:"lastCheckIn"`
+	Triggered    bool   `json:"triggered"`
+	CreatedAt    int64  `json:"createdAt"`
+}
+
+// SaveDeadMansSwitch persists a dead man's switch configuration.
+func (s *Store) SaveDeadMansSwitch(dms DeadMansSwitch) error {
+	triggered := 0
+	if dms.Triggered {
+		triggered = 1
+	}
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO dead_mans_switch (id, user_npub, message_text, recipient, interval_days, last_check_in, triggered, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		dms.ID, dms.UserNpub, dms.MessageText, dms.Recipient, dms.IntervalDays, dms.LastCheckIn, triggered, dms.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save dead mans switch %s: %w", dms.ID, err)
+	}
+	return nil
+}
+
+// CheckInDeadMansSwitch updates the last_check_in timestamp for all switches of a user.
+func (s *Store) CheckInDeadMansSwitch(userNpub string) error {
+	_, err := s.db.Exec(
+		`UPDATE dead_mans_switch SET last_check_in = ? WHERE user_npub = ?`,
+		time.Now().Unix(), userNpub,
+	)
+	return err
+}
+
+// GetExpiredSwitches returns all switches that have exceeded their interval.
+func (s *Store) GetExpiredSwitches() ([]DeadMansSwitch, error) {
+	now := time.Now().Unix()
+	rows, err := s.db.Query(
+		`SELECT id, user_npub, message_text, recipient, interval_days, last_check_in, triggered, created_at
+		 FROM dead_mans_switch
+		 WHERE triggered = 0 AND (last_check_in + interval_days * 86400) < ?`, now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get expired switches: %w", err)
+	}
+	defer rows.Close()
+
+	var switches []DeadMansSwitch
+	for rows.Next() {
+		var dms DeadMansSwitch
+		var triggered int
+		if err := rows.Scan(&dms.ID, &dms.UserNpub, &dms.MessageText, &dms.Recipient,
+			&dms.IntervalDays, &dms.LastCheckIn, &triggered, &dms.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan switch: %w", err)
+		}
+		dms.Triggered = triggered != 0
+		switches = append(switches, dms)
+	}
+	return switches, rows.Err()
+}
+
+// MarkSwitchTriggered marks a switch as triggered.
+func (s *Store) MarkSwitchTriggered(id string) error {
+	_, err := s.db.Exec(`UPDATE dead_mans_switch SET triggered = 1 WHERE id = ?`, id)
+	return err
 }
