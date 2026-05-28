@@ -19,11 +19,12 @@ const BroadcastTarget = "broadcast"
 //
 //	{"type":"chat|join|leave|typing","from":"userId","to":"userId|broadcast","text":"...","ts":unix}
 type Message struct {
-	Type string `json:"type"`           // "chat", "join", "leave", "typing"
-	From string `json:"from"`           // sender userId
-	To   string `json:"to"`             // receiver userId or "broadcast"
-	Text string `json:"text,omitempty"` // message body (empty for join/leave/typing)
-	Ts   int64  `json:"ts"`             // unix timestamp
+	Type      string `json:"type"`                 // "chat", "join", "leave", "typing", "key_exchange"
+	From      string `json:"from"`                 // sender userId
+	To        string `json:"to"`                   // receiver userId or "broadcast"
+	Text      string `json:"text,omitempty"`       // message body (empty for join/leave/typing)
+	Ts        int64  `json:"ts"`                   // unix timestamp
+	PublicKey string `json:"publicKey,omitempty"`  // ECDH public key for key_exchange
 }
 
 // Encode marshals the message to JSON bytes.

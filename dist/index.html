@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#1e88e5">
   <title>Unkillable Messenger</title>
   <link rel="manifest" href="/manifest.json">
+  <script src="/js/e2e.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;overflow:hidden}
@@ -298,13 +299,29 @@
         setConn('on', 'Подключён');
         reconnectDelay = 1000;
         toast('✅ Подключён к чату');
+        // Send E2E public key to all peers
+        const pubKey = E2E.getPublicKeyBase64();
+        if (pubKey) {
+          ws.send(JSON.stringify({ type: 'key_exchange', publicKey: pubKey }));
+        }
       };
 
       ws.onmessage = (e) => {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'chat') {
-            addMsg(msg.from, msg.text, msg.from === myId);
+            // Try E2E decrypt if from known peer
+            let text = msg.text;
+            if (msg.from !== myId && E2E.hasSharedKey(msg.from)) {
+              try { text = await E2E.decrypt(msg.from, msg.text); } catch(e) {}
+            }
+            addMsg(msg.from, text, msg.from === myId);
+          } else if (msg.type === 'key_exchange') {
+            // Auto key exchange: derive shared AES key
+            if (msg.from && msg.from !== myId && msg.publicKey) {
+              await E2E.deriveSharedKey(msg.from, msg.publicKey);
+              console.log('E2E key exchanged with', msg.from.substring(0,8));
+            }
           } else if (msg.type === 'join') {
             addSystemMsg(msg.from + ' подключился');
             refreshOnline();
@@ -371,7 +388,15 @@
       const text = msgInput.value.trim();
       if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
       const msg = {type:'chat', from:myId, to:'broadcast', text:text, ts:Date.now()/1000|0};
-      ws.send(JSON.stringify(msg));
+      // E2E: encrypt if DM target has shared key
+      if (msg.to !== 'broadcast' && E2E.hasSharedKey(msg.to)) {
+        E2E.encrypt(msg.to, text).then(ct => {
+          msg.text = ct;
+          ws.send(JSON.stringify(msg));
+        });
+      } else {
+        ws.send(JSON.stringify(msg));
+      }
       addMsg(myId, text, true);
       msgInput.value = '';
       msgInput.focus();
@@ -607,6 +632,12 @@
     }
 
     // ========== INIT ==========
+    (async () => {
+      try {
+        const pubKey = await E2E.init();
+        console.log('E2E ready, pubkey:', pubKey?.substring(0,16) + '...');
+      } catch(e) { console.warn('E2E init failed:', e); }
+    })();
     loadIdentity();
     loadPeers();
     loadChannels();
