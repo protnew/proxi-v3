@@ -30,6 +30,7 @@ type Message struct {
 	ReplyToText    string `json:"replyToText,omitempty"`   // preview text of replied message
 	ReplyToFrom    string `json:"replyToFrom,omitempty"`   // sender of replied message
 	ForwardedFrom  string `json:"forwardedFrom,omitempty"` // original sender npub for forwarded messages
+	TTL            int    `json:"ttl,omitempty"`            // self-destruct in seconds (0 = never)
 }
 
 // Encode marshals the message to JSON bytes.

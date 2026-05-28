@@ -24,6 +24,7 @@ type Message struct {
 	ReplyTo       string `json:"replyTo,omitempty"`    // ID сообщения-ответа
 	ForwardedFrom string `json:"forwardedFrom,omitempty"` // npub автора пересланного
 	Attachments   string `json:"attachments,omitempty"`   // JSON array of file IDs
+	TTL           int    `json:"ttl,omitempty"`            // seconds until self-destruct (0 = never)
 }
 
 // Channel represents a public channel.
@@ -146,6 +147,7 @@ func (s *Store) migrate() error {
 		`ALTER TABLE messages ADD COLUMN reply_to TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE messages ADD COLUMN forwarded_from TEXT NOT NULL DEFAULT ''`,
 		`ALTER TABLE messages ADD COLUMN attachments TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE messages ADD COLUMN ttl INTEGER NOT NULL DEFAULT 0`,
 	}
 	for _, q := range alterStmts {
 		// Ignore errors — column may already exist
@@ -162,10 +164,10 @@ func (s *Store) migrate() error {
 // SaveMessage persists a message.
 func (s *Store) SaveMessage(msg Message) error {
 	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		msg.ID, msg.From, msg.To, msg.Text, boolToInt(msg.Encrypted), msg.Timestamp,
-		msg.ReplyTo, msg.ForwardedFrom, msg.Attachments,
+		msg.ReplyTo, msg.ForwardedFrom, msg.Attachments, msg.TTL,
 	)
 	if err != nil {
 		return fmt.Errorf("save message %s: %w", msg.ID, err)
@@ -207,7 +209,7 @@ func (s *Store) DeleteMessage(messageID string) error {
 // given npub is either sender or recipient.
 func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, error) {
 	rows, err := s.db.Query(
-		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages
 		 WHERE timestamp > ?
 		   AND (recipient = 'broadcast'
@@ -227,7 +229,7 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 		var m Message
 		var enc int
 		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments); err != nil {
+			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Encrypted = enc != 0
@@ -239,13 +241,13 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 // GetMessageByID returns a single message by ID, or error if not found.
 func (s *Store) GetMessageByID(id string) (*Message, error) {
 	row := s.db.QueryRow(
-		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages WHERE id = ?`, id,
 	)
 	var m Message
 	var enc int
 	if err := row.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-		&m.ReplyTo, &m.ForwardedFrom, &m.Attachments); err != nil {
+		&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL); err != nil {
 		return nil, fmt.Errorf("message %s not found: %w", id, err)
 	}
 	m.Encrypted = enc != 0
@@ -617,7 +619,7 @@ func (s *Store) SearchProfiles(query string) ([]map[string]interface{}, error) {
 // SearchMessages performs a text search across messages visible to the given npub.
 func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message, error) {
 	rows, err := s.db.Query(
-		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages
 		 WHERE text LIKE ?
 		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)
@@ -635,13 +637,27 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 		var m Message
 		var enc int
 		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments); err != nil {
+			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Encrypted = enc != 0
 		msgs = append(msgs, m)
 	}
 	return msgs, rows.Err()
+}
+
+// CleanExpiredMessages deletes all messages where TTL > 0 and timestamp+ttl < now.
+// Returns the number of deleted messages.
+func (s *Store) CleanExpiredMessages() (int64, error) {
+	now := time.Now().Unix()
+	res, err := s.db.Exec(
+		`DELETE FROM messages WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("clean expired messages: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
 }
 
 // ---------------------------------------------------------------------------

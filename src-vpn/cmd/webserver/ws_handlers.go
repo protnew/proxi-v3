@@ -119,6 +119,7 @@ func initHub() {
 				Timestamp:     msg.Ts,
 				ReplyTo:       msg.ReplyTo,
 				ForwardedFrom: msg.ForwardedFrom,
+				TTL:           msg.TTL,
 			}
 			// Enrich reply with preview text
 			if msg.ReplyTo != "" {
@@ -138,6 +139,20 @@ func initHub() {
 		}
 	}
 	log.Println("💬 Chat Hub initialized")
+
+	// Start self-destruct cleaner (runs every 30 seconds)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			if db == nil {
+				continue
+			}
+			if n, err := db.CleanExpiredMessages(); err == nil && n > 0 {
+				log.Printf("💣 Self-destruct: cleaned %d expired messages", n)
+			}
+		}
+	}()
 }
 
 // ========== Peer Management Handlers ==========

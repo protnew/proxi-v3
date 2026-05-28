@@ -187,6 +187,7 @@
         </div>
         <div class="input-bar">
           <input id="msg-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}" />
+          <button id="ttl-btn" onclick="cycleTTL()" title="Самоуничтожение" style="background:#1a1a1a;font-size:14px;min-width:42px">⏱0</button>
           <button onclick="sendMsg()">➤</button>
         </div>
       </div>
@@ -440,13 +441,20 @@
         fwdHtml = '<div class="msg-fwd">↗ Переслано от ' + escHtml(msgData.forwardedFrom.substring(0,12)) + '...</div>';
       }
 
+      // TTL indicator
+      let ttlHtml = '';
+      if (msgData && msgData.ttl && msgData.ttl > 0) {
+        const ttlMins = msgData.ttl < 3600 ? Math.round(msgData.ttl/60) + 'м' : Math.round(msgData.ttl/3600) + 'ч';
+        ttlHtml = '<div style="font-size:9px;color:#c62828;margin-top:2px">💣 Исчезнет через ~' + ttlMins + '</div>';
+      }
+
       // Action buttons (reply, forward) — visible on hover
       const actions = '<div class="msg-actions">' +
         '<button class="msg-action-btn" onclick="startReply(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')\" title="Ответить">↩</button>' +
         '<button class="msg-action-btn" onclick="startForward(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')\" title="Переслать">↗</button>' +
         '</div>';
 
-      div.innerHTML = sender + actions + replyHtml + fwdHtml + '<div class="msg-bubble">' + escHtml(text) + '</div><div class="msg-time">' + time + '</div>';
+      div.innerHTML = sender + actions + replyHtml + fwdHtml + '<div class="msg-bubble">' + escHtml(text) + '</div>' + ttlHtml + '<div class="msg-time">' + time + '</div>';
       msgList.appendChild(div);
       msgList.scrollTop = msgList.scrollHeight;
       return msgId;
@@ -468,6 +476,20 @@
     let replyToText = '';
     let fwdMsgText = '';
     let fwdMsgFrom = '';
+
+    // TTL state: 0=off, 60=1min, 300=5min, 3600=1h
+    let currentTTL = 0;
+    const ttlOptions = [0, 60, 300, 3600];
+    const ttlLabels = ['⏱0', '⏱1м', '⏱5м', '⏱1ч'];
+
+    function cycleTTL() {
+      const idx = (ttlOptions.indexOf(currentTTL) + 1) % ttlOptions.length;
+      currentTTL = ttlOptions[idx];
+      const btn = document.getElementById('ttl-btn');
+      btn.textContent = ttlLabels[idx];
+      btn.style.background = currentTTL > 0 ? '#c62828' : '#1a1a1a';
+      btn.style.color = currentTTL > 0 ? '#fff' : '#888';
+    }
 
     function startReply(msgId, from, text) {
       replyToId = msgId;
@@ -516,6 +538,10 @@
         msg.replyToFrom = replyToFrom;
         msg.replyToText = replyToText;
       }
+      // Attach TTL if set
+      if (currentTTL > 0) {
+        msg.ttl = currentTTL;
+      }
       // E2E: encrypt if DM target has shared key
       if (msg.to !== 'broadcast' && E2E.hasSharedKey(msg.to)) {
         E2E.encrypt(msg.to, text).then(ct => {
@@ -525,7 +551,7 @@
       } else {
         ws.send(JSON.stringify(msg));
       }
-      const msgData = replyToId ? {replyTo: replyToId, replyToFrom: replyToFrom, replyToText: replyToText} : {};
+      const msgData = replyToId ? {replyTo: replyToId, replyToFrom: replyToFrom, replyToText: replyToText, ttl: currentTTL} : {ttl: currentTTL};
       addMsg(myId, text, true, msgData);
       msgInput.value = '';
       cancelReply();
