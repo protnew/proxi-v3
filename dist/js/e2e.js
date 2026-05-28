@@ -1,20 +1,33 @@
 // E2E encryption module for Proxi Messenger
 // Uses WebCrypto API: ECDH key exchange + AES-256-GCM
+// Key rotation: every 50 messages or 24 hours
 
 const E2E = (() => {
   let myKeyPair = null;       // { publicKey: CryptoKey, privateKey: CryptoKey }
   let myPublicKeyRaw = null;  // ArrayBuffer (raw bytes for exchange)
   let sharedKeys = {};        // peerId → AES CryptoKey (derived shared secret)
+  let msgCount = {};          // peerId → number of messages since last rotation
+  let lastRotation = Date.now();
+  const ROTATION_INTERVAL = 50;       // messages
+  const ROTATION_TIMEOUT = 24*3600*1000; // 24 hours in ms
+  let onKeyRotation = null;   // callback(ws) to send new key
 
   // Initialize: generate ECDH key pair
-  async function init() {
+  async function init(keyRotationCallback) {
+    onKeyRotation = keyRotationCallback || null;
+    await generateKeyPair();
+    return getPublicKeyBase64();
+  }
+
+  async function generateKeyPair() {
     myKeyPair = await crypto.subtle.generateKey(
       { name: 'ECDH', namedCurve: 'P-256' },
       true, // extractable
       ['deriveKey']
     );
     myPublicKeyRaw = await crypto.subtle.exportKey('raw', myKeyPair.publicKey);
-    return getPublicKeyBase64();
+    lastRotation = Date.now();
+    msgCount = {};
   }
 
   // Get public key as base64 string for sending over WS
@@ -41,13 +54,41 @@ const E2E = (() => {
     );
 
     sharedKeys[peerId] = sharedKey;
+    msgCount[peerId] = 0;
     return sharedKey;
+  }
+
+  // Check if rotation needed and perform it
+  async function checkRotation(ws) {
+    const totalMsgs = Object.values(msgCount).reduce((a,b) => a+b, 0);
+    const timeExpired = Date.now() - lastRotation > ROTATION_TIMEOUT;
+    
+    if (totalMsgs >= ROTATION_INTERVAL || timeExpired) {
+      await generateKeyPair();
+      // Re-derive shared keys with new key pair for all known peers
+      const knownPeers = Object.keys(sharedKeys);
+      sharedKeys = {};
+      
+      // Broadcast new public key
+      if (ws && ws.readyState === WebSocket.OPEN && onKeyRotation) {
+        onKeyRotation(getPublicKeyBase64());
+      }
+      return true; // rotation happened
+    }
+    return false;
+  }
+
+  // Increment message counter for peer
+  function incrementCount(peerId) {
+    msgCount[peerId] = (msgCount[peerId] || 0) + 1;
   }
 
   // Encrypt message for a peer
   async function encrypt(peerId, plaintext) {
     const key = sharedKeys[peerId];
     if (!key) return plaintext; // fallback: unencrypted
+
+    incrementCount(peerId);
 
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const encoded = new TextEncoder().encode(plaintext);
@@ -81,6 +122,7 @@ const E2E = (() => {
         ciphertext
       );
 
+      incrementCount(peerId);
       return new TextDecoder().decode(decrypted);
     } catch (e) {
       // Decryption failed — return raw
@@ -93,5 +135,15 @@ const E2E = (() => {
     return !!sharedKeys[peerId];
   }
 
-  return { init, getPublicKeyBase64, deriveSharedKey, encrypt, decrypt, hasSharedKey };
+  // Get stats
+  function getStats() {
+    return {
+      peers: Object.keys(sharedKeys).length,
+      totalMessages: Object.values(msgCount).reduce((a,b) => a+b, 0),
+      lastRotation: new Date(lastRotation).toISOString(),
+      nextRotation: ROTATION_INTERVAL - Object.values(msgCount).reduce((a,b) => a+b, 0),
+    };
+  }
+
+  return { init, getPublicKeyBase64, deriveSharedKey, encrypt, decrypt, hasSharedKey, checkRotation, getStats };
 })();

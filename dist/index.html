@@ -544,6 +544,8 @@
       }
       // E2E: encrypt if DM target has shared key
       if (msg.to !== 'broadcast' && E2E.hasSharedKey(msg.to)) {
+        // Check if key rotation needed
+        await E2E.checkRotation(ws);
         E2E.encrypt(msg.to, text).then(ct => {
           msg.text = ct;
           ws.send(JSON.stringify(msg));
@@ -801,7 +803,13 @@
     // ========== INIT ==========
     (async () => {
       try {
-        const pubKey = await E2E.init();
+        const pubKey = await E2E.init((newPubKey) => {
+          // Key rotation callback: broadcast new key to all peers
+          if (ws && ws.readyState === WebSocket.OPEN && newPubKey) {
+            ws.send(JSON.stringify({ type: 'key_exchange', publicKey: newPubKey }));
+            console.log('E2E key rotated, broadcasting new key');
+          }
+        });
         console.log('E2E ready, pubkey:', pubKey?.substring(0,16) + '...');
       } catch(e) { console.warn('E2E init failed:', e); }
     })();
