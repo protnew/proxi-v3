@@ -183,6 +183,18 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("create dead_mans_switch: %w", err)
 	}
 
+	// Group members table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS group_members (
+			group_id TEXT NOT NULL,
+			user_npub TEXT NOT NULL,
+			role TEXT NOT NULL DEFAULT 'member',
+			joined_at INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (group_id, user_npub)
+		)`); err != nil {
+		return fmt.Errorf("create group_members: %w", err)
+	}
+
 	return nil
 }
 
@@ -900,5 +912,86 @@ func (s *Store) GetExpiredSwitches() ([]DeadMansSwitch, error) {
 // MarkSwitchTriggered marks a switch as triggered.
 func (s *Store) MarkSwitchTriggered(id string) error {
 	_, err := s.db.Exec(`UPDATE dead_mans_switch SET triggered = 1 WHERE id = ?`, id)
+	return err
+}
+
+// ---------------------------------------------------------------------------
+// Group Members
+// ---------------------------------------------------------------------------
+
+// GroupMember represents a user in a group chat.
+type GroupMember struct {
+	GroupID  string `json:"groupId"`
+	UserNpub string `json:"userNpub"`
+	Role     string `json:"role"` // admin, moderator, member
+	JoinedAt int64  `json:"joinedAt"`
+}
+
+// SaveGroupMember adds a user to a group.
+func (s *Store) SaveGroupMember(gm GroupMember) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO group_members (group_id, user_npub, role, joined_at) VALUES (?, ?, ?, ?)`,
+		gm.GroupID, gm.UserNpub, gm.Role, gm.JoinedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save group member %s/%s: %w", gm.GroupID, gm.UserNpub, err)
+	}
+	return nil
+}
+
+// GetGroupMembers returns all members of a group.
+func (s *Store) GetGroupMembers(groupID string) ([]GroupMember, error) {
+	rows, err := s.db.Query(
+		`SELECT group_id, user_npub, role, joined_at FROM group_members WHERE group_id = ?`,
+		groupID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get group members %s: %w", groupID, err)
+	}
+	defer rows.Close()
+
+	var members []GroupMember
+	for rows.Next() {
+		var m GroupMember
+		if err := rows.Scan(&m.GroupID, &m.UserNpub, &m.Role, &m.JoinedAt); err != nil {
+			return nil, fmt.Errorf("scan member: %w", err)
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}
+
+// RemoveGroupMember removes a user from a group.
+func (s *Store) RemoveGroupMember(groupID, userNpub string) error {
+	res, err := s.db.Exec(`DELETE FROM group_members WHERE group_id = ? AND user_npub = ?`, groupID, userNpub)
+	if err != nil {
+		return fmt.Errorf("remove group member: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("member %s not found in group %s", userNpub, groupID)
+	}
+	return nil
+}
+
+// IsGroupAdmin checks if a user is admin of a group.
+func (s *Store) IsGroupAdmin(groupID, userNpub string) (bool, error) {
+	var role string
+	err := s.db.QueryRow(
+		`SELECT role FROM group_members WHERE group_id = ? AND user_npub = ?`,
+		groupID, userNpub,
+	).Scan(&role)
+	if err != nil {
+		return false, err
+	}
+	return role == "admin", nil
+}
+
+// UpdateGroupMemberRole changes a member's role.
+func (s *Store) UpdateGroupMemberRole(groupID, userNpub, newRole string) error {
+	_, err := s.db.Exec(
+		`UPDATE group_members SET role = ? WHERE group_id = ? AND user_npub = ?`,
+		newRole, groupID, userNpub,
+	)
 	return err
 }

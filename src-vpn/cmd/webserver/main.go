@@ -410,6 +410,10 @@ func main() {
 	http.HandleFunc("/api/switch/setup", apiChain(handleSwitchSetup))
 	http.HandleFunc("/api/switch/check-in", apiChain(handleSwitchCheckIn))
 	http.HandleFunc("/api/push/subscribe", apiChain(handlePushSubscribe))
+	http.HandleFunc("/api/groups/create", apiChain(handleGroupCreate))
+	http.HandleFunc("/api/groups/members", apiChain(handleGroupMembers))
+	http.HandleFunc("/api/groups/kick", apiChain(handleGroupKick))
+	http.HandleFunc("/api/groups/promote", apiChain(handleGroupPromote))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -693,4 +697,169 @@ func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("🔔 Push subscription received: %s", truncate(string(body), 100))
 	writeJSON(w, 200, map[string]interface{}{"status": "subscribed"})
+}
+
+// handleGroupCreate — POST /api/groups/create
+func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Name        string   `json:"name"`
+		CreatorNpub string   `json:"creatorNpub"`
+		Members     []string `json:"members"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.Name == "" || req.CreatorNpub == "" {
+		writeError(w, 400, "BAD_REQUEST", "name and creatorNpub required")
+		return
+	}
+
+	groupID := fmt.Sprintf("grp-%d", time.Now().UnixNano())
+
+	// Add creator as admin
+	if err := db.SaveGroupMember(store.GroupMember{
+		GroupID:  groupID,
+		UserNpub: req.CreatorNpub,
+		Role:     "admin",
+		JoinedAt: time.Now().Unix(),
+	}); err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+
+	// Add members
+	for _, m := range req.Members {
+		if m == req.CreatorNpub {
+			continue
+		}
+		db.SaveGroupMember(store.GroupMember{
+			GroupID:  groupID,
+			UserNpub: m,
+			Role:     "member",
+			JoinedAt: time.Now().Unix(),
+		})
+	}
+
+	// Also create as a channel for message routing
+	ch := store.Channel{
+		ID:          groupID,
+		Name:        req.Name,
+		Description: "Group chat",
+		Creator:     req.CreatorNpub,
+		Subscribers: len(req.Members) + 1,
+		CreatedAt:   time.Now().Unix(),
+	}
+	db.SaveChannel(ch)
+
+	writeJSON(w, 200, map[string]interface{}{
+		"status":  "created",
+		"groupId": groupID,
+		"name":    req.Name,
+		"members": len(req.Members) + 1,
+	})
+	log.Printf("👥 Group created: %s (%s) with %d members", req.Name, groupID, len(req.Members)+1)
+}
+
+// handleGroupMembers — GET /api/groups/members?groupId=...
+func handleGroupMembers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	groupID := r.URL.Query().Get("groupId")
+	if groupID == "" {
+		writeError(w, 400, "BAD_REQUEST", "groupId required")
+		return
+	}
+	members, err := db.GetGroupMembers(groupID)
+	if err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+	if members == nil {
+		members = []store.GroupMember{}
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"groupId": groupID,
+		"members": members,
+		"count":   len(members),
+	})
+}
+
+// handleGroupKick — DELETE /api/groups/kick (admin only)
+func handleGroupKick(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST or DELETE")
+		return
+	}
+	var req struct {
+		GroupID  string `json:"groupId"`
+		AdminNpub string `json:"adminNpub"`
+		TargetNpub string `json:"targetNpub"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.GroupID == "" || req.AdminNpub == "" || req.TargetNpub == "" {
+		writeError(w, 400, "BAD_REQUEST", "groupId, adminNpub and targetNpub required")
+		return
+	}
+
+	isAdmin, err := db.IsGroupAdmin(req.GroupID, req.AdminNpub)
+	if err != nil || !isAdmin {
+		writeError(w, 403, "FORBIDDEN", "Only admin can kick members")
+		return
+	}
+
+	if err := db.RemoveGroupMember(req.GroupID, req.TargetNpub); err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{"status": "kicked", "groupId": req.GroupID, "target": req.TargetNpub})
+}
+
+// handleGroupPromote — POST /api/groups/promote (admin only)
+func handleGroupPromote(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		GroupID     string `json:"groupId"`
+		AdminNpub   string `json:"adminNpub"`
+		TargetNpub  string `json:"targetNpub"`
+		NewRole     string `json:"newRole"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.GroupID == "" || req.AdminNpub == "" || req.TargetNpub == "" || req.NewRole == "" {
+		writeError(w, 400, "BAD_REQUEST", "groupId, adminNpub, targetNpub and newRole required")
+		return
+	}
+	if req.NewRole != "admin" && req.NewRole != "moderator" && req.NewRole != "member" {
+		writeError(w, 400, "BAD_REQUEST", "newRole must be admin, moderator or member")
+		return
+	}
+
+	isAdmin, err := db.IsGroupAdmin(req.GroupID, req.AdminNpub)
+	if err != nil || !isAdmin {
+		writeError(w, 403, "FORBIDDEN", "Only admin can promote members")
+		return
+	}
+
+	if err := db.UpdateGroupMemberRole(req.GroupID, req.TargetNpub, req.NewRole); err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{"status": "promoted", "newRole": req.NewRole})
 }
