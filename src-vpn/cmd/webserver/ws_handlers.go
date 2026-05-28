@@ -301,3 +301,27 @@ func handleChannelsPost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, ch)
 	log.Printf("📡 Channel created: %s by %s", req.Name, truncate(req.Creator, 16)+"...")
 }
+
+// handleChannelSubscribe — POST /api/channels/subscribe {channelId}
+func handleChannelSubscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		ChannelID string `json:"channelId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.ChannelID == "" {
+		writeError(w, 400, "BAD_REQUEST", "channelId required")
+		return
+	}
+	if err := db.SubscribeChannel(req.ChannelID); err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"status": "subscribed", "channelId": req.ChannelID})
+}

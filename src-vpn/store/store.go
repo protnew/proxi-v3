@@ -276,6 +276,22 @@ func (s *Store) GetChannels() ([]Channel, error) {
 	return channels, rows.Err()
 }
 
+// SubscribeChannel increments subscriber count for a channel.
+func (s *Store) SubscribeChannel(channelID string) error {
+	res, err := s.db.Exec(
+		`UPDATE channels SET subscribers = subscribers + 1 WHERE id = ?`,
+		channelID,
+	)
+	if err != nil {
+		return fmt.Errorf("subscribe channel %s: %w", channelID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("channel %s not found", channelID)
+	}
+	return nil
+}
+
 // ---------------------------------------------------------------------------
 // Peers
 // ---------------------------------------------------------------------------

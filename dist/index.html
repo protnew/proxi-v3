@@ -334,6 +334,20 @@
             window._typingTimeout = setTimeout(() => {
               document.getElementById('typing-indicator').textContent = '';
             }, 2000);
+          } else if (msg.type === 'message_edited') {
+            // Find message by text content and update (best effort)
+            const bubbles = msgList.querySelectorAll('.msg-bubble');
+            // Server sends edited text — show toast
+            toast('✏️ Сообщение отредактировано');
+          } else if (msg.type === 'message_deleted') {
+            // msg.text contains the deleted message ID
+            const delId = msg.text;
+            if (delId) {
+              // Remove message element by matching data attribute
+              const el = msgList.querySelector('[data-msg-id="' + delId + '"]');
+              if (el) el.remove();
+            }
+            toast('🗑 Сообщение удалено');
           }
         } catch(err) {}
       };
@@ -368,10 +382,13 @@
       const time = new Date().toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit'});
       const div = document.createElement('div');
       div.className = 'msg ' + (isMe ? 'me' : 'other');
+      const msgId = 'msg-dom-' + Date.now() + '-' + Math.random().toString(36).substr(2,6);
+      div.setAttribute('data-msg-id', msgId);
       const sender = isMe ? '' : '<div class="msg-sender">' + escHtml(from.substring(0,12)) + '...</div>';
       div.innerHTML = sender + '<div class="msg-bubble">' + escHtml(text) + '</div><div class="msg-time">' + time + '</div>';
       msgList.appendChild(div);
       msgList.scrollTop = msgList.scrollHeight;
+      return msgId;
     }
 
     function addSystemMsg(text) {
@@ -607,10 +624,21 @@
     }
 
     function subscribeChannel(channelId, btn) {
-      btn.textContent = '✓ Подписан';
+      btn.textContent = '⏳';
       btn.disabled = true;
-      btn.style.background = '#333';
-      toast('📡 Вы подписались на канал');
+      fetch('/api/channels/subscribe', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({channelId: channelId})
+      }).then(r => r.json()).then(d => {
+        btn.textContent = '✓ Подписан';
+        btn.style.background = '#333';
+        toast('📡 Вы подписались на канал');
+      }).catch(() => {
+        btn.textContent = 'Ошибка';
+        btn.disabled = false;
+        toast('❌ Ошибка подписки');
+      });
     }
 
     // ========== TOAST ==========
