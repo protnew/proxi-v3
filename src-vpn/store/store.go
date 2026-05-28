@@ -173,6 +173,35 @@ func (s *Store) SaveMessage(msg Message) error {
 	return nil
 }
 
+// EditMessage updates the text of an existing message. Returns error if not found.
+func (s *Store) EditMessage(messageID, newText string) error {
+	res, err := s.db.Exec(
+		`UPDATE messages SET text = ? WHERE id = ?`,
+		newText, messageID,
+	)
+	if err != nil {
+		return fmt.Errorf("edit message %s: %w", messageID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("message %s not found", messageID)
+	}
+	return nil
+}
+
+// DeleteMessage removes a message by ID. Returns error if not found.
+func (s *Store) DeleteMessage(messageID string) error {
+	res, err := s.db.Exec(`DELETE FROM messages WHERE id = ?`, messageID)
+	if err != nil {
+		return fmt.Errorf("delete message %s: %w", messageID, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("message %s not found", messageID)
+	}
+	return nil
+}
+
 // GetMessages returns up to `limit` messages newer than `since` (unix ts).
 // It returns broadcast messages (recipient = "broadcast") plus DMs where the
 // given npub is either sender or recipient.

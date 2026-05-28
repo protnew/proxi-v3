@@ -393,6 +393,8 @@ func main() {
 	http.HandleFunc("/api/profiles", apiChain(handleProfiles))
 	// Search
 	http.HandleFunc("/api/search", apiChain(handleSearch))
+	http.HandleFunc("/api/messages/edit", apiChain(handleEditMessage))
+	http.HandleFunc("/api/messages/delete", apiChain(handleDeleteMessage))
 
 	// Static files + SPA fallback
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

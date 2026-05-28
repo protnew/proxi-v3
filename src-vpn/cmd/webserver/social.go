@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/store"
 )
 
@@ -392,4 +393,80 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		"query":   query,
 		"time":    fmt.Sprintf("%dms", time.Now().Unix()%1000),
 	})
+}
+
+// ==================== Edit/Delete Messages ====================
+
+// handleEditMessage — PUT /api/messages/edit {id, text}
+func handleEditMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use PUT or POST")
+		return
+	}
+	var req struct {
+		ID   string `json:"id"`
+		Text string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.ID == "" || req.Text == "" {
+		writeError(w, 400, "BAD_REQUEST", "id and text required")
+		return
+	}
+	if err := db.EditMessage(req.ID, req.Text); err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+
+	// Broadcast edit event to WS clients
+	if hub != nil {
+		msg := &chat.Message{
+			Type: "message_edited",
+			Text: req.Text,
+			Ts:   time.Now().Unix(),
+		}
+		msg.From = ""
+		encoded, _ := msg.Encode()
+		hub.Broadcast(encoded, "")
+	}
+
+	writeJSON(w, 200, map[string]interface{}{"status": "edited", "id": req.ID})
+}
+
+// handleDeleteMessage — DELETE /api/messages/delete {id}
+func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use DELETE or POST")
+		return
+	}
+	var req struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.ID == "" {
+		writeError(w, 400, "BAD_REQUEST", "id required")
+		return
+	}
+	if err := db.DeleteMessage(req.ID); err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+
+	// Broadcast delete event to WS clients
+	if hub != nil {
+		msg := &chat.Message{
+			Type: "message_deleted",
+			Ts:   time.Now().Unix(),
+		}
+		msg.Text = req.ID
+		encoded, _ := msg.Encode()
+		hub.Broadcast(encoded, "")
+	}
+
+	writeJSON(w, 200, map[string]interface{}{"status": "deleted", "id": req.ID})
 }
