@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -335,6 +336,9 @@ func main() {
 	// Initialize chat hub
 	initHub()
 
+	// Auto-connect VPN peers on startup
+	go autoConnectPeers()
+
 	fs := http.FileServer(http.Dir(distDir))
 
 	// API routes with middleware chain
@@ -434,5 +438,44 @@ func main() {
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Fatal(err)
+	}
+}
+
+// autoConnectPeers loads saved VPN peers from DB and attempts to reconnect.
+// Runs in background goroutine on startup.
+func autoConnectPeers() {
+	// Wait a moment for server to be ready
+	time.Sleep(2 * time.Second)
+
+	peers, err := db.GetPeers()
+	if err != nil {
+		log.Printf("🔌 Auto-connect: failed to load peers: %v", err)
+		return
+	}
+
+	connected := 0
+	for _, p := range peers {
+		pubKey, _ := p["public_key"].(string)
+		endpoint, _ := p["endpoint"].(string)
+		name, _ := p["name"].(string)
+
+		if pubKey == "" || endpoint == "" {
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := vpnMgr.ConnectToExitNode(ctx, pubKey, endpoint); err != nil {
+			log.Printf("🔌 Auto-connect: failed %s (%s): %v", name, endpoint, err)
+		} else {
+			connected++
+			log.Printf("🔌 Auto-connected: %s (%s)", name, endpoint)
+		}
+		cancel()
+	}
+
+	if connected > 0 {
+		log.Printf("🔌 Auto-connected %d/%d VPN peers", connected, len(peers))
+	} else if len(peers) > 0 {
+		log.Printf("🔌 Auto-connect: 0/%d peers connected (will retry on demand)", len(peers))
 	}
 }
