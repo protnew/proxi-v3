@@ -306,7 +306,7 @@
         }
       };
 
-      ws.onmessage = (e) => {
+      ws.onmessage = async (e) => {
         try {
           const msg = JSON.parse(e.data);
           if (msg.type === 'chat') {
