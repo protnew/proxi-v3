@@ -96,6 +96,30 @@
     .peer-remove:hover{background:#f44336;color:#fff;border-color:#f44336}
     .add-form-msg{font-size:12px;padding:4px 0;margin-top:4px}
 
+    /* Reply/Forward */
+    .reply-bar{display:none;padding:8px 12px;background:#111;border-top:1px solid #222;align-items:center;gap:8px}
+    .reply-bar.show{display:flex}
+    .reply-preview{flex:1;font-size:12px;color:#888;border-left:2px solid #1e88e5;padding-left:8px}
+    .reply-preview .rp-from{color:#1e88e5;font-size:11px}
+    .reply-preview .rp-text{color:#aaa;margin-top:2px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .reply-cancel{background:none;border:none;color:#555;cursor:pointer;font-size:18px;padding:4px}
+    .reply-cancel:hover{color:#e0e0e0}
+    .msg-actions{position:absolute;right:-8px;top:-8px;display:none;gap:4px}
+    .msg:hover .msg-actions{display:flex}
+    .msg-action-btn{width:28px;height:28px;border-radius:50%;background:#1a1a1a;border:1px solid #333;color:#888;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center}
+    .msg-action-btn:hover{background:#1e88e5;color:#fff;border-color:#1e88e5}
+    .msg{position:relative}
+    .msg-reply{background:#0d1520;border-left:2px solid #1e88e5;padding:4px 8px;margin-bottom:4px;border-radius:4px;font-size:11px;cursor:pointer}
+    .msg-reply .mr-from{color:#1e88e5}
+    .msg-reply .mr-text{color:#666;margin-top:1px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .msg-fwd{font-size:10px;color:#666;margin-bottom:2px;font-style:italic}
+    .forward-modal{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.7);z-index:100;align-items:center;justify-content:center}
+    .forward-modal.show{display:flex}
+    .fwd-dialog{background:#111;border:1px solid #333;border-radius:14px;padding:20px;width:320px;max-height:70vh;overflow-y:auto}
+    .fwd-dialog h3{font-size:15px;margin-bottom:12px}
+    .fwd-item{padding:10px;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px}
+    .fwd-item:hover{border-color:#1e88e5;background:#0d1520}
+
     /* Channels */
     .channels-panel{padding:24px}
     .channels-panel h1{font-size:20px;margin-bottom:24px}
@@ -154,6 +178,13 @@
           </div>
         </div>
         <div class="typing" id="typing-indicator"></div>
+        <div class="reply-bar" id="reply-bar">
+          <div class="reply-preview" id="reply-preview">
+            <div class="rp-from" id="rp-from"></div>
+            <div class="rp-text" id="rp-text"></div>
+          </div>
+          <button class="reply-cancel" onclick="cancelReply()">✕</button>
+        </div>
         <div class="input-bar">
           <input id="msg-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}" />
           <button onclick="sendMsg()">➤</button>
@@ -315,7 +346,14 @@
             if (msg.from !== myId && E2E.hasSharedKey(msg.from)) {
               try { text = await E2E.decrypt(msg.from, msg.text); } catch(e) {}
             }
-            addMsg(msg.from, text, msg.from === myId);
+            const msgData = {
+              id: msg.id || null,
+              replyTo: msg.replyTo || null,
+              replyToFrom: msg.replyToFrom || null,
+              replyToText: msg.replyToText || null,
+              forwardedFrom: msg.forwardedFrom || null,
+            };
+            addMsg(msg.from, text, msg.from === myId, msgData);
           } else if (msg.type === 'key_exchange') {
             // Auto key exchange: derive shared AES key
             if (msg.from && msg.from !== myId && msg.publicKey) {
@@ -376,16 +414,39 @@
     const msgList = document.getElementById('msg-list');
     const msgInput = document.getElementById('msg-input');
 
-    function addMsg(from, text, isMe) {
+    function addMsg(from, text, isMe, msgData) {
       if (msgCount === 0) msgList.innerHTML = '';
       msgCount++;
       const time = new Date().toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit'});
       const div = document.createElement('div');
       div.className = 'msg ' + (isMe ? 'me' : 'other');
-      const msgId = 'msg-dom-' + Date.now() + '-' + Math.random().toString(36).substr(2,6);
+      const msgId = msgData && msgData.id ? msgData.id : 'msg-dom-' + Date.now() + '-' + Math.random().toString(36).substr(2,6);
       div.setAttribute('data-msg-id', msgId);
       const sender = isMe ? '' : '<div class="msg-sender">' + escHtml(from.substring(0,12)) + '...</div>';
-      div.innerHTML = sender + '<div class="msg-bubble">' + escHtml(text) + '</div><div class="msg-time">' + time + '</div>';
+
+      // Reply preview
+      let replyHtml = '';
+      if (msgData && msgData.replyTo) {
+        const rtFrom = msgData.replyToFrom ? escHtml(msgData.replyToFrom.substring(0,12)) + '...' : '';
+        const rtText = msgData.replyToText ? escHtml(msgData.replyToText) : '...';
+        replyHtml = '<div class="msg-reply" onclick="scrollToMsg(\'' + escHtml(msgData.replyTo) + '\')">' +
+          '<div class="mr-from">' + rtFrom + '</div>' +
+          '<div class="mr-text">' + rtText + '</div></div>';
+      }
+
+      // Forward label
+      let fwdHtml = '';
+      if (msgData && msgData.forwardedFrom) {
+        fwdHtml = '<div class="msg-fwd">↗ Переслано от ' + escHtml(msgData.forwardedFrom.substring(0,12)) + '...</div>';
+      }
+
+      // Action buttons (reply, forward) — visible on hover
+      const actions = '<div class="msg-actions">' +
+        '<button class="msg-action-btn" onclick="startReply(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')\" title="Ответить">↩</button>' +
+        '<button class="msg-action-btn" onclick="startForward(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')\" title="Переслать">↗</button>' +
+        '</div>';
+
+      div.innerHTML = sender + actions + replyHtml + fwdHtml + '<div class="msg-bubble">' + escHtml(text) + '</div><div class="msg-time">' + time + '</div>';
       msgList.appendChild(div);
       msgList.scrollTop = msgList.scrollHeight;
       return msgId;
@@ -401,10 +462,60 @@
       msgList.scrollTop = msgList.scrollHeight;
     }
 
+    // Reply state
+    let replyToId = null;
+    let replyToFrom = '';
+    let replyToText = '';
+    let fwdMsgText = '';
+    let fwdMsgFrom = '';
+
+    function startReply(msgId, from, text) {
+      replyToId = msgId;
+      replyToFrom = from;
+      replyToText = text;
+      document.getElementById('rp-from').textContent = from + '...';
+      document.getElementById('rp-text').textContent = text;
+      document.getElementById('reply-bar').classList.add('show');
+      document.getElementById('msg-input').focus();
+    }
+
+    function cancelReply() {
+      replyToId = null;
+      replyToFrom = '';
+      replyToText = '';
+      document.getElementById('reply-bar').classList.remove('show');
+    }
+
+    function scrollToMsg(msgId) {
+      const el = document.querySelector('[data-msg-id="' + msgId + '"]');
+      if (el) {
+        el.scrollIntoView({behavior: 'smooth', block: 'center'});
+        el.style.outline = '2px solid #1e88e5';
+        setTimeout(() => el.style.outline = '', 1500);
+      }
+    }
+
+    function startForward(msgId, from, text) {
+      fwdMsgText = text;
+      fwdMsgFrom = from;
+      // For now just send as forwarded broadcast
+      if (!ws || ws.readyState !== WebSocket.OPEN) { toast('❌ Нет подключения'); return; }
+      const msg = {type:'chat', from:myId, to:'broadcast', text: text, ts:Date.now()/1000|0, forwardedFrom: from};
+      ws.send(JSON.stringify(msg));
+      addMsg(myId, text, true, {forwardedFrom: from});
+      toast('↗ Сообщение переслано');
+    }
+
     function sendMsg() {
       const text = msgInput.value.trim();
       if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
       const msg = {type:'chat', from:myId, to:'broadcast', text:text, ts:Date.now()/1000|0};
+      // Attach reply info
+      if (replyToId) {
+        msg.replyTo = replyToId;
+        msg.replyToFrom = replyToFrom;
+        msg.replyToText = replyToText;
+      }
       // E2E: encrypt if DM target has shared key
       if (msg.to !== 'broadcast' && E2E.hasSharedKey(msg.to)) {
         E2E.encrypt(msg.to, text).then(ct => {
@@ -414,8 +525,10 @@
       } else {
         ws.send(JSON.stringify(msg));
       }
-      addMsg(myId, text, true);
+      const msgData = replyToId ? {replyTo: replyToId, replyToFrom: replyToFrom, replyToText: replyToText} : {};
+      addMsg(myId, text, true, msgData);
       msgInput.value = '';
+      cancelReply();
       msgInput.focus();
     }
 

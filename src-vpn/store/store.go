@@ -236,6 +236,22 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 	return msgs, rows.Err()
 }
 
+// GetMessageByID returns a single message by ID, or error if not found.
+func (s *Store) GetMessageByID(id string) (*Message, error) {
+	row := s.db.QueryRow(
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments
+		 FROM messages WHERE id = ?`, id,
+	)
+	var m Message
+	var enc int
+	if err := row.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
+		&m.ReplyTo, &m.ForwardedFrom, &m.Attachments); err != nil {
+		return nil, fmt.Errorf("message %s not found: %w", id, err)
+	}
+	m.Encrypted = enc != 0
+	return &m, nil
+}
+
 // ---------------------------------------------------------------------------
 // Channels
 // ---------------------------------------------------------------------------

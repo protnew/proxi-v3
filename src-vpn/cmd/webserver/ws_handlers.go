@@ -107,6 +107,35 @@ func initHub() {
 	hub = chat.NewChatHub()
 	hub.OnMessage = func(msg *chat.Message) {
 		log.Printf("💬 [%s→%s]: %s", msg.From, msg.To, truncate(msg.Text, 50))
+
+		// Save chat messages to SQLite
+		if msg.Type == "chat" {
+			msgID := fmt.Sprintf("msg-%d-%s", msg.Ts, randomHex(4))
+			storeMsg := store.Message{
+				ID:            msgID,
+				From:          msg.From,
+				To:            msg.To,
+				Text:          msg.Text,
+				Timestamp:     msg.Ts,
+				ReplyTo:       msg.ReplyTo,
+				ForwardedFrom: msg.ForwardedFrom,
+			}
+			// Enrich reply with preview text
+			if msg.ReplyTo != "" {
+				if orig, err := db.GetMessageByID(msg.ReplyTo); err == nil {
+					msg.ReplyToText = orig.Text
+					msg.ReplyToFrom = orig.From
+					if len(orig.Text) > 80 {
+						msg.ReplyToText = orig.Text[:80] + "..."
+					}
+				}
+			}
+			// Assign server-generated ID back to message for WS broadcast
+			msg.ID = msgID
+			if err := db.SaveMessage(storeMsg); err != nil {
+				log.Printf("ERROR: save message: %v", err)
+			}
+		}
 	}
 	log.Println("💬 Chat Hub initialized")
 }
