@@ -8,6 +8,7 @@
   <link rel="manifest" href="/manifest.json">
   <script src="/js/e2e.js"></script>
   <script src="/js/push.js"></script>
+  <script src="/js/voice.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;overflow:hidden}
@@ -121,6 +122,10 @@
     .fwd-item{padding:10px;background:#0a0a0a;border:1px solid #1a1a1a;border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13px}
     .fwd-item:hover{border-color:#1e88e5;background:#0d1520}
 
+    /* Voice */
+    .voice-msg{display:flex;align-items:center;gap:6px;padding:4px 0}
+    .voice-msg audio{border-radius:8px;outline:none}
+
     /* Channels */
     .channels-panel{padding:24px}
     .channels-panel h1{font-size:20px;margin-bottom:24px}
@@ -188,6 +193,7 @@
         </div>
         <div class="input-bar">
           <input id="msg-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}" />
+          <button id="voice-btn" onclick="toggleVoice()" title="Голосовое сообщение" style="background:#1a1a1a;font-size:14px;min-width:42px">🎤</button>
           <button id="ttl-btn" onclick="cycleTTL()" title="Самоуничтожение" style="background:#1a1a1a;font-size:14px;min-width:42px">⏱0</button>
           <button onclick="sendMsg()">➤</button>
         </div>
@@ -494,6 +500,51 @@
       btn.textContent = ttlLabels[idx];
       btn.style.background = currentTTL > 0 ? '#c62828' : '#1a1a1a';
       btn.style.color = currentTTL > 0 ? '#fff' : '#888';
+    }
+
+    // Voice recording
+    async function toggleVoice() {
+      const btn = document.getElementById('voice-btn');
+      if (VoiceMessages.getIsRecording()) {
+        // Stop and send
+        const result = await VoiceMessages.stopRecording();
+        if (result && result.blob) {
+          if (result.duration > 120) {
+            toast('❌ Голосовое сообщение максимум 2 минуты');
+            return;
+          }
+          const b64 = await VoiceMessages.blobToBase64(result.blob);
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            const msg = {
+              type: 'chat',
+              from: myId,
+              to: 'broadcast',
+              text: '🎤 Голосовое сообщение (' + result.duration + 'с)',
+              ts: Date.now()/1000|0,
+              voiceData: b64,
+              voiceDuration: result.duration
+            };
+            ws.send(JSON.stringify(msg));
+            // Show locally with player
+            addMsg(myId, '🎤 Голосовое (' + result.duration + 'с)', true);
+            toast('🎤 Голосовое отправлено');
+          }
+        }
+        btn.textContent = '🎤';
+        btn.style.background = '#1a1a1a';
+        btn.style.color = '#888';
+      } else {
+        // Start recording
+        const ok = await VoiceMessages.startRecording();
+        if (ok) {
+          btn.textContent = '⏹';
+          btn.style.background = '#c62828';
+          btn.style.color = '#fff';
+          toast('🎤 Запись...');
+        } else {
+          toast('❌ Нет доступа к микрофону');
+        }
+      }
     }
 
     function startReply(msgId, from, text) {
