@@ -409,6 +409,7 @@ func main() {
 	http.HandleFunc("/api/messages/schedule", apiChain(handleScheduleMessage))
 	http.HandleFunc("/api/switch/setup", apiChain(handleSwitchSetup))
 	http.HandleFunc("/api/switch/check-in", apiChain(handleSwitchCheckIn))
+	http.HandleFunc("/api/push/subscribe", apiChain(handlePushSubscribe))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -679,4 +680,17 @@ func handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]interface{}{"status": "checked_in"})
+}
+
+// handlePushSubscribe — POST /api/push/subscribe
+func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	body, _ := io.ReadAll(io.LimitReader(r.Body, 4*1024))
+	defer r.Body.Close()
+
+	log.Printf("🔔 Push subscription received: %s", truncate(string(body), 100))
+	writeJSON(w, 200, map[string]interface{}{"status": "subscribed"})
 }
