@@ -1,20 +1,49 @@
-version: "3.8"
+version: '3.8'
 
 services:
-  messenger:
-    build: .
-    container_name: unkillable-messenger
+  proxi-server:
+    build:
+      context: ./src-vpn
+      dockerfile: Dockerfile
     ports:
-      - "8090:8080"   # Web UI
-      - "51820:51820/udp"  # WireGuard VPN
-    cap_add:
-      - NET_ADMIN
-      - SYS_MODULE
-    sysctls:
-      - net.ipv4.ip_forward=1
+      - "9999:9999"
+    environment:
+      - PORT=9999
+      - DIST_DIR=/app/dist
+      - DATA_DIR=/data
     volumes:
-      - vpn-data:/root/.unkillable-vpn
+      - proxi-data:/data
+      - ./dist:/app/dist:ro
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9999/api/status"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional: IPFS node for file storage
+  ipfs:
+    image: ipfs/kubo:latest
+    ports:
+      - "4001:4001"
+      - "5001:5001"
+      - "8080:8080"
+    volumes:
+      - ipfs-data:/data/ipfs
+    restart: unless-stopped
+    profiles:
+      - ipfs
+
+  # Optional: Tor proxy for .onion connections
+  tor:
+    image: dperson/torproxy:latest
+    ports:
+      - "9050:9050"
+      - "9051:9051"
+    restart: unless-stopped
+    profiles:
+      - tor
 
 volumes:
-  vpn-data:
+  proxi-data:
+  ipfs-data:
