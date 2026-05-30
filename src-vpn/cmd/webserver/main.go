@@ -18,6 +18,7 @@ import (
 	"github.com/unkillable-messenger/vpn/ipfs"
 	"github.com/unkillable-messenger/vpn/nat"
 	"github.com/unkillable-messenger/vpn/nostr"
+	"github.com/unkillable-messenger/vpn/tor"
 	"github.com/unkillable-messenger/vpn/store"
 
 	"golang.org/x/time/rate"
@@ -35,6 +36,8 @@ var vpnMgr *vpn.Manager
 var nostrRelay *nostr.Relay
 
 var ipfsClient *ipfs.Client
+
+var torDialer *tor.TorDialer
 
 // ========== Rate limiter ==========
 
@@ -329,6 +332,14 @@ func main() {
 		log.Println("📦 IPFS daemon not found (file upload will return error)")
 	}
 
+	// Initialize Tor dialer
+	torDialer = tor.NewTorDialer("")
+	if torDialer.IsTorRunning() {
+		log.Println("🧅 Tor SOCKS5 proxy connected")
+	} else {
+		log.Println("🧅 Tor not found (.onion connections disabled)")
+	}
+
 	// Initialize VPN Manager
 	var vpnErr error
 	vpnMgr, vpnErr = vpn.NewManager(getDataDir() + "/vpn")
@@ -441,6 +452,7 @@ func main() {
 	http.HandleFunc("/api/ipfs/upload", apiChain(handleIPFSUpload))
 	http.HandleFunc("/api/ipfs/status", apiChain(handleIPFSStatus))
 	http.HandleFunc("/api/nat/discover", apiChain(handleNATDiscover))
+	http.HandleFunc("/api/tor/status", apiChain(handleTorStatus))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -1074,4 +1086,12 @@ func handleNATDiscover(w http.ResponseWriter, r *http.Request) {
 	natType, _ := nat.DetectNATType("")
 	result.NATType = natType
 	writeJSON(w, 200, result)
+}
+
+// handleTorStatus returns Tor SOCKS5 proxy status.
+func handleTorStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]interface{}{
+		"available": torDialer.IsTorRunning(),
+		"proxy":     "127.0.0.1:9050",
+	})
 }
