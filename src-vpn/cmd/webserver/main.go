@@ -15,9 +15,11 @@ import (
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
+	"github.com/unkillable-messenger/vpn/nostr"
 	"github.com/unkillable-messenger/vpn/store"
 
 	"golang.org/x/time/rate"
+	"nhooyr.io/websocket"
 )
 
 // ========== SQLite-backed store ==========
@@ -27,6 +29,8 @@ var db *store.Store
 // ========== VPN Manager ==========
 
 var vpnMgr *vpn.Manager
+
+var nostrRelay *nostr.Relay
 
 // ========== Rate limiter ==========
 
@@ -309,6 +313,10 @@ func main() {
 	}
 	log.Println("💾 SQLite store initialized")
 
+	// Initialize Nostr Relay
+	nostrRelay = nostr.NewRelay(50000)
+	log.Println("📡 Nostr NIP-01 relay initialized")
+
 	// Initialize VPN Manager
 	var vpnErr error
 	vpnMgr, vpnErr = vpn.NewManager(getDataDir() + "/vpn")
@@ -416,6 +424,8 @@ func main() {
 	http.HandleFunc("/api/groups/promote", apiChain(handleGroupPromote))
 	http.HandleFunc("/api/vpn/split-tunnel", apiChain(handleSplitTunnel))
 	http.HandleFunc("/api/vpn/dns", apiChain(handleDNSProxy))
+	http.HandleFunc("/api/nostr/stats", apiChain(handleNostrStats))
+	http.HandleFunc("/nostr", handleNostrWS) // NIP-01 WebSocket endpoint
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -936,4 +946,54 @@ func handleDNSProxy(w http.ResponseWriter, r *http.Request) {
 		"listen":   cfg.Listen,
 		"upstream": cfg.Upstream,
 	})
+}
+
+// ==================== Nostr NIP-01 Handlers ====================
+
+// nhooyrWSConn adapts nhooyr.io/websocket.Conn to nostr.WebSocketConn.
+type nhooyrWSConn struct {
+	c *websocket.Conn
+}
+
+func (g *nhooyrWSConn) ReadJSON(v interface{}) error {
+	_, r, err := g.c.Reader(context.Background())
+	if err != nil {
+		return err
+	}
+	return json.NewDecoder(r).Decode(v)
+}
+
+func (g *nhooyrWSConn) WriteJSON(v interface{}) error {
+	w, err := g.c.Writer(context.Background(), websocket.MessageText)
+	if err != nil {
+		return err
+	}
+	err = json.NewEncoder(w).Encode(v)
+	w.Close()
+	return err
+}
+
+func (g *nhooyrWSConn) Close() error {
+	return g.c.Close(websocket.StatusNormalClosure, "")
+}
+
+// handleNostrWS handles WebSocket connections for the Nostr relay.
+func handleNostrWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"*"},
+	})
+	if err != nil {
+		log.Printf("[nostr] upgrade error: %v", err)
+		return
+	}
+	nostrRelay.HandleClient(&nhooyrWSConn{c: conn})
+}
+
+// handleNostrStats returns relay statistics.
+func handleNostrStats(w http.ResponseWriter, r *http.Request) {
+	if nostrRelay == nil {
+		writeError(w, 503, "NOT_READY", "Nostr relay not initialized")
+		return
+	}
+	writeJSON(w, 200, nostrRelay.GetStats())
 }
