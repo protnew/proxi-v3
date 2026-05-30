@@ -36,14 +36,8 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	client := &chat.Client{
-		UserID: userId,
-		Conn:   conn,
-		Send:   make(chan []byte, 64),
-	}
-
 	log.Printf("🔌 WS connected: %s", userId)
-	client.Serve(r.Context())
+	chat.ServeWS(hub, userId, conn, r.Context())
 }
 
 // handleIdentityGet returns current user's identity (generates if needed)

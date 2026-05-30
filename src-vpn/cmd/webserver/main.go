@@ -320,6 +320,9 @@ func main() {
 	}
 	log.Println("💾 SQLite store initialized")
 
+	// Initialize Chat Hub
+	initHub()
+
 	// Initialize Nostr Relay
 	nostrRelay = nostr.NewRelay(50000)
 	log.Println("📡 Nostr NIP-01 relay initialized")
