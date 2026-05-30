@@ -515,9 +515,130 @@ func (m *Manager) HandleRPC(request []byte) []byte {
 }
 
 func rpcError(code int, message string) []byte {
-    resp, _ := json.Marshal(map[string]interface{}{
-        "jsonrpc": "2.0",
-        "error":   map[string]interface{}{"code": code, "message": message},
-    })
-    return resp
+	resp, _ := json.Marshal(map[string]interface{}{
+		"jsonrpc": "2.0",
+		"error":   map[string]interface{}{"code": code, "message": message},
+	})
+	return resp
+}
+
+// ==================== Split Tunneling ====================
+
+// SplitTunnelConfig stores which domains/IPs go through VPN.
+type SplitTunnelConfig struct {
+	Mode    string   `json:"mode"`    // "all" (default), "split" (only listed), "exclude" (all except listed)
+	Targets []string `json:"targets"` // domains or CIDR ranges
+}
+
+// SetSplitTunnel configures split tunneling rules via iptables.
+func (m *Manager) SetSplitTunnel(cfg SplitTunnelConfig) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// First flush existing mangle rules for our interface
+	exec.Command("iptables", "-t", "mangle", "-F", "PROXI_SPLIT").Run()
+	exec.Command("iptables", "-t", "mangle", "-N", "PROXI_SPLIT").Run()
+
+	switch cfg.Mode {
+	case "all":
+		// No split rules — all traffic goes through VPN (default behavior)
+		return nil
+	case "split":
+		// Only listed targets go through VPN
+		for _, target := range cfg.Targets {
+			if ip := net.ParseIP(target); ip != nil {
+				exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+					"-d", target, "-j", "MARK", "--set-mark", "1").Run()
+			} else {
+				// Resolve domain and add rule
+				if addrs, err := net.LookupHost(target); err == nil {
+					for _, addr := range addrs {
+						exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+							"-d", addr, "-j", "MARK", "--set-mark", "1").Run()
+					}
+				}
+			}
+		}
+	case "exclude":
+		// All traffic through VPN except listed targets
+		exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+			"-j", "MARK", "--set-mark", "1").Run()
+		for _, target := range cfg.Targets {
+			if ip := net.ParseIP(target); ip != nil {
+				exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+					"-d", target, "-j", "MARK", "--set-mark", "0").Run()
+			}
+		}
+	}
+
+	return nil
+}
+
+// ==================== DNS through VPN ====================
+
+// DNSConfig stores DNS proxy settings.
+type DNSConfig struct {
+	Enabled   bool   `json:"enabled"`
+	Listen    string `json:"listen"`    // e.g. "127.0.0.1:5353"
+	Upstream  string `json:"upstream"`  // e.g. "1.1.1.1:53"
+}
+
+// StartDNSProxy starts a simple DNS forwarder that routes queries through the WG tunnel.
+func (m *Manager) StartDNSProxy(cfg DNSConfig) error {
+	if !cfg.Enabled {
+		return nil
+	}
+	if cfg.Listen == "" {
+		cfg.Listen = "127.0.0.1:5353"
+	}
+	if cfg.Upstream == "" {
+		cfg.Upstream = "1.1.1.1:53"
+	}
+
+	addr, err := net.ResolveUDPAddr("udp", cfg.Listen)
+	if err != nil {
+		return fmt.Errorf("DNS listen addr: %w", err)
+	}
+
+	conn, err := net.ListenUDP("udp", addr)
+	if err != nil {
+		return fmt.Errorf("DNS listen: %w", err)
+	}
+
+	go func() {
+		defer conn.Close()
+		buf := make([]byte, 512)
+		for {
+			n, clientAddr, err := conn.ReadFromUDP(buf)
+			if err != nil {
+				return
+			}
+
+			// Forward to upstream
+			go func(query []byte, client *net.UDPAddr) {
+				upstream, err := net.ResolveUDPAddr("udp", cfg.Upstream)
+				if err != nil {
+					return
+				}
+				upConn, err := net.DialUDP("udp", nil, upstream)
+				if err != nil {
+					return
+				}
+				defer upConn.Close()
+
+				upConn.SetDeadline(time.Now().Add(5 * time.Second))
+				upConn.Write(query)
+
+				resp := make([]byte, 512)
+				n, err := upConn.Read(resp)
+				if err != nil {
+					return
+				}
+
+				conn.WriteToUDP(resp[:n], client)
+			}(append([]byte(nil), buf[:n]...), clientAddr)
+		}
+	}()
+
+	return nil
 }

@@ -414,6 +414,8 @@ func main() {
 	http.HandleFunc("/api/groups/members", apiChain(handleGroupMembers))
 	http.HandleFunc("/api/groups/kick", apiChain(handleGroupKick))
 	http.HandleFunc("/api/groups/promote", apiChain(handleGroupPromote))
+	http.HandleFunc("/api/vpn/split-tunnel", apiChain(handleSplitTunnel))
+	http.HandleFunc("/api/vpn/dns", apiChain(handleDNSProxy))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -862,4 +864,76 @@ func handleGroupPromote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, 200, map[string]interface{}{"status": "promoted", "newRole": req.NewRole})
+}
+
+// handleSplitTunnel — POST /api/vpn/split-tunnel
+func handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Mode    string   `json:"mode"`
+		Targets []string `json:"targets"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.Mode != "all" && req.Mode != "split" && req.Mode != "exclude" {
+		writeError(w, 400, "BAD_REQUEST", "mode must be all, split or exclude")
+		return
+	}
+
+	cfg := vpn.SplitTunnelConfig{
+		Mode:    req.Mode,
+		Targets: req.Targets,
+	}
+	if err := vpnMgr.SetSplitTunnel(cfg); err != nil {
+		writeError(w, 500, "SPLIT_ERROR", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"status":  "configured",
+		"mode":    req.Mode,
+		"targets": len(req.Targets),
+	})
+}
+
+// handleDNSProxy — POST /api/vpn/dns
+func handleDNSProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Enabled  bool   `json:"enabled"`
+		Listen   string `json:"listen"`
+		Upstream string `json:"upstream"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+
+	cfg := vpn.DNSConfig{
+		Enabled:  req.Enabled,
+		Listen:   req.Listen,
+		Upstream: req.Upstream,
+	}
+	if err := vpnMgr.StartDNSProxy(cfg); err != nil {
+		writeError(w, 500, "DNS_ERROR", err.Error())
+		return
+	}
+
+	status := "stopped"
+	if cfg.Enabled {
+		status = "running"
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"status":   status,
+		"listen":   cfg.Listen,
+		"upstream": cfg.Upstream,
+	})
 }
