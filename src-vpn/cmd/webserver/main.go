@@ -15,6 +15,7 @@ import (
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
+	"github.com/unkillable-messenger/vpn/ipfs"
 	"github.com/unkillable-messenger/vpn/nostr"
 	"github.com/unkillable-messenger/vpn/store"
 
@@ -31,6 +32,8 @@ var db *store.Store
 var vpnMgr *vpn.Manager
 
 var nostrRelay *nostr.Relay
+
+var ipfsClient *ipfs.Client
 
 // ========== Rate limiter ==========
 
@@ -317,6 +320,14 @@ func main() {
 	nostrRelay = nostr.NewRelay(50000)
 	log.Println("📡 Nostr NIP-01 relay initialized")
 
+	// Initialize IPFS client
+	ipfsClient = ipfs.NewClient("", "")
+	if ipfsClient.IsAvailable() {
+		log.Println("📦 IPFS daemon connected")
+	} else {
+		log.Println("📦 IPFS daemon not found (file upload will return error)")
+	}
+
 	// Initialize VPN Manager
 	var vpnErr error
 	vpnMgr, vpnErr = vpn.NewManager(getDataDir() + "/vpn")
@@ -426,6 +437,8 @@ func main() {
 	http.HandleFunc("/api/vpn/dns", apiChain(handleDNSProxy))
 	http.HandleFunc("/api/nostr/stats", apiChain(handleNostrStats))
 	http.HandleFunc("/nostr", handleNostrWS) // NIP-01 WebSocket endpoint
+	http.HandleFunc("/api/ipfs/upload", apiChain(handleIPFSUpload))
+	http.HandleFunc("/api/ipfs/status", apiChain(handleIPFSStatus))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -996,4 +1009,55 @@ func handleNostrStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, nostrRelay.GetStats())
+}
+
+// ==================== IPFS Handlers ====================
+
+// handleIPFSUpload handles file upload to IPFS.
+func handleIPFSUpload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST with multipart form")
+		return
+	}
+
+	if !ipfsClient.IsAvailable() {
+		writeError(w, 503, "IPFS_UNAVAILABLE", "IPFS daemon not running")
+		return
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, 400, "BAD_REQUEST", "No file provided")
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		writeError(w, 500, "READ_ERROR", err.Error())
+		return
+	}
+
+	result, err := ipfsClient.UploadFile(header.Filename, data)
+	if err != nil {
+		writeError(w, 500, "UPLOAD_ERROR", err.Error())
+		return
+	}
+
+	// Pin the file
+	ipfsClient.PinFile(result.CID)
+
+	writeJSON(w, 200, map[string]interface{}{
+		"cid":        result.CID,
+		"gatewayUrl": result.GatewayURL,
+		"size":       result.Size,
+		"filename":   header.Filename,
+	})
+}
+
+// handleIPFSStatus returns IPFS daemon status.
+func handleIPFSStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, map[string]interface{}{
+		"available": ipfsClient.IsAvailable(),
+	})
 }
