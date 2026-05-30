@@ -9,6 +9,7 @@
   <script src="/js/e2e.js"></script>
   <script src="/js/push.js"></script>
   <script src="/js/voice.js"></script>
+  <script src="/js/offline.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;overflow:hidden}
@@ -343,6 +344,13 @@
         if (pubKey) {
           ws.send(JSON.stringify({ type: 'key_exchange', publicKey: pubKey }));
         }
+        // Sync missed messages + flush pending
+        OfflineStorage.syncFromServer().then(n => {
+          if (n > 0) toast('📥 Синхронизировано ' + n + ' сообщений');
+        });
+        OfflineStorage.flushPending(ws).then(n => {
+          if (n > 0) toast('📤 Отправлено ' + n + ' отложенных');
+        });
       };
 
       ws.onmessage = async (e) => {
@@ -362,6 +370,8 @@
               forwardedFrom: msg.forwardedFrom || null,
             };
             addMsg(msg.from, text, msg.from === myId, msgData);
+            // Cache to IndexedDB for offline
+            OfflineStorage.saveMessage({id: msg.id, from: msg.from, to: msg.to, text: text, ts: msg.ts, replyTo: msg.replyTo, forwardedFrom: msg.forwardedFrom, ttl: msg.ttl});
             // Push notification if tab not focused
             if (document.hidden && msg.from !== myId) {
               PushNotifications.showLocal('Proxi Messenger', text.substring(0, 100));
@@ -586,7 +596,8 @@
 
     function sendMsg() {
       const text = msgInput.value.trim();
-      if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+      if (!text) return;
+      
       const msg = {type:'chat', from:myId, to:'broadcast', text:text, ts:Date.now()/1000|0};
       // Attach reply info
       if (replyToId) {
@@ -598,6 +609,19 @@
       if (currentTTL > 0) {
         msg.ttl = currentTTL;
       }
+
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        // Offline: save to pending queue
+        OfflineStorage.savePending(msg);
+        OfflineStorage.saveMessage({from: myId, text: text, ts: msg.ts, replyTo: msg.replyTo, ttl: msg.ttl});
+        addMsg(myId, text, true, {ttl: currentTTL});
+        msgInput.value = '';
+        cancelReply();
+        toast('💾 Сохранено (офлайн)');
+        msgInput.focus();
+        return;
+      }
+
       // E2E: encrypt if DM target has shared key
       if (msg.to !== 'broadcast' && E2E.hasSharedKey(msg.to)) {
         // Check if key rotation needed
@@ -611,6 +635,8 @@
       }
       const msgData = replyToId ? {replyTo: replyToId, replyToFrom: replyToFrom, replyToText: replyToText, ttl: currentTTL} : {ttl: currentTTL};
       addMsg(myId, text, true, msgData);
+      // Cache to IndexedDB
+      OfflineStorage.saveMessage({from: myId, text: text, ts: msg.ts, replyTo: msg.replyTo, ttl: msg.ttl});
       msgInput.value = '';
       cancelReply();
       msgInput.focus();
@@ -858,6 +884,13 @@
 
     // ========== INIT ==========
     (async () => {
+      // Initialize offline storage first
+      try {
+        await OfflineStorage.init();
+        const cached = await OfflineStorage.getMessageCount();
+        if (cached > 0) console.log('Offline cache:', cached, 'messages');
+      } catch(e) { console.warn('OfflineStorage init failed:', e); }
+
       try {
         const pubKey = await E2E.init((newPubKey) => {
           // Key rotation callback: broadcast new key to all peers
