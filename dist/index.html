@@ -10,6 +10,7 @@
   <script src="/js/push.js"></script>
   <script src="/js/voice.js"></script>
   <script src="/js/offline.js"></script>
+  <script src="/js/webrtc.js"></script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{font-family:-apple-system,'Segoe UI',sans-serif;background:#0a0a0a;color:#e0e0e0;height:100vh;overflow:hidden}
@@ -178,6 +179,16 @@
     <div class="content">
       <!-- CHAT -->
       <div id="tab-chat" class="tab-content active">
+        <!-- Call UI overlay -->
+        <div id="call-panel" style="display:none;position:absolute;top:0;left:0;right:0;bottom:0;z-index:100;background:#0a0a0a;flex-direction:column;align-items:center;justify-content:center">
+          <video id="remote-video" autoplay playsinline style="width:100%;max-height:70vh;background:#000;border-radius:8px"></video>
+          <video id="local-video" autoplay playsinline muted style="position:absolute;top:10px;right:10px;width:120px;height:90px;border-radius:6px;border:1px solid #333"></video>
+          <div style="margin-top:16px;display:flex;gap:12px">
+            <button onclick="toggleMuteCall()" id="mute-btn" style="background:#1a1a1a;font-size:20px;width:48px;height:48px;border-radius:50%;border:none;color:#e0e0e0;cursor:pointer">🎤</button>
+            <button onclick="hangupCall()" style="background:#c0392b;font-size:20px;width:48px;height:48px;border-radius:50%;border:none;color:white;cursor:pointer">📵</button>
+          </div>
+          <div id="call-status" style="margin-top:8px;color:#888;font-size:14px">Звоним...</div>
+        </div>
         <div class="messages" id="msg-list">
           <div class="welcome">
             <h3>💬 Мессенджер</h3>
@@ -196,6 +207,8 @@
           <input id="msg-input" placeholder="Написать сообщение..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg()}" />
           <button id="voice-btn" onclick="toggleVoice()" title="Голосовое сообщение" style="background:#1a1a1a;font-size:14px;min-width:42px">🎤</button>
           <button id="ttl-btn" onclick="cycleTTL()" title="Самоуничтожение" style="background:#1a1a1a;font-size:14px;min-width:42px">⏱0</button>
+          <button id="call-audio-btn" onclick="startAudioCall()" title="Аудиозвонок" style="background:#1a1a1a;font-size:14px;min-width:42px">📞</button>
+          <button id="call-video-btn" onclick="startVideoCall()" title="Видеозвонок" style="background:#1a1a1a;font-size:14px;min-width:42px">📹</button>
           <button onclick="sendMsg()">➤</button>
         </div>
       </div>
@@ -339,6 +352,8 @@
         setConn('on', 'Подключён');
         reconnectDelay = 1000;
         toast('✅ Подключён к чату');
+        // Set WS reference for WebRTC signaling
+        WebRTCCall.setWS(ws);
         // Send E2E public key to all peers
         const pubKey = E2E.getPublicKeyBase64();
         if (pubKey) {
@@ -408,6 +423,15 @@
               if (el) el.remove();
             }
             toast('🗑 Сообщение удалено');
+          } else if (msg.type === 'webrtc-signal') {
+            // WebRTC signaling relay
+            WebRTCCall.handleSignal({
+              type: msg.signalType,
+              from: msg.from,
+              sdp: msg.sdp,
+              candidate: msg.candidate
+            });
+          }
           }
         } catch(err) {}
       };
@@ -881,6 +905,55 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
+
+    // ========== WEBRTC CALLS ==========
+    function startAudioCall() {
+      const peerId = prompt('ID пира для аудиозвонка:');
+      if (peerId) WebRTCCall.initCall(peerId, false);
+    }
+    function startVideoCall() {
+      const peerId = prompt('ID пира для видеозвонка:');
+      if (peerId) WebRTCCall.initCall(peerId, true);
+    }
+    function hangupCall() {
+      WebRTCCall.hangup();
+      document.getElementById('call-panel').style.display = 'none';
+    }
+    function toggleMuteCall() {
+      const unmuted = WebRTCCall.toggleMute();
+      document.getElementById('mute-btn').textContent = unmuted ? '🎤' : '🔇';
+    }
+
+    WebRTCCall.onStateChange = (state) => {
+      const panel = document.getElementById('call-panel');
+      const status = document.getElementById('call-status');
+      if (state === 'idle') {
+        panel.style.display = 'none';
+      } else {
+        panel.style.display = 'flex';
+        status.textContent = state === 'connecting' ? 'Звоним...' :
+                             state === 'connected' ? 'Подключён' : state;
+      }
+    };
+
+    WebRTCCall.onRemoteStream = (stream) => {
+      document.getElementById('remote-video').srcObject = stream;
+    };
+
+    WebRTCCall.onRemoteStream = (stream) => {
+      document.getElementById('remote-video').srcObject = stream;
+      if (WebRTCCall.localStream) {
+        document.getElementById('local-video').srcObject = WebRTCCall.localStream;
+      }
+    };
+
+    WebRTCCall.onIncomingCall = (from, sdp) => {
+      if (confirm('📞 Входящий звонок от ' + from.substring(0,8) + '...\nПринять?')) {
+        WebRTCCall.acceptCall(false);
+      } else {
+        WebRTCCall.rejectCall();
+      }
+    };
 
     // ========== INIT ==========
     (async () => {
