@@ -16,6 +16,7 @@ import (
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
+	"github.com/unkillable-messenger/vpn/nat"
 	"github.com/unkillable-messenger/vpn/nostr"
 	"github.com/unkillable-messenger/vpn/store"
 
@@ -439,6 +440,7 @@ func main() {
 	http.HandleFunc("/nostr", handleNostrWS) // NIP-01 WebSocket endpoint
 	http.HandleFunc("/api/ipfs/upload", apiChain(handleIPFSUpload))
 	http.HandleFunc("/api/ipfs/status", apiChain(handleIPFSStatus))
+	http.HandleFunc("/api/nat/discover", apiChain(handleNATDiscover))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 
 	// Static files + SPA fallback
@@ -1060,4 +1062,16 @@ func handleIPFSStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{
 		"available": ipfsClient.IsAvailable(),
 	})
+}
+
+// handleNATDiscover discovers public IP and NAT type via STUN.
+func handleNATDiscover(w http.ResponseWriter, r *http.Request) {
+	result, err := nat.DiscoverPublicAddr("")
+	if err != nil {
+		writeError(w, 500, "STUN_ERROR", err.Error())
+		return
+	}
+	natType, _ := nat.DetectNATType("")
+	result.NATType = natType
+	writeJSON(w, 200, result)
 }
