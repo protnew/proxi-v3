@@ -385,6 +385,7 @@
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       const url = proto + '//' + location.host + '/ws?userId=' + encodeURIComponent(myId);
       ws = new WebSocket(url);
+      ws.binaryType = 'arraybuffer'; // Enable binary frame reception for voice messages
 
       ws.onopen = () => {
         setConn('on', 'Подключён');
@@ -408,6 +409,28 @@
 
       ws.onmessage = async (e) => {
         try {
+          // Handle binary voice frames
+          if (e.data instanceof ArrayBuffer) {
+            const parsed = VoiceMessages.parseBinaryVoiceFrame(e.data);
+            if (parsed) {
+              const audioUrl = URL.createObjectURL(parsed.audioBlob);
+              const isMe = parsed.meta.from === myId;
+              addVoiceMsg(parsed.meta.from, audioUrl, parsed.meta.duration, isMe);
+              // Cache to IndexedDB for offline
+              OfflineStorage.saveMessage({
+                from: parsed.meta.from,
+                text: '🎤 Голосовое (' + parsed.meta.duration + 'с)',
+                ts: parsed.meta.ts || Math.floor(Date.now()/1000),
+                voiceDuration: parsed.meta.duration
+              });
+              // Push notification if tab not focused
+              if (document.hidden && parsed.meta.from !== myId) {
+                PushNotifications.showLocal('Proxi Messenger', '🎤 Голосовое сообщение');
+              }
+            }
+            return;
+          }
+
           const msg = JSON.parse(e.data);
           if (msg.type === 'chat') {
             // Try E2E decrypt if from known peer
@@ -422,7 +445,14 @@
               replyToText: msg.replyToText || null,
               forwardedFrom: msg.forwardedFrom || null,
             };
-            addMsg(msg.from, text, msg.from === myId, msgData);
+
+            // Legacy voice message (base64 in JSON)
+            if (msg.voiceData) {
+              const audioUrl = 'data:audio/webm;base64,' + msg.voiceData;
+              addVoiceMsg(msg.from, audioUrl, msg.voiceDuration || 0, msg.from === myId);
+            } else {
+              addMsg(msg.from, text, msg.from === myId, msgData);
+            }
             // Cache to IndexedDB for offline
             OfflineStorage.saveMessage({id: msg.id, from: msg.from, to: msg.to, text: text, ts: msg.ts, replyTo: msg.replyTo, forwardedFrom: msg.forwardedFrom, ttl: msg.ttl});
             // Push notification if tab not focused
@@ -533,11 +563,33 @@
 
       // Action buttons (reply, forward) — visible on hover
       const actions = '<div class="msg-actions">' +
-        '<button class="msg-action-btn" onclick="startReply(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')\" title="Ответить">↩</button>' +
-        '<button class="msg-action-btn" onclick="startForward(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')\" title="Переслать">↗</button>' +
+        '<button class="msg-action-btn" onclick="startReply(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')" title="Ответить">↩</button>' +
+        '<button class="msg-action-btn" onclick="startForward(\'' + escHtml(msgId) + '\',\'' + escHtml(from.substring(0,16)) + '\',\'' + escHtml(text.substring(0,60).replace(/'/g,'')) + '\')" title="Переслать">↗</button>' +
         '</div>';
 
       div.innerHTML = sender + actions + replyHtml + fwdHtml + '<div class="msg-bubble">' + escHtml(text) + '</div>' + ttlHtml + '<div class="msg-time">' + time + '</div>';
+      msgList.appendChild(div);
+      msgList.scrollTop = msgList.scrollHeight;
+      return msgId;
+    }
+
+    // addVoiceMsg displays a voice message with an audio player
+    function addVoiceMsg(from, audioUrl, duration, isMe) {
+      if (msgCount === 0) msgList.innerHTML = '';
+      msgCount++;
+      const time = new Date().toLocaleTimeString('ru', {hour:'2-digit', minute:'2-digit'});
+      const div = document.createElement('div');
+      div.className = 'msg ' + (isMe ? 'me' : 'other');
+      const msgId = 'voice-' + Date.now() + '-' + Math.random().toString(36).substr(2,6);
+      div.setAttribute('data-msg-id', msgId);
+      const sender = isMe ? '' : '<div class="msg-sender">' + escHtml(from.substring(0,12)) + '...</div>';
+
+      const voicePlayerHtml = '<div class="voice-msg">' +
+        '<audio controls src="' + audioUrl + '" style="height:32px;max-width:200px"></audio>' +
+        '<span style="font-size:10px;color:#666;margin-left:4px">' + duration + 'с</span>' +
+        '</div>';
+
+      div.innerHTML = sender + '<div class="msg-bubble">' + voicePlayerHtml + '</div><div class="msg-time">' + time + '</div>';
       msgList.appendChild(div);
       msgList.scrollTop = msgList.scrollHeight;
       return msgId;
@@ -585,21 +637,15 @@
             toast('❌ Голосовое сообщение максимум 2 минуты');
             return;
           }
-          const b64 = await VoiceMessages.blobToBase64(result.blob);
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            const msg = {
-              type: 'chat',
-              from: myId,
-              to: 'broadcast',
-              text: '🎤 Голосовое сообщение (' + result.duration + 'с)',
-              ts: Date.now()/1000|0,
-              voiceData: b64,
-              voiceDuration: result.duration
-            };
-            ws.send(JSON.stringify(msg));
-            // Show locally with player
-            addMsg(myId, '🎤 Голосовое (' + result.duration + 'с)', true);
+          // Send as binary WebSocket frame (with base64 fallback)
+          const sent = await VoiceMessages.sendVoiceBinary(ws, result.blob, result.duration, myId, 'broadcast');
+          if (sent) {
+            // Show locally with audio player
+            const audioUrl = URL.createObjectURL(result.blob);
+            addVoiceMsg(myId, audioUrl, result.duration, true);
             toast('🎤 Голосовое отправлено');
+          } else {
+            toast('❌ Не удалось отправить голосовое');
           }
         }
         btn.textContent = '🎤';

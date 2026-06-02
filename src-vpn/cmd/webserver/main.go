@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
@@ -141,6 +142,10 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string) {
+	// Capture 5xx errors to Sentry
+	if status >= 500 {
+		sentry.CaptureException(fmt.Errorf("HTTP %d [%s]: %s", status, code, message))
+	}
 	writeJSON(w, status, map[string]interface{}{
 		"error": map[string]string{
 			"code":    code,
@@ -296,6 +301,43 @@ var startTime time.Time
 var distDir string
 
 func main() {
+	// Initialize Sentry (no-op if SENTRY_DSN is empty)
+	sentryDSN := os.Getenv("SENTRY_DSN")
+	if sentryDSN != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn:           sentryDSN,
+			EnableTracing: false,
+			Release:       "unkillable-messenger@0.1.0",
+			Environment:   os.Getenv("SENTRY_ENVIRONMENT"),
+		})
+		if err != nil {
+			log.Printf("⚠️  Sentry init failed: %v", err)
+		} else {
+			log.Println("🔍 Sentry error tracking enabled")
+		}
+		// Ensure Sentry flushes events on exit
+		defer sentry.Flush(2 * time.Second)
+	} else {
+		log.Println("🔍 Sentry disabled (SENTRY_DSN not set)")
+	}
+
+	// Wrap main logic in a deferred recover so panics are reported to Sentry
+	defer func() {
+		if r := recover(); r != nil {
+			sentry.CurrentHub().Recover(r)
+			sentry.Flush(2 * time.Second)
+			log.Fatalf("💥 Panic recovered: %v", r)
+		}
+	}()
+
+	if err := run(); err != nil {
+		sentry.CaptureException(err)
+		sentry.Flush(2 * time.Second)
+		log.Fatalf("💥 Fatal: %v", err)
+	}
+}
+
+func run() error {
 	startTime = time.Now()
 
 	distDir = os.Getenv("DIST_DIR")
@@ -319,7 +361,7 @@ func main() {
 	var dbErr error
 	db, dbErr = store.NewStore(getDataDir() + "/messenger.db")
 	if dbErr != nil {
-		log.Fatalf("❌ Failed to initialize SQLite store: %v", dbErr)
+		return fmt.Errorf("failed to initialize SQLite store: %w", dbErr)
 	}
 	log.Println("💾 SQLite store initialized")
 
@@ -355,7 +397,7 @@ func main() {
 	var vpnErr error
 	vpnMgr, vpnErr = vpn.NewManager(getDataDir() + "/vpn")
 	if vpnErr != nil {
-		log.Fatalf("❌ Failed to initialize VPN Manager: %v", vpnErr)
+		return fmt.Errorf("failed to initialize VPN Manager: %w", vpnErr)
 	}
 	log.Println("🔒 VPN Manager initialized")
 
@@ -508,8 +550,9 @@ func main() {
 	log.Printf("   Chat: http://0.0.0.0:%s/api/messages", port)
 
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
+		return fmt.Errorf("HTTP server error: %w", err)
 	}
+	return nil
 }
 
 // autoConnectPeers loads saved VPN peers from DB and attempts to reconnect.

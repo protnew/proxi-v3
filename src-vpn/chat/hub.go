@@ -192,21 +192,51 @@ func (c *Client) Serve(ctx context.Context) {
 
 // ReadPump reads messages from the WebSocket connection and dispatches them
 // to the hub. It runs in a goroutine per client.
+// It handles both text JSON frames (legacy) and binary voice frames (0x02).
 func (c *Client) ReadPump(ctx context.Context) {
 	defer func() {
 		c.hub.Unregister(c)
 		_ = c.Conn.Close(websocket.StatusNormalClosure, "read pump done")
 	}()
 
-	c.Conn.SetReadLimit(MaxMessageSize)
+	c.Conn.SetReadLimit(MaxBinaryVoiceSize)
 
 	for {
-		_, data, err := c.Conn.Read(ctx)
+		msgType, data, err := c.Conn.Read(ctx)
 		if err != nil {
 			// Normal closure or context cancel — just exit.
 			return
 		}
 
+		// Handle binary voice frames.
+		if msgType == websocket.MessageBinary && IsBinaryVoiceFrame(data) {
+			meta, _, err := DecodeBinaryVoice(data)
+			if err != nil {
+				log.Printf("[chat] invalid binary voice from %s: %v", c.UserID, err)
+				continue
+			}
+
+			// Build routing message for the OnMessage callback.
+			voiceMsg := BinaryVoiceToMessage(meta, c.UserID)
+
+			// Invoke callback if set.
+			if c.hub.OnMessage != nil {
+				c.hub.OnMessage(voiceMsg)
+			}
+
+			// Route binary frame as-is to other clients.
+			switch voiceMsg.To {
+			case "", BroadcastTarget:
+				c.hub.Broadcast(data, c.UserID)
+			default:
+				// Direct message — deliver to recipient and echo to self.
+				c.hub.SendTo(voiceMsg.To, data)
+				c.hub.SendTo(c.UserID, data)
+			}
+			continue
+		}
+
+		// Legacy text JSON handling.
 		msg, err := DecodeMessage(data)
 		if err != nil {
 			log.Printf("[chat] invalid message from %s: %v", c.UserID, err)
@@ -241,6 +271,7 @@ func (c *Client) ReadPump(ctx context.Context) {
 
 // WritePump writes buffered messages to the WebSocket connection.
 // It also handles periodic ping/pong keepalive.
+// It supports both text JSON and binary voice frames.
 func (c *Client) WritePump(ctx context.Context) {
 	ticker := time.NewTicker(PingInterval)
 	defer func() {
@@ -257,7 +288,15 @@ func (c *Client) WritePump(ctx context.Context) {
 				return
 			}
 			writeCtx, cancel := context.WithTimeout(ctx, WriteTimeout)
-			err := c.Conn.Write(writeCtx, websocket.MessageText, msg)
+
+			// Determine frame type: binary voice (0x02 prefix) or text JSON.
+			var writeType websocket.MessageType
+			if IsBinaryVoiceFrame(msg) {
+				writeType = websocket.MessageBinary
+			} else {
+				writeType = websocket.MessageText
+			}
+			err := c.Conn.Write(writeCtx, writeType, msg)
 			cancel()
 			if err != nil {
 				return
