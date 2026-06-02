@@ -15,9 +15,8 @@ import (
 	"time"
 
 	"github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/middleware"
 	"github.com/unkillable-messenger/vpn/store"
-
-	"golang.org/x/time/rate"
 )
 
 // setupTestServer creates a fully initialized test server with in-memory DB.
@@ -33,7 +32,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	t.Setenv("DATA_DIR", dataDir)
 
 	// Override rate limiter to allow all requests during tests
-	limiter = rate.NewLimiter(1000, 5000)
+	perUserLimiter = middleware.NewRateLimiter(1000, 5000)
 
 	// Initialize store
 	var err error

@@ -220,6 +220,20 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("create index nostr_events_created_at: %w", err)
 	}
 
+	// Push subscriptions table (Web Push VAPID)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id    TEXT NOT NULL,
+			endpoint   TEXT NOT NULL,
+			p256dh     TEXT NOT NULL DEFAULT '',
+			auth       TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL DEFAULT 0,
+			UNIQUE(user_id, endpoint)
+		)`); err != nil {
+		return fmt.Errorf("create push_subscriptions: %w", err)
+	}
+
 	return nil
 }
 
@@ -1152,4 +1166,65 @@ func (s *Store) DeleteOldNostrEvents(olderThan int64) (int64, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+// ---------------------------------------------------------------------------
+// Push Subscriptions (Web Push VAPID)
+// ---------------------------------------------------------------------------
+
+// PushSubscription represents a Web Push subscription stored in SQLite.
+type PushSubscription struct {
+	ID        int64  `json:"id"`
+	UserID    string `json:"userId"`
+	Endpoint  string `json:"endpoint"`
+	P256DH    string `json:"p256dh"` // subscriber's ECDH P-256 public key (base64url)
+	Auth      string `json:"auth"`   // subscriber's auth secret (16 bytes, base64url)
+	CreatedAt int64  `json:"createdAt"`
+}
+
+// SavePushSubscription saves or updates a Web Push subscription for a user.
+func (s *Store) SavePushSubscription(userID, endpoint, p256dh, auth string) error {
+	_, err := s.db.Exec(`
+		INSERT OR REPLACE INTO push_subscriptions (user_id, endpoint, p256dh, auth, created_at)
+		VALUES (?, ?, ?, ?, ?)`,
+		userID, endpoint, p256dh, auth, time.Now().Unix(),
+	)
+	if err != nil {
+		return fmt.Errorf("save push subscription: %w", err)
+	}
+	return nil
+}
+
+// GetPushSubscriptions retrieves push subscriptions for the given user IDs.
+func (s *Store) GetPushSubscriptions(userIDs []string) ([]PushSubscription, error) {
+	if len(userIDs) == 0 {
+		return nil, nil
+	}
+
+	placeholders := make([]string, len(userIDs))
+	args := make([]interface{}, len(userIDs))
+	for i, id := range userIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `SELECT id, user_id, endpoint, p256dh, auth, created_at
+			  FROM push_subscriptions
+			  WHERE user_id IN (` + strings.Join(placeholders, ",") + `)`
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("get push subscriptions: %w", err)
+	}
+	defer rows.Close()
+
+	var subs []PushSubscription
+	for rows.Next() {
+		var sub PushSubscription
+		if err := rows.Scan(&sub.ID, &sub.UserID, &sub.Endpoint, &sub.P256DH, &sub.Auth, &sub.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan push subscription: %w", err)
+		}
+		subs = append(subs, sub)
+	}
+	return subs, rows.Err()
 }

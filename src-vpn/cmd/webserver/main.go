@@ -18,12 +18,12 @@ import (
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
 	"github.com/unkillable-messenger/vpn/mesh"
+	"github.com/unkillable-messenger/vpn/middleware"
 	"github.com/unkillable-messenger/vpn/nat"
 	"github.com/unkillable-messenger/vpn/nostr"
 	"github.com/unkillable-messenger/vpn/tor"
 	"github.com/unkillable-messenger/vpn/store"
 
-	"golang.org/x/time/rate"
 	"nhooyr.io/websocket"
 )
 
@@ -43,17 +43,14 @@ var torDialer *tor.TorDialer
 
 var meshNet *mesh.MeshNet
 
-// ========== Rate limiter ==========
+// ========== Per-user rate limiter ==========
 
-var limiter = rate.NewLimiter(100, 200) // 100 req/s, burst 200
+var perUserLimiter = middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
 
 func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	handler := perUserLimiter.Middleware(next)
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !limiter.Allow() {
-			http.Error(w, `{"error":"rate limited"}`, http.StatusTooManyRequests)
-			return
-		}
-		next(w, r)
+		handler.ServeHTTP(w, r)
 	}
 }
 

@@ -74,6 +74,7 @@ type Manager struct {
     startTime time.Time
     cancel   context.CancelFunc
     stubMode bool // true if wg binary is not available — runs without real interface
+    userspace *UserspaceVPN // userspace transport when kernel WG unavailable
 }
 
 // NewManager создаёт VPN менеджер
@@ -99,6 +100,25 @@ func NewManager(dataDir string) (*Manager, error) {
     // Load or generate keys
     if err := m.loadOrGenerateKeys(); err != nil {
         return nil, fmt.Errorf("key init: %w", err)
+    }
+
+    // If kernel WireGuard is unavailable, initialize userspace transport
+    if !m.IsWireGuardAvailable() {
+        fmt.Printf("[VPN] Kernel WireGuard not found — initializing userspace transport\n")
+        us, err := NewUserspaceVPN(UserspaceConfig{
+            ListenAddr:      fmt.Sprintf(":%d", m.config.Port),
+            MTU:             m.config.MTU,
+            StaticPrivateKey: m.privKey,
+            StaticPublicKey:  m.pubKey,
+        })
+        if err != nil {
+            fmt.Printf("[VPN] Warning: userspace init failed: %v (falling back to stub mode)\n", err)
+            m.stubMode = true
+        } else {
+            m.userspace = us
+            m.stubMode = false // userspace transport replaces kernel WG
+            fmt.Printf("[VPN] Userspace transport ready (public key: %s)\n", us.GetPublicKey())
+        }
     }
 
     return m, nil
@@ -174,16 +194,26 @@ func (m *Manager) StartExitNode(ctx context.Context) error {
 
     m.state = StateConnecting
 
-    // Check if WireGuard is available; fall back to stub mode if not
-    if !m.IsWireGuardAvailable() {
+    // Check if WireGuard is available; fall back to userspace or stub mode
+    if m.userspace != nil {
+        // Use userspace transport — no kernel interface needed
+        if err := m.userspace.Start(); err != nil {
+            m.state = StateError
+            return fmt.Errorf("userspace start: %w", err)
+        }
+        m.myIP = "10.77.0.1"
+        fmt.Printf("[VPN] Userspace transport started\n")
+    } else if !m.IsWireGuardAvailable() {
         fmt.Printf("[VPN] WARNING: wg binary not found — switching to stub mode (no real VPN interface)\n")
         m.stubMode = true
     }
 
-    // Создаём WireGuard интерфейс
-    if err := m.setupInterface(); err != nil {
-        m.state = StateError
-        return fmt.Errorf("setup interface: %w", err)
+    // Создаём WireGuard интерфейс (only if not userspace)
+    if m.userspace == nil {
+        if err := m.setupInterface(); err != nil {
+            m.state = StateError
+            return fmt.Errorf("setup interface: %w", err)
+        }
     }
 
     // Включаем IP forwarding (для exit node)
@@ -217,6 +247,11 @@ func (m *Manager) StopExitNode() error {
         m.cancel()
     }
 
+    // Stop userspace transport if active
+    if m.userspace != nil {
+        m.userspace.Stop()
+    }
+
     if err := m.teardownInterface(); err != nil {
         fmt.Printf("Warning: teardown: %v\n", err)
     }
@@ -235,8 +270,16 @@ func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint st
 
     m.state = StateConnecting
 
-    // Check if WireGuard is available; fall back to stub mode if not
-    if !m.IsWireGuardAvailable() {
+    // Check if WireGuard is available; fall back to userspace or stub mode
+    if m.userspace != nil {
+        // Use userspace transport
+        if err := m.userspace.Start(); err != nil {
+            m.state = StateError
+            return fmt.Errorf("userspace start: %w", err)
+        }
+        m.myIP = "10.77.0.1"
+        fmt.Printf("[VPN] Userspace transport started for peer connection\n")
+    } else if !m.IsWireGuardAvailable() {
         fmt.Printf("[VPN] WARNING: wg binary not found — switching to stub mode (no real VPN interface)\n")
         m.stubMode = true
     }
@@ -252,10 +295,23 @@ func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint st
     }
     m.peers[peer.ID] = peer
 
-    // Создаём интерфейс
-    if err := m.setupInterface(); err != nil {
-        m.state = StateError
-        return err
+    // Add peer to userspace transport if available
+    if m.userspace != nil {
+        if err := m.userspace.AddPeer(PeerInfo{
+            ID:        peer.ID,
+            PublicKey: peer.PublicKey,
+            Endpoint:  peer.Endpoint,
+        }); err != nil {
+            fmt.Printf("[VPN] Warning: userspace add peer: %v\n", err)
+        }
+    }
+
+    // Создаём интерфейс (only if not userspace)
+    if m.userspace == nil {
+        if err := m.setupInterface(); err != nil {
+            m.state = StateError
+            return err
+        }
     }
 
     // Добавляем пира
@@ -280,6 +336,9 @@ func (m *Manager) Disconnect() error {
     
     if m.cancel != nil {
         m.cancel()
+    }
+    if m.userspace != nil {
+        m.userspace.Stop()
     }
     m.teardownInterface()
     m.state = StateDisconnected
