@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 )
 
@@ -449,5 +450,319 @@ func TestSaveAndLoadIdentity(t *testing.T) {
 	if gotNpub != npub || gotNsec != nsec || gotSeed != seed {
 		t.Errorf("identity roundtrip failed: got (%s, %s, %s), want (%s, %s, %s)",
 			gotNpub, gotNsec, gotSeed, npub, nsec, seed)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Nostr Events
+// ---------------------------------------------------------------------------
+
+func TestSaveNostrEvent(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	evt := NostrEvent{
+		ID:        "evt1",
+		PubKey:    "pk_alice",
+		Kind:      1,
+		Tags:      [][]string{{"e", "ref1"}, {"p", "refpk1"}},
+		Content:   "hello nostr",
+		Sig:       "sig123",
+		CreatedAt: 1700000000,
+	}
+	if err := s.SaveNostrEvent(evt); err != nil {
+		t.Fatalf("SaveNostrEvent: %v", err)
+	}
+
+	// Verify saved by reading back
+	results, err := s.GetNostrEvents(NostrEventFilter{IDs: []string{"evt1"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(results))
+	}
+	got := results[0]
+	if got.ID != "evt1" || got.PubKey != "pk_alice" || got.Kind != 1 {
+		t.Errorf("event mismatch: %+v", got)
+	}
+	if got.Content != "hello nostr" || got.Sig != "sig123" {
+		t.Errorf("event content/sig mismatch: %+v", got)
+	}
+	if len(got.Tags) != 2 || got.Tags[0][0] != "e" || got.Tags[1][0] != "p" {
+		t.Errorf("tags mismatch: %+v", got.Tags)
+	}
+}
+
+func TestSaveNostrEvent_Duplicate(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	evt := NostrEvent{
+		ID:        "dup1",
+		PubKey:    "pk1",
+		Kind:      1,
+		Content:   "first",
+		CreatedAt: 100,
+	}
+	if err := s.SaveNostrEvent(evt); err != nil {
+		t.Fatal(err)
+	}
+	// Save again with same ID — should not error (INSERT OR IGNORE)
+	evt.Content = "second"
+	if err := s.SaveNostrEvent(evt); err != nil {
+		t.Fatalf("duplicate save should not error: %v", err)
+	}
+
+	results, _ := s.GetNostrEvents(NostrEventFilter{IDs: []string{"dup1"}})
+	if len(results) != 1 {
+		t.Fatalf("expected 1 event (dedup), got %d", len(results))
+	}
+	// Content should be the first one since duplicate is ignored
+	if results[0].Content != "first" {
+		t.Errorf("expected content='first' (original), got %q", results[0].Content)
+	}
+}
+
+func TestGetNostrEvents_FilterKinds(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	events := []NostrEvent{
+		{ID: "k1", PubKey: "pk1", Kind: 0, Content: "metadata", CreatedAt: 100},
+		{ID: "k2", PubKey: "pk1", Kind: 1, Content: "note", CreatedAt: 200},
+		{ID: "k3", PubKey: "pk2", Kind: 3, Content: "contacts", CreatedAt: 300},
+		{ID: "k4", PubKey: "pk1", Kind: 1, Content: "note2", CreatedAt: 400},
+	}
+	for _, e := range events {
+		s.SaveNostrEvent(e)
+	}
+
+	results, err := s.GetNostrEvents(NostrEventFilter{Kinds: []int{1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 events with kind=1, got %d", len(results))
+	}
+}
+
+func TestGetNostrEvents_FilterAuthors(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	events := []NostrEvent{
+		{ID: "a1", PubKey: "alice", Kind: 1, Content: "hi", CreatedAt: 100},
+		{ID: "a2", PubKey: "bob", Kind: 1, Content: "hello", CreatedAt: 200},
+		{ID: "a3", PubKey: "alice", Kind: 1, Content: "world", CreatedAt: 300},
+	}
+	for _, e := range events {
+		s.SaveNostrEvent(e)
+	}
+
+	results, err := s.GetNostrEvents(NostrEventFilter{Authors: []string{"alice"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 events from alice, got %d", len(results))
+	}
+}
+
+func TestGetNostrEvents_FilterSinceUntil(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	events := []NostrEvent{
+		{ID: "t1", PubKey: "pk1", Kind: 1, Content: "old", CreatedAt: 100},
+		{ID: "t2", PubKey: "pk1", Kind: 1, Content: "mid", CreatedAt: 200},
+		{ID: "t3", PubKey: "pk1", Kind: 1, Content: "new", CreatedAt: 300},
+	}
+	for _, e := range events {
+		s.SaveNostrEvent(e)
+	}
+
+	since := int64(150)
+	results, err := s.GetNostrEvents(NostrEventFilter{Since: &since})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 events with since=150, got %d", len(results))
+	}
+
+	until := int64(250)
+	results, err = s.GetNostrEvents(NostrEventFilter{Until: &until})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 events with until=250, got %d", len(results))
+	}
+
+	// Both since and until
+	results, err = s.GetNostrEvents(NostrEventFilter{Since: &since, Until: &until})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 event with since=150 and until=250, got %d", len(results))
+	}
+}
+
+func TestGetNostrEvents_FilterIDs(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	events := []NostrEvent{
+		{ID: "id1", PubKey: "pk1", Kind: 1, Content: "one", CreatedAt: 100},
+		{ID: "id2", PubKey: "pk1", Kind: 1, Content: "two", CreatedAt: 200},
+		{ID: "id3", PubKey: "pk1", Kind: 1, Content: "three", CreatedAt: 300},
+	}
+	for _, e := range events {
+		s.SaveNostrEvent(e)
+	}
+
+	results, err := s.GetNostrEvents(NostrEventFilter{IDs: []string{"id1", "id3"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 events, got %d", len(results))
+	}
+}
+
+func TestGetNostrEvents_Limit(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	for i := 0; i < 20; i++ {
+		s.SaveNostrEvent(NostrEvent{
+			ID:        fmt.Sprintf("lim%d", i),
+			PubKey:    "pk1",
+			Kind:      1,
+			Content:   fmt.Sprintf("msg%d", i),
+			CreatedAt: int64(100 + i),
+		})
+	}
+
+	results, err := s.GetNostrEvents(NostrEventFilter{Limit: 5})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 5 {
+		t.Fatalf("expected 5 events with limit=5, got %d", len(results))
+	}
+
+	// Default limit (0 → 100)
+	results, err = s.GetNostrEvents(NostrEventFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 20 {
+		t.Fatalf("expected 20 events with default limit, got %d", len(results))
+	}
+}
+
+func TestGetNostrEvents_OrderDescending(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	events := []NostrEvent{
+		{ID: "o1", PubKey: "pk1", Kind: 1, Content: "first", CreatedAt: 100},
+		{ID: "o2", PubKey: "pk1", Kind: 1, Content: "second", CreatedAt: 200},
+		{ID: "o3", PubKey: "pk1", Kind: 1, Content: "third", CreatedAt: 300},
+	}
+	for _, e := range events {
+		s.SaveNostrEvent(e)
+	}
+
+	results, _ := s.GetNostrEvents(NostrEventFilter{})
+	if len(results) != 3 {
+		t.Fatalf("expected 3 events, got %d", len(results))
+	}
+	// Newest first (DESC order)
+	if results[0].ID != "o3" {
+		t.Errorf("expected first result to be o3 (newest), got %s", results[0].ID)
+	}
+	if results[2].ID != "o1" {
+		t.Errorf("expected last result to be o1 (oldest), got %s", results[2].ID)
+	}
+}
+
+func TestGetNostrEvents_Empty(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	results, err := s.GetNostrEvents(NostrEventFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected 0 events from empty DB, got %d", len(results))
+	}
+}
+
+func TestNostrEventFilter_AllFieldsCombined(t *testing.T) {
+	s, err := NewStore(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	events := []NostrEvent{
+		{ID: "c1", PubKey: "alice", Kind: 1, Content: "match", CreatedAt: 150},
+		{ID: "c2", PubKey: "alice", Kind: 1, Content: "too old", CreatedAt: 50},
+		{ID: "c3", PubKey: "bob", Kind: 1, Content: "wrong author", CreatedAt: 200},
+		{ID: "c4", PubKey: "alice", Kind: 2, Content: "wrong kind", CreatedAt: 200},
+		{ID: "c5", PubKey: "alice", Kind: 1, Content: "too new", CreatedAt: 500},
+	}
+	for _, e := range events {
+		s.SaveNostrEvent(e)
+	}
+
+	since := int64(100)
+	until := int64(300)
+	results, err := s.GetNostrEvents(NostrEventFilter{
+		Authors: []string{"alice"},
+		Kinds:   []int{1},
+		Since:   &since,
+		Until:   &until,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 event matching all filters, got %d", len(results))
+	}
+	if results[0].ID != "c1" {
+		t.Errorf("expected c1, got %s", results[0].ID)
 	}
 }
