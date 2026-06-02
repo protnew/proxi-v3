@@ -137,6 +137,29 @@
     .channel-desc{font-size:12px;color:#666}
     .channel-meta{font-size:11px;color:#444;margin-top:8px}
 
+    /* Groups */
+    .groups-section{margin-top:0}
+    .group-card{display:flex;align-items:center;gap:10px;padding:10px;background:#0a0a0a;border-radius:8px;margin-bottom:6px;cursor:pointer;border:1px solid #1a1a1a;transition:all .2s}
+    .group-card:hover{border-color:#1e88e5;background:#0d1520}
+    .group-card .g-icon{font-size:20px}
+    .group-card .g-info{flex:1}
+    .group-card .g-name{font-size:13px;font-weight:500}
+    .group-card .g-meta{font-size:11px;color:#555}
+    .group-members-panel{margin-top:12px;padding:12px;background:#0a0a0a;border:1px solid #222;border-radius:10px;display:none}
+    .group-members-panel.show{display:block}
+    .group-members-panel h4{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px}
+    .gm-item{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;border-bottom:1px solid #111}
+    .gm-item:last-child{border-bottom:none}
+    .gm-dot{width:6px;height:6px;border-radius:50%;background:#4caf50}
+    .gm-role{font-size:10px;color:#1e88e5;margin-left:auto;padding:2px 6px;background:#0d1520;border-radius:4px}
+    .gm-kick{padding:2px 8px;background:#1a1a1a;border:1px solid #333;color:#f44336;border-radius:4px;cursor:pointer;font-size:10px;margin-left:4px}
+    .gm-kick:hover{background:#f44336;color:#fff;border-color:#f44336}
+    .groups-create-btn{width:100%;padding:10px;background:#1a1a1a;color:#4fc3f7;border:1px dashed #333;border-radius:10px;cursor:pointer;font-size:13px;transition:all .2s;margin-bottom:10px}
+    .groups-create-btn:hover{background:#222;border-color:#1e88e5;color:#e0e0e0}
+    .empty-groups{color:#333;font-size:12px;padding:16px;text-align:center}
+    .back-to-groups{padding:6px 12px;background:#1a1a1a;border:1px solid #333;color:#4fc3f7;border-radius:6px;cursor:pointer;font-size:11px;margin-bottom:10px}
+    .back-to-groups:hover{background:#222;color:#e0e0e0}
+
     /* Toast */
     .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);padding:10px 20px;background:#1e88e5;color:#fff;border-radius:10px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:100;white-space:nowrap}
     .toast.show{opacity:1}
@@ -209,6 +232,8 @@
           <button id="ttl-btn" onclick="cycleTTL()" title="Самоуничтожение" style="background:#1a1a1a;font-size:14px;min-width:42px">⏱0</button>
           <button id="call-audio-btn" onclick="startAudioCall()" title="Аудиозвонок" style="background:#1a1a1a;font-size:14px;min-width:42px">📞</button>
           <button id="call-video-btn" onclick="startVideoCall()" title="Видеозвонок" style="background:#1a1a1a;font-size:14px;min-width:42px">📹</button>
+          <button id="ipfs-attach-btn" onclick="ipfsAttachClick()" title="Прикрепить файл (IPFS)" style="background:#1a1a1a;font-size:14px;min-width:42px">📎</button>
+          <input type="file" id="ipfs-file-input" style="display:none" onchange="ipfsFileSelected(this)" />
           <button onclick="sendMsg()">➤</button>
         </div>
       </div>
@@ -292,6 +317,19 @@
           <div class="id-card">
             <h3>👥 Онлайн</h3>
             <div id="online-list" style="font-size:13px;color:#666">загрузка...</div>
+          </div>
+          <!-- GROUP CHATS -->
+          <div class="id-card groups-section">
+            <h3>👥 Группы</h3>
+            <button class="groups-create-btn" onclick="createGroup()">➕ Создать группу</button>
+            <div id="groups-list">
+              <div class="empty-groups">Загрузка групп...</div>
+            </div>
+            <div class="group-members-panel" id="group-members-panel">
+              <button class="back-to-groups" onclick="closeGroupMembers()">← Назад к группам</button>
+              <h4 id="group-members-title">Участники</h4>
+              <div id="group-members-list"></div>
+            </div>
           </div>
           <div class="id-card" id="seed-card" style="display:none">
             <h3>⚠️ Seed Phrase — запиши!</h3>
@@ -888,6 +926,102 @@
       });
     }
 
+    // ========== GROUPS ==========
+    async function loadGroups() {
+      try {
+        const r = await fetch('/api/groups');
+        const d = await r.json();
+        renderGroups(d.groups || d || []);
+      } catch(e) {
+        console.error('Failed to load groups:', e);
+        document.getElementById('groups-list').innerHTML = '<div class="empty-groups">Ошибка загрузки групп</div>';
+      }
+    }
+
+    function renderGroups(groups) {
+      const el = document.getElementById('groups-list');
+      if (!groups || groups.length === 0) {
+        el.innerHTML = '<div class="empty-groups">Пока нет групп — создай первую!</div>';
+        return;
+      }
+      el.innerHTML = groups.map(g => {
+        const members = g.members || g.memberCount || 0;
+        const creatorShort = g.creator ? g.creator.substring(0, 12) + '...' : '';
+        return '<div class="group-card" onclick="viewGroupMembers(\'' + escHtml(g.id) + '\', \'' + escHtml(g.name || 'Группа') + '\')">' +
+          '<span class="g-icon">👥</span>' +
+          '<div class="g-info">' +
+            '<div class="g-name">' + escHtml(g.name || 'Без имени') + '</div>' +
+            '<div class="g-meta">' + members + ' участник(ов)' +
+            (creatorShort ? ' · ' + creatorShort : '') + '</div>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    async function createGroup() {
+      const name = prompt('Название группы:');
+      if (!name || !name.trim()) return;
+      try {
+        const r = await fetch('/api/groups/create', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({name: name.trim(), creator: myId || 'anonymous'})
+        });
+        const d = await r.json();
+        if (!r.ok) {
+          toast('❌ ' + (d.error && d.error.message ? d.error.message : 'Ошибка создания группы'));
+          return;
+        }
+        toast('✅ Группа «' + name.trim() + '» создана!');
+        loadGroups();
+      } catch(e) {
+        toast('❌ Ошибка создания группы');
+      }
+    }
+
+    async function viewGroupMembers(groupId, groupName) {
+      const panel = document.getElementById('group-members-panel');
+      const title = document.getElementById('group-members-title');
+      const list = document.getElementById('group-members-list');
+      
+      title.textContent = 'Участники — ' + (groupName || 'Группа');
+      list.innerHTML = '<div style="color:#555;font-size:12px;padding:8px">Загрузка...</div>';
+      panel.classList.add('show');
+      
+      try {
+        const r = await fetch('/api/groups/members?group_id=' + encodeURIComponent(groupId));
+        const d = await r.json();
+        const members = d.members || d || [];
+        if (!members || members.length === 0) {
+          list.innerHTML = '<div style="color:#555;font-size:12px;padding:8px">Нет участников</div>';
+          return;
+        }
+        list.innerHTML = members.map(m => {
+          const memberId = m.id || m.userId || m.npub || '';
+          const memberName = m.name || memberId.substring(0, 16) + '...';
+          const role = m.role || 'member';
+          const isCreator = role === 'creator' || role === 'admin';
+          const roleBadge = isCreator ? '<span class="gm-role">' + escHtml(role) + '</span>' : '';
+          const kickBtn = (isCreator && memberId !== myId) ? '' :
+            (!isCreator ? '' : '');
+          // Show kick button only if current user is creator/admin of this group
+          const canKick = false; // TODO: determine if current user is admin
+          const kickHtml = ''; // For now, no kick in UI unless user is admin
+          return '<div class="gm-item">' +
+            '<span class="gm-dot"></span>' +
+            '<span>' + escHtml(memberName) + '</span>' +
+            roleBadge +
+          '</div>';
+        }).join('');
+      } catch(e) {
+        list.innerHTML = '<div style="color:#f44336;font-size:12px;padding:8px">Ошибка загрузки участников</div>';
+      }
+    }
+
+    function closeGroupMembers() {
+      document.getElementById('group-members-panel').classList.remove('show');
+    }
+
     // ========== TOAST ==========
     function toast(msg) {
       const t = document.getElementById('toast');
@@ -955,6 +1089,94 @@
       }
     };
 
+    // ========== IPFS FILE UPLOAD ==========
+    async function ipfsAttachClick() {
+      // Check if IPFS is available first
+      try {
+        const r = await fetch('/api/ipfs/status');
+        const d = await r.json();
+        if (!d.available) {
+          toast('IPFS недоступен');
+          return;
+        }
+      } catch(e) {
+        toast('IPFS недоступен');
+        return;
+      }
+      document.getElementById('ipfs-file-input').click();
+    }
+
+    async function ipfsFileSelected(input) {
+      const file = input.files[0];
+      if (!file) return;
+      // Reset input so same file can be selected again
+      input.value = '';
+
+      const btn = document.getElementById('ipfs-attach-btn');
+      const origBg = btn.style.background;
+      btn.textContent = '⏳';
+      btn.disabled = true;
+
+      try {
+        const fd = new FormData();
+        fd.append('file', file);
+        const r = await fetch('/api/ipfs/upload', { method: 'POST', body: fd });
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          toast('❌ Ошибка загрузки: ' + (err.error || r.statusText));
+          return;
+        }
+        const d = await r.json();
+        const cid = d.cid || d.hash || d.ipfsHash || '';
+        if (!cid) {
+          toast('❌ Сервер не вернул CID');
+          return;
+        }
+        const fileName = file.name || 'file';
+        const sizeKB = (file.size / 1024).toFixed(1);
+        const text = '📎 ' + fileName + ' (' + sizeKB + ' KB, CID: ' + cid + ')';
+
+        // Send via WS
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          const msg = {
+            type: 'chat',
+            from: myId,
+            to: 'broadcast',
+            text: text,
+            ts: Date.now() / 1000 | 0,
+            ipfs: true,
+            fileName: fileName,
+            fileSize: file.size,
+            cid: cid
+          };
+          ws.send(JSON.stringify(msg));
+        } else {
+          // Offline: save to pending
+          OfflineStorage.savePending({
+            type: 'chat',
+            from: myId,
+            to: 'broadcast',
+            text: text,
+            ts: Date.now() / 1000 | 0,
+            ipfs: true,
+            fileName: fileName,
+            fileSize: file.size,
+            cid: cid
+          });
+        }
+
+        addMsg(myId, text, true);
+        toast('📎 Файл загружен в IPFS!');
+      } catch(e) {
+        console.error('IPFS upload error:', e);
+        toast('❌ Ошибка загрузки файла');
+      } finally {
+        btn.textContent = '📎';
+        btn.disabled = false;
+        btn.style.background = origBg;
+      }
+    }
+
     // ========== INIT ==========
     (async () => {
       // Initialize offline storage first
@@ -978,6 +1200,7 @@
     loadIdentity();
     loadPeers();
     loadChannels();
+    loadGroups();
     setInterval(refreshOnline, 10000);
   </script>
 </body>

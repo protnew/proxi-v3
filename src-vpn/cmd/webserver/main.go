@@ -16,6 +16,7 @@ import (
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
+	"github.com/unkillable-messenger/vpn/mesh"
 	"github.com/unkillable-messenger/vpn/nat"
 	"github.com/unkillable-messenger/vpn/nostr"
 	"github.com/unkillable-messenger/vpn/tor"
@@ -38,6 +39,8 @@ var nostrRelay *nostr.Relay
 var ipfsClient *ipfs.Client
 
 var torDialer *tor.TorDialer
+
+var meshNet *mesh.MeshNet
 
 // ========== Rate limiter ==========
 
@@ -323,8 +326,13 @@ func main() {
 	// Initialize Chat Hub
 	initHub()
 
+	// Initialize P2P Mesh Network
+	meshNet = mesh.NewMeshNet(6)
+	meshNet.StartPruner(5*time.Minute, 30*time.Minute)
+	log.Println("🕸️  P2P Mesh Network initialized (maxHops=6, prune every 5m, stale after 30m)")
+
 	// Initialize Nostr Relay
-	nostrRelay = nostr.NewRelay(50000)
+	nostrRelay = nostr.NewRelay(50000, db)
 	log.Println("📡 Nostr NIP-01 relay initialized")
 
 	// Initialize IPFS client
@@ -457,6 +465,11 @@ func main() {
 	http.HandleFunc("/api/nat/discover", apiChain(handleNATDiscover))
 	http.HandleFunc("/api/tor/status", apiChain(handleTorStatus))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
+
+	// Mesh network endpoints
+	http.HandleFunc("/api/mesh/peers", apiChain(handleMeshPeers))
+	http.HandleFunc("/api/mesh/stats", apiChain(handleMeshStats))
+	http.HandleFunc("/api/mesh/add", apiChain(handleMeshAdd))
 
 	// Static files + SPA fallback
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1096,5 +1109,55 @@ func handleTorStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{
 		"available": torDialer.IsTorRunning(),
 		"proxy":     "127.0.0.1:9050",
+	})
+}
+
+// ==================== Mesh Network Handlers ====================
+
+// handleMeshPeers — GET /api/mesh/peers
+func handleMeshPeers(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	peers := meshNet.GetAllPeers()
+	if peers == nil {
+		peers = []mesh.PeerInfo{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"peers": peers,
+		"count": len(peers),
+	})
+}
+
+// handleMeshStats — GET /api/mesh/stats
+func handleMeshStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	writeJSON(w, http.StatusOK, meshNet.GetStats())
+}
+
+// handleMeshAdd — POST /api/mesh/add
+func handleMeshAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var peer mesh.PeerInfo
+	if err := json.NewDecoder(r.Body).Decode(&peer); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	if peer.ID == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "peer id is required")
+		return
+	}
+	meshNet.AddPeer(peer)
+	log.Printf("🕸️  Mesh peer added: %s (%s)", peer.ID, peer.Address)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "added",
+		"id":     peer.ID,
 	})
 }

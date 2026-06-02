@@ -9,19 +9,21 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/unkillable-messenger/vpn/store"
 )
 
 // ==================== NIP-01 Types ====================
 
 // Event is a Nostr event (NIP-01).
 type Event struct {
-	ID        string   `json:"id"`
-	PubKey    string   `json:"pubkey"`
-	CreatedAt int64    `json:"created_at"`
-	Kind      int      `json:"kind"`
+	ID        string     `json:"id"`
+	PubKey    string     `json:"pubkey"`
+	CreatedAt int64      `json:"created_at"`
+	Kind      int        `json:"kind"`
 	Tags      [][]string `json:"tags"`
-	Content   string   `json:"content"`
-	Sig       string   `json:"sig"`
+	Content   string     `json:"content"`
+	Sig       string     `json:"sig"`
 }
 
 // Filter is a NIP-01 subscription filter.
@@ -45,8 +47,8 @@ type Subscription struct {
 
 // Client represents a connected WebSocket client.
 type Client struct {
-	conn   WebSocketConn
-	mu     sync.Mutex
+	conn          WebSocketConn
+	mu            sync.Mutex
 	subscriptions map[string]*Subscription
 }
 
@@ -57,16 +59,24 @@ type WebSocketConn interface {
 	Close() error
 }
 
+// DBProvider defines the interface the relay needs for event persistence.
+type DBProvider interface {
+	SaveNostrEvent(evt store.NostrEvent) error
+	GetNostrEvents(filter store.NostrEventFilter) ([]store.NostrEvent, error)
+}
+
 // Relay is a NIP-01 relay.
 type Relay struct {
-	mu       sync.RWMutex
-	events   []Event
-	clients  map[*Client]bool
+	mu        sync.RWMutex
+	events    []Event // kept for backward-compatible GetStats and in-memory fallback
+	clients   map[*Client]bool
 	maxEvents int
+	db        DBProvider
 }
 
 // NewRelay creates a new NIP-01 relay.
-func NewRelay(maxEvents int) *Relay {
+// If db is non-nil, events are persisted to SQLite; otherwise falls back to in-memory only.
+func NewRelay(maxEvents int, db DBProvider) *Relay {
 	if maxEvents <= 0 {
 		maxEvents = 50000
 	}
@@ -74,6 +84,7 @@ func NewRelay(maxEvents int) *Relay {
 		events:    make([]Event, 0),
 		clients:   make(map[*Client]bool),
 		maxEvents: maxEvents,
+		db:        db,
 	}
 }
 
@@ -96,7 +107,7 @@ func ComputeEventID(e *Event) string {
 // HandleClient handles a WebSocket client connection (NIP-01 protocol).
 func (r *Relay) HandleClient(conn WebSocketConn) {
 	client := &Client{
-		conn:         conn,
+		conn:          conn,
 		subscriptions: make(map[string]*Subscription),
 	}
 
@@ -154,7 +165,22 @@ func (r *Relay) handleEvent(client *Client, raw []json.RawMessage) {
 		return
 	}
 
-	// Store event
+	// Persist to SQLite if db is configured
+	if r.db != nil {
+		if err := r.db.SaveNostrEvent(store.NostrEvent{
+			ID:        event.ID,
+			PubKey:    event.PubKey,
+			Kind:      event.Kind,
+			Tags:      event.Tags,
+			Content:   event.Content,
+			Sig:       event.Sig,
+			CreatedAt: event.CreatedAt,
+		}); err != nil {
+			log.Printf("[nostr] failed to save event %s: %v", event.ID, err)
+		}
+	}
+
+	// Also keep in-memory for stats / backward compat
 	r.mu.Lock()
 	r.events = append(r.events, event)
 	if len(r.events) > r.maxEvents {
@@ -204,21 +230,57 @@ func (r *Relay) handleReq(client *Client, raw []json.RawMessage) {
 	client.subscriptions[subID] = sub
 	client.mu.Unlock()
 
-	// Send matching stored events
-	r.mu.RLock()
-	matched := 0
-	limit := filter.Limit
-	if limit <= 0 {
-		limit = 100
-	}
-	for i := len(r.events) - 1; i >= 0 && matched < limit; i-- {
-		if matchFilter(&r.events[i], &filter) {
-			msg := []interface{}{"EVENT", subID, r.events[i]}
-			client.send(msg)
-			matched++
+	// Load events from SQLite if db is configured, otherwise from in-memory
+	if r.db != nil {
+		limit := filter.Limit
+		if limit <= 0 {
+			limit = 100
 		}
+		dbFilter := store.NostrEventFilter{
+			IDs:     filter.IDs,
+			Kinds:   filter.Kinds,
+			Authors: filter.Authors,
+			Since:   filter.Since,
+			Until:   filter.Until,
+			Limit:   limit,
+		}
+		storedEvents, err := r.db.GetNostrEvents(dbFilter)
+		if err != nil {
+			log.Printf("[nostr] failed to query events for sub %s: %v", subID, err)
+		} else {
+			// Results come DESC (newest first); send in order for client
+			for i := len(storedEvents) - 1; i >= 0; i-- {
+				se := storedEvents[i]
+				evt := Event{
+					ID:        se.ID,
+					PubKey:    se.PubKey,
+					Kind:      se.Kind,
+					Tags:      se.Tags,
+					Content:   se.Content,
+					Sig:       se.Sig,
+					CreatedAt: se.CreatedAt,
+				}
+				msg := []interface{}{"EVENT", subID, evt}
+				client.send(msg)
+			}
+		}
+	} else {
+		// Fallback: in-memory (original behavior)
+		r.mu.RLock()
+		matched := 0
+		limit := filter.Limit
+		if limit <= 0 {
+			limit = 100
+		}
+		for i := len(r.events) - 1; i >= 0 && matched < limit; i-- {
+			if matchFilter(&r.events[i], &filter) {
+				msg := []interface{}{"EVENT", subID, r.events[i]}
+				client.send(msg)
+				matched++
+			}
+		}
+		r.mu.RUnlock()
 	}
-	r.mu.RUnlock()
 
 	// Send EOSE (End of Stored Events)
 	client.send([]string{"EOSE", subID})
@@ -311,9 +373,9 @@ func (r *Relay) GetStats() map[string]interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return map[string]interface{}{
-		"events":      len(r.events),
-		"clients":     len(r.clients),
-		"max_events":  r.maxEvents,
-		"uptime":      fmt.Sprintf("%d", time.Now().Unix()),
+		"events":     len(r.events),
+		"clients":    len(r.clients),
+		"max_events": r.maxEvents,
+		"uptime":     fmt.Sprintf("%d", time.Now().Unix()),
 	}
 }

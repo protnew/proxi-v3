@@ -1,10 +1,13 @@
 package tor
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 )
 
@@ -133,7 +136,121 @@ type OnionService struct {
 }
 
 // GetOnionAddress reads the .onion address from Tor control port or filesystem.
-// This is a placeholder — real implementation needs tor control port auth.
+// Tries control port first (port 9051), then falls back to hostname file.
 func GetOnionAddress(dataDir string) string {
+	// Try control port (9051)
+	if addr, err := getOnionFromControlPort("127.0.0.1:9051"); err == nil && addr != "" {
+		return addr
+	}
+	// Fallback: read from Tor data directory
+	if dataDir == "" {
+		dataDir = "/var/lib/tor"
+	}
+	// Common hidden service locations
+	paths := []string{
+		dataDir + "/proxi/hostname",
+		dataDir + "/hidden_service/hostname",
+		"/var/lib/tor/proxi/hostname",
+		"/var/lib/tor/hidden_service/hostname",
+	}
+	for _, p := range paths {
+		data, err := os.ReadFile(p)
+		if err == nil {
+			addr := strings.TrimSpace(string(data))
+			if addr != "" {
+				return addr
+			}
+		}
+	}
 	return "not-yet-configured.onion"
+}
+
+// getOnionFromControlPort queries Tor control port for hidden service addresses.
+func getOnionFromControlPort(addr string) (string, error) {
+	conn, err := net.DialTimeout("tcp", addr, 3*time.Second)
+	if err != nil {
+		return "", err
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(5 * time.Second))
+
+	// Authenticate (no password — cookie or empty)
+	conn.Write([]byte("AUTHENTICATE \"\"\r\n"))
+	buf := make([]byte, 1024)
+	n, err := conn.Read(buf)
+	if err != nil || !bytes.Contains(buf[:n], []byte("250")) {
+		return "", fmt.Errorf("auth failed")
+	}
+
+	// Get hidden service descriptors
+	conn.Write([]byte("GETINFO onions/current\r\n"))
+	n, err = conn.Read(buf)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse response: 250-ons/current=abcdef1234.onion
+	lines := string(buf[:n])
+	for _, line := range strings.Split(lines, "\n") {
+		if strings.HasPrefix(line, "250-ons/current=") {
+			addr := strings.TrimPrefix(line, "250-ons/current=")
+			addr = strings.TrimSpace(addr)
+			if addr != "" && strings.HasSuffix(addr, ".onion") {
+				return addr, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("no onion address found")
+}
+
+// CreateOnionService creates a new hidden service via Tor control port.
+func CreateOnionService(controlAddr string, targetPort int) (*OnionService, error) {
+	if controlAddr == "" {
+		controlAddr = "127.0.0.1:9051"
+	}
+	if targetPort <= 0 {
+		targetPort = 9999
+	}
+
+	conn, err := net.DialTimeout("tcp", controlAddr, 3*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("connect to Tor control port: %w", err)
+	}
+	defer conn.Close()
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+
+	// Authenticate
+	conn.Write([]byte("AUTHENTICATE \"\"\r\n"))
+	buf := make([]byte, 4096)
+	n, err := conn.Read(buf)
+	if err != nil || !bytes.Contains(buf[:n], []byte("250")) {
+		return nil, fmt.Errorf("Tor auth failed")
+	}
+
+	// Create ephemeral hidden service
+	cmd := fmt.Sprintf("ADD_ONION NEW:BEST Flags=DiscardPK Port=80,127.0.0.1:%d\r\n", targetPort)
+	conn.Write([]byte(cmd))
+
+	n, err = conn.Read(buf)
+	if err != nil {
+		return nil, fmt.Errorf("ADD_ONION read: %w", err)
+	}
+
+	resp := string(buf[:n])
+	var onionAddr string
+	for _, line := range strings.Split(resp, "\n") {
+		if strings.HasPrefix(line, "250-ServiceID=") {
+			onionAddr = strings.TrimPrefix(line, "250-ServiceID=")
+			onionAddr = strings.TrimSpace(onionAddr) + ".onion"
+		}
+	}
+	if onionAddr == "" {
+		return nil, fmt.Errorf("no ServiceID in response: %s", resp)
+	}
+
+	return &OnionService{
+		OnionAddr: onionAddr,
+		Port:      80,
+	}, nil
 }

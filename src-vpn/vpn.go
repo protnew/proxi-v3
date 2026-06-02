@@ -73,6 +73,7 @@ type Manager struct {
     myIP     string
     startTime time.Time
     cancel   context.CancelFunc
+    stubMode bool // true if wg binary is not available — runs without real interface
 }
 
 // NewManager создаёт VPN менеджер
@@ -173,6 +174,12 @@ func (m *Manager) StartExitNode(ctx context.Context) error {
 
     m.state = StateConnecting
 
+    // Check if WireGuard is available; fall back to stub mode if not
+    if !m.IsWireGuardAvailable() {
+        fmt.Printf("[VPN] WARNING: wg binary not found — switching to stub mode (no real VPN interface)\n")
+        m.stubMode = true
+    }
+
     // Создаём WireGuard интерфейс
     if err := m.setupInterface(); err != nil {
         m.state = StateError
@@ -227,6 +234,12 @@ func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint st
     defer m.mu.Unlock()
 
     m.state = StateConnecting
+
+    // Check if WireGuard is available; fall back to stub mode if not
+    if !m.IsWireGuardAvailable() {
+        fmt.Printf("[VPN] WARNING: wg binary not found — switching to stub mode (no real VPN interface)\n")
+        m.stubMode = true
+    }
 
     // Добавляем пир
     peer := &Peer{
@@ -381,41 +394,79 @@ func (m *Manager) checkPeers() {
 
 // ========== Platform-specific (Linux/WSL stubs) ==========
 
+// IsWireGuardAvailable checks whether the wg binary exists on the system.
+func (m *Manager) IsWireGuardAvailable() bool {
+    _, err := exec.LookPath("wg")
+    return err == nil
+}
+
 func (m *Manager) setupInterface() error {
+    // Stub mode: skip real interface setup
+    if m.stubMode {
+        fmt.Printf("[VPN] stub mode: skipping interface setup\n")
+        m.myIP = "10.77.0.1"
+        return nil
+    }
+
     iface := m.config.InterfaceName
     ip := m.config.Address
-    
+
     // ip link add um0 type wireguard
     cmd := exec.Command("ip", "link", "add", "dev", iface, "type", "wireguard")
-    cmd.Run() // может уже существовать
-    
+    if err := cmd.Run(); err != nil {
+        // May already exist — check with a second attempt
+        fmt.Printf("[VPN] Warning: ip link add: %v (may already exist)\n", err)
+    }
+
     // wg set um0 private-key <key> listen-port 51820
     keyFile := filepath.Join(m.config.DataDir, "private.key")
-    exec.Command("wg", "set", iface, "private-key", keyFile, "listen-port", fmt.Sprintf("%d", m.config.Port)).Run()
-    
+    if err := exec.Command("wg", "set", iface, "private-key", keyFile, "listen-port", fmt.Sprintf("%d", m.config.Port)).Run(); err != nil {
+        return fmt.Errorf("wg set private-key: %w (is wireguard-tools installed?)", err)
+    }
+
     // ip address add 10.77.0.1/24 dev um0
-    exec.Command("ip", "address", "add", ip, "dev", iface).Run()
-    
+    if err := exec.Command("ip", "address", "add", ip, "dev", iface).Run(); err != nil {
+        fmt.Printf("[VPN] Warning: ip address add: %v (may already be assigned)\n", err)
+    }
+
     // ip link set um0 up
-    exec.Command("ip", "link", "set", iface, "up").Run()
-    
+    if err := exec.Command("ip", "link", "set", iface, "up").Run(); err != nil {
+        return fmt.Errorf("ip link set up %s: %w", iface, err)
+    }
+
     m.myIP = "10.77.0.1"
     return nil
 }
 
 func (m *Manager) teardownInterface() error {
+    if m.stubMode {
+        fmt.Printf("[VPN] stub mode: skipping teardownInterface\n")
+        return nil
+    }
     return exec.Command("ip", "link", "del", m.config.InterfaceName).Run()
 }
 
 func (m *Manager) addPeer(p *Peer) error {
+    // Stub mode: skip real peer configuration
+    if m.stubMode {
+        fmt.Printf("[VPN] stub mode: skipping addPeer(%s)\n", p.PublicKey[:min(16, len(p.PublicKey))])
+        return nil
+    }
+
     args := []string{"set", m.config.InterfaceName, "peer", p.PublicKey, "allowed-ips", p.AllowedIPs}
     if p.Endpoint != "" {
         args = append(args, "endpoint", p.Endpoint)
     }
-    return exec.Command("wg", args...).Run()
+    if err := exec.Command("wg", args...).Run(); err != nil {
+        return fmt.Errorf("wg set peer %s: %w", p.PublicKey[:min(16, len(p.PublicKey))], err)
+    }
+    return nil
 }
 
 func (m *Manager) removePeerFromInterface(p *Peer) error {
+    if m.stubMode {
+        return nil
+    }
     return exec.Command("wg", "set", m.config.InterfaceName, "peer", p.PublicKey, "remove").Run()
 }
 
@@ -535,43 +586,84 @@ func (m *Manager) SetSplitTunnel(cfg SplitTunnelConfig) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// First flush existing mangle rules for our interface
-	exec.Command("iptables", "-t", "mangle", "-F", "PROXI_SPLIT").Run()
+	// Clean up any previous split tunnel rules
+	m.cleanupSplitTunnelLocked()
+
+	// Create a fresh PROXI_SPLIT chain
 	exec.Command("iptables", "-t", "mangle", "-N", "PROXI_SPLIT").Run()
 
 	switch cfg.Mode {
 	case "all":
 		// No split rules — all traffic goes through VPN (default behavior)
-		return nil
-	case "split":
-		// Only listed targets go through VPN
-		for _, target := range cfg.Targets {
-			if ip := net.ParseIP(target); ip != nil {
-				exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-					"-d", target, "-j", "MARK", "--set-mark", "1").Run()
-			} else {
-				// Resolve domain and add rule
-				if addrs, err := net.LookupHost(target); err == nil {
-					for _, addr := range addrs {
-						exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-							"-d", addr, "-j", "MARK", "--set-mark", "1").Run()
+		// Still jump to chain (it will just RETURN immediately)
+	default:
+		// "split" or "exclude"
+		if cfg.Mode == "split" {
+			// Only listed targets go through VPN
+			for _, target := range cfg.Targets {
+				if ip := net.ParseIP(target); ip != nil {
+					exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+						"-d", target, "-j", "MARK", "--set-mark", "1").Run()
+				} else {
+					// Resolve domain and add rule
+					if addrs, err := net.LookupHost(target); err == nil {
+						for _, addr := range addrs {
+							exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+								"-d", addr, "-j", "MARK", "--set-mark", "1").Run()
+						}
 					}
 				}
 			}
-		}
-	case "exclude":
-		// All traffic through VPN except listed targets
-		exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-			"-j", "MARK", "--set-mark", "1").Run()
-		for _, target := range cfg.Targets {
-			if ip := net.ParseIP(target); ip != nil {
-				exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-					"-d", target, "-j", "MARK", "--set-mark", "0").Run()
+		} else if cfg.Mode == "exclude" {
+			// All traffic through VPN except listed targets
+			for _, target := range cfg.Targets {
+				if ip := net.ParseIP(target); ip != nil {
+					exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+						"-d", target, "-j", "RETURN").Run()
+				}
 			}
+			// Mark everything else (rules above RETURN first, so excluded targets skip this)
+			exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
+				"-j", "MARK", "--set-mark", "1").Run()
 		}
 	}
 
+	// Append unconditional RETURN at the end so unmatched traffic is not blocked
+	exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-j", "RETURN").Run()
+
+	// Connect the chain to PREROUTING so it actually gets evaluated
+	exec.Command("iptables", "-t", "mangle", "-A", "PREROUTING", "-j", "PROXI_SPLIT").Run()
+
 	return nil
+}
+
+// CleanupSplitTunnel removes all split tunneling iptables rules.
+func (m *Manager) CleanupSplitTunnel() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.cleanupSplitTunnelLocked()
+}
+
+// cleanupSplitTunnelLocked does the actual iptables cleanup (caller must hold m.mu).
+func (m *Manager) cleanupSplitTunnelLocked() error {
+	var firstErr error
+
+	// Remove the jump rule from PREROUTING to PROXI_SPLIT
+	if err := exec.Command("iptables", "-t", "mangle", "-D", "PREROUTING", "-j", "PROXI_SPLIT").Run(); err != nil && firstErr == nil {
+		firstErr = fmt.Errorf("delete PREROUTING jump: %w", err)
+	}
+
+	// Flush all rules in the PROXI_SPLIT chain
+	if err := exec.Command("iptables", "-t", "mangle", "-F", "PROXI_SPLIT").Run(); err != nil && firstErr == nil {
+		firstErr = fmt.Errorf("flush PROXI_SPLIT: %w", err)
+	}
+
+	// Delete the PROXI_SPLIT chain itself
+	if err := exec.Command("iptables", "-t", "mangle", "-X", "PROXI_SPLIT").Run(); err != nil && firstErr == nil {
+		firstErr = fmt.Errorf("delete PROXI_SPLIT chain: %w", err)
+	}
+
+	return firstErr
 }
 
 // ==================== DNS through VPN ====================
