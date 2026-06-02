@@ -453,6 +453,7 @@ func main() {
 	http.HandleFunc("/api/switch/check-in", apiChain(handleSwitchCheckIn))
 	http.HandleFunc("/api/push/subscribe", apiChain(handlePushSubscribe))
 	http.HandleFunc("/api/groups/create", apiChain(handleGroupCreate))
+	http.HandleFunc("/api/groups/list", apiChain(handleGroupList))
 	http.HandleFunc("/api/groups/members", apiChain(handleGroupMembers))
 	http.HandleFunc("/api/groups/kick", apiChain(handleGroupKick))
 	http.HandleFunc("/api/groups/promote", apiChain(handleGroupPromote))
@@ -752,6 +753,32 @@ func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("🔔 Push subscription received: %s", truncate(string(body), 100))
 	writeJSON(w, 200, map[string]interface{}{"status": "subscribed"})
+}
+
+// handleGroupList — GET /api/groups/list
+func handleGroupList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	channels, err := db.GetChannels()
+	if err != nil {
+		writeError(w, 500, "DB_ERROR", err.Error())
+		return
+	}
+	groups := make([]map[string]interface{}, 0)
+	for _, ch := range channels {
+		groups = append(groups, map[string]interface{}{
+			"id":        ch.ID,
+			"name":      ch.Name,
+			"creator":   ch.Creator,
+			"createdAt": ch.CreatedAt,
+		})
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"groups": groups,
+		"count":  len(groups),
+	})
 }
 
 // handleGroupCreate — POST /api/groups/create
