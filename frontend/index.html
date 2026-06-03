@@ -4,10 +4,31 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#1e88e5">
+  <meta name="description" content="Unkillable Messenger — decentralized, censorship-resistant messenger">
   <title>Unkillable Messenger</title>
   <link rel="manifest" href="/manifest.json">
+  <style>
+    /* Skip navigation link — visible only on focus */
+    .skip-nav {
+      position: absolute;
+      top: -100%;
+      left: 0;
+      background: #1e88e5;
+      color: #fff;
+      padding: 8px 16px;
+      z-index: 9999;
+      font-size: 14px;
+      border-radius: 0 0 4px 0;
+      text-decoration: none;
+      transition: top 0.2s;
+    }
+    .skip-nav:focus {
+      top: 0;
+    }
+  </style>
 </head>
 <body>
+  <a href="#main-content" class="skip-nav">Перейти к основному содержимому</a>
   <div id="app"></div>
   <script type="module" src="/src/main.js"></script>
 </body>

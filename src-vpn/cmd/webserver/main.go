@@ -16,6 +16,7 @@ import (
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
+	"github.com/unkillable-messenger/vpn/federation"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
 	"github.com/unkillable-messenger/vpn/mesh"
@@ -38,6 +39,8 @@ var db *store.Store
 var vpnMgr *vpn.Manager
 
 var nostrRelay *nostr.Relay
+
+var fedRelay *federation.FederatedRelay
 
 var ipfsClient *ipfs.Client
 
@@ -380,6 +383,25 @@ func run() error {
 	nostrRelay = nostr.NewRelay(50000, db)
 	log.Println("📡 Nostr NIP-01 relay initialized")
 
+	// Initialize Federation Relay
+	fedRelay = federation.NewFederatedRelay(nostrRelay)
+	// Load persisted federation peers from DB
+	fedPeers, fedPeerErr := db.GetFederationPeers()
+	if fedPeerErr != nil {
+		log.Printf("⚠️  Failed to load federation peers: %v", fedPeerErr)
+	} else {
+		for _, fp := range fedPeers {
+			if err := fedRelay.AddPeer(fp.URL); err == nil {
+				log.Printf("🌐 Federation peer restored: %s (%s)", fp.URL, fp.Status)
+			}
+		}
+		if len(fedPeers) > 0 {
+			log.Printf("🌐 Federation relay initialized with %d peer(s)", len(fedPeers))
+		} else {
+			log.Println("🌐 Federation relay initialized (no peers)")
+		}
+	}
+
 	// Initialize IPFS client
 	ipfsClient = ipfs.NewClient("", "")
 	if ipfsClient.IsAvailable() {
@@ -530,6 +552,21 @@ func run() error {
 	http.HandleFunc("/api/mesh/peers", apiChain(handleMeshPeers))
 	http.HandleFunc("/api/mesh/stats", apiChain(handleMeshStats))
 	http.HandleFunc("/api/mesh/add", apiChain(handleMeshAdd))
+
+	// Federation endpoints (Sprint 6 — S6.1)
+	http.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "POST":
+			handleFederationPeerAdd(w, r)
+		case "DELETE":
+			handleFederationPeerRemove(w, r)
+		case "GET":
+			handleFederationPeerList(w, r)
+		default:
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
+		}
+	}))
+	http.HandleFunc("/api/federation/sync", apiChain(handleFederationSync))
 
 	// Static files + SPA fallback
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -1423,4 +1460,135 @@ func handleStickerPackGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, pack)
+}
+
+// ==================== Federation Handlers (Sprint 6 — S6.1) ====================
+
+// handleFederationPeerAdd — POST /api/federation/peer
+func handleFederationPeerAdd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.URL == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "url is required")
+		return
+	}
+
+	// Add to in-memory federation relay
+	if err := fedRelay.AddPeer(req.URL); err != nil {
+		writeError(w, http.StatusConflict, "DUPLICATE", err.Error())
+		return
+	}
+
+	// Persist to DB
+	peer := store.FederationPeer{
+		ID:        fmt.Sprintf("fp-%d", time.Now().UnixNano()),
+		URL:       req.URL,
+		LastSync:  0,
+		Status:    "active",
+	}
+	if err := db.SaveFederationPeer(peer); err != nil {
+		log.Printf("⚠️  Failed to persist federation peer: %v", err)
+	}
+
+	log.Printf("🌐 Federation peer added: %s", req.URL)
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"status": "added",
+		"url":    req.URL,
+	})
+}
+
+// handleFederationPeerRemove — DELETE /api/federation/peer
+func handleFederationPeerRemove(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use DELETE")
+		return
+	}
+	var req struct {
+		URL string `json:"url"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.URL == "" {
+		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "url is required")
+		return
+	}
+
+	// Remove from in-memory relay
+	if err := fedRelay.RemovePeer(req.URL); err != nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", err.Error())
+		return
+	}
+
+	// Remove from DB
+	if err := db.DeleteFederationPeer(req.URL); err != nil {
+		log.Printf("⚠️  Failed to delete federation peer from DB: %v", err)
+	}
+
+	log.Printf("🌐 Federation peer removed: %s", req.URL)
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "removed",
+		"url":    req.URL,
+	})
+}
+
+// handleFederationPeerList — GET /api/federation/peer
+func handleFederationPeerList(w http.ResponseWriter, r *http.Request) {
+	peers, err := db.GetFederationPeers()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	if peers == nil {
+		peers = []store.FederationPeer{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"peers": peers,
+		"count": len(peers),
+	})
+}
+
+// handleFederationSync — POST /api/federation/sync
+func handleFederationSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Since int64 `json:"since"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Default: sync from 0 (full sync)
+		req.Since = 0
+	}
+
+	if err := fedRelay.SyncEvents(req.Since); err != nil {
+		writeError(w, http.StatusInternalServerError, "SYNC_ERROR", err.Error())
+		return
+	}
+
+	// Update last_sync for all peers in DB
+	now := time.Now().Unix()
+	peers := fedRelay.GetPeers()
+	for _, p := range peers {
+		if err := db.UpdateFederationPeerSync(p, now); err != nil {
+			log.Printf("⚠️  Failed to update sync time for %s: %v", p, err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":    "synced",
+		"peerCount": len(peers),
+		"syncedAt":  now,
+	})
 }

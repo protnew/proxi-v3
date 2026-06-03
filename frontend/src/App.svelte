@@ -5,6 +5,7 @@
   import * as E2E from './lib/e2e.js';
   import { loadIdentity, getWS, refreshOnline } from './lib/api.js';
   import Sidebar from './components/Sidebar.svelte';
+  import SkipNav from './components/SkipNav.svelte';
   import Chat from './components/Chat.svelte';
   import VpnPanel from './components/VpnPanel.svelte';
   import ChannelsPanel from './components/ChannelsPanel.svelte';
@@ -21,6 +22,11 @@
 
   function switchTab(name) {
     activeTab.set(name);
+    // Focus management: move focus to main content area after tab switch
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+      mainContent.focus();
+    }
   }
 
   onMount(async () => {
@@ -57,10 +63,14 @@
   });
 </script>
 
-<div class="app">
-  <Sidebar {currentTab} {switchTab} />
+<SkipNav />
 
-  <div class="content">
+<div class="app">
+  <nav role="navigation" aria-label="Main navigation">
+    <Sidebar {currentTab} {switchTab} />
+  </nav>
+
+  <div class="content" id="main-content" role="main" tabindex="-1" aria-label="{currentTab} panel">
     {#if currentTab === 'chat'}
       <Chat />
     {:else if currentTab === 'vpn'}
@@ -73,7 +83,7 @@
   </div>
 </div>
 
-<div class="toast" class:show={toastShow}>{toastMsg}</div>
+<div class="toast" class:show={toastShow} role="status" aria-live="polite" aria-atomic="true">{toastMsg}</div>
 
 <style>
   :global(*) {
@@ -88,6 +98,10 @@
     height: 100vh;
     overflow: hidden;
   }
+  :global(:focus-visible) {
+    outline: 2px solid #1e88e5;
+    outline-offset: 2px;
+  }
   .app {
     display: flex;
     height: 100vh;
@@ -97,6 +111,9 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+  .content:focus {
+    outline: none;
   }
   .toast {
     position: fixed;

@@ -317,6 +317,30 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("create reports: %w", err)
 	}
 
+	// Federation peers table (Sprint 6 — S6.1)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS federation_peers (
+			id        TEXT PRIMARY KEY,
+			url       TEXT NOT NULL UNIQUE,
+			last_sync INTEGER NOT NULL DEFAULT 0,
+			status    TEXT NOT NULL DEFAULT 'active'
+		)`); err != nil {
+		return fmt.Errorf("create federation_peers: %w", err)
+	}
+
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS invites (
+			id          TEXT PRIMARY KEY,
+			channel     TEXT DEFAULT '',
+			group_name  TEXT DEFAULT '',
+			created_by  TEXT NOT NULL,
+			expires_at  INTEGER DEFAULT 0,
+			max_uses    INTEGER DEFAULT 0,
+			uses        INTEGER DEFAULT 0
+		)`); err != nil {
+		return fmt.Errorf("create invites: %w", err)
+	}
+
 	return nil
 }
 
@@ -1310,4 +1334,69 @@ func (s *Store) GetPushSubscriptions(userIDs []string) ([]PushSubscription, erro
 		subs = append(subs, sub)
 	}
 	return subs, rows.Err()
+}
+
+// ---------------------------------------------------------------------------
+// Federation Peers (Sprint 6 — S6.1)
+// ---------------------------------------------------------------------------
+
+// FederationPeer represents a persisted federation peer entry.
+type FederationPeer struct {
+	ID        string `json:"id"`
+	URL       string `json:"url"`
+	LastSync  int64  `json:"lastSync"`
+	Status    string `json:"status"`
+}
+
+// SaveFederationPeer inserts or updates a federation peer.
+func (s *Store) SaveFederationPeer(peer FederationPeer) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO federation_peers (id, url, last_sync, status) VALUES (?, ?, ?, ?)`,
+		peer.ID, peer.URL, peer.LastSync, peer.Status,
+	)
+	if err != nil {
+		return fmt.Errorf("save federation peer %s: %w", peer.URL, err)
+	}
+	return nil
+}
+
+// GetFederationPeers returns all federation peers.
+func (s *Store) GetFederationPeers() ([]FederationPeer, error) {
+	rows, err := s.db.Query(`SELECT id, url, last_sync, status FROM federation_peers`)
+	if err != nil {
+		return nil, fmt.Errorf("get federation peers: %w", err)
+	}
+	defer rows.Close()
+
+	var peers []FederationPeer
+	for rows.Next() {
+		var p FederationPeer
+		if err := rows.Scan(&p.ID, &p.URL, &p.LastSync, &p.Status); err != nil {
+			return nil, fmt.Errorf("scan federation peer: %w", err)
+		}
+		peers = append(peers, p)
+	}
+	return peers, rows.Err()
+}
+
+// DeleteFederationPeer removes a federation peer by URL.
+func (s *Store) DeleteFederationPeer(url string) error {
+	res, err := s.db.Exec(`DELETE FROM federation_peers WHERE url = ?`, url)
+	if err != nil {
+		return fmt.Errorf("delete federation peer %s: %w", url, err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("federation peer %s not found", url)
+	}
+	return nil
+}
+
+// UpdateFederationPeerSync updates the last_sync timestamp for a peer.
+func (s *Store) UpdateFederationPeerSync(url string, lastSync int64) error {
+	_, err := s.db.Exec(`UPDATE federation_peers SET last_sync = ?, status = 'active' WHERE url = ?`, lastSync, url)
+	if err != nil {
+		return fmt.Errorf("update federation peer sync %s: %w", url, err)
+	}
+	return nil
 }
