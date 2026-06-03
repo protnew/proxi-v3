@@ -4,3 +4,4 @@ dist-svelte/
 *.exe
 messenger-server
 src-vpn/webserver
+coverage.out
