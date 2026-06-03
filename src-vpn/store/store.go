@@ -15,6 +15,11 @@ type Store struct {
 	db *sql.DB
 }
 
+// DB returns the underlying database connection (for admin operations).
+func (s *Store) DB() *sql.DB {
+	return s.db
+}
+
 // Message represents a stored chat message.
 type Message struct {
 	ID            string `json:"id"`
@@ -285,6 +290,31 @@ func (s *Store) migrate() error {
 			started_at   INTEGER NOT NULL
 		)`); err != nil {
 		return fmt.Errorf("create streams: %w", err)
+	}
+
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS user_bans (
+			id        INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id   TEXT NOT NULL,
+			reason    TEXT,
+			banned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at DATETIME
+		)`); err != nil {
+		return fmt.Errorf("create user_bans: %w", err)
+	}
+
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS reports (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			message_id  INTEGER,
+			reporter_id TEXT,
+			reason      TEXT,
+			status      TEXT DEFAULT 'open',
+			created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+			resolved_at DATETIME,
+			resolver_id TEXT
+		)`); err != nil {
+		return fmt.Errorf("create reports: %w", err)
 	}
 
 	return nil
