@@ -236,6 +236,24 @@ func (c *Client) ReadPump(ctx context.Context) {
 			continue
 		}
 
+		// Handle binary stream frames (0x03 prefix).
+		if msgType == websocket.MessageBinary && len(data) > 0 && data[0] == BinaryFrameStream {
+			// Route stream frame as-is to all other clients
+			// (subscribers will filter by stream ID on the client side)
+			c.hub.Broadcast(data, c.UserID)
+
+			if c.hub.OnMessage != nil {
+				streamMsg := &Message{
+					Type: "stream-frame",
+					From: c.UserID,
+					To:   BroadcastTarget,
+					Ts:   time.Now().Unix(),
+				}
+				c.hub.OnMessage(streamMsg)
+			}
+			continue
+		}
+
 		// Legacy text JSON handling.
 		msg, err := DecodeMessage(data)
 		if err != nil {
@@ -289,9 +307,9 @@ func (c *Client) WritePump(ctx context.Context) {
 			}
 			writeCtx, cancel := context.WithTimeout(ctx, WriteTimeout)
 
-			// Determine frame type: binary voice (0x02 prefix) or text JSON.
+			// Determine frame type: binary voice (0x02) or stream (0x03) or text JSON.
 			var writeType websocket.MessageType
-			if IsBinaryVoiceFrame(msg) {
+			if IsBinaryVoiceFrame(msg) || (len(msg) > 0 && msg[0] == BinaryFrameStream) {
 				writeType = websocket.MessageBinary
 			} else {
 				writeType = websocket.MessageText

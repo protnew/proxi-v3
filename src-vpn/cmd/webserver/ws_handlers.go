@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/store"
@@ -101,6 +102,22 @@ func initHub() {
 	hub = chat.NewChatHub()
 	hub.OnMessage = func(msg *chat.Message) {
 		log.Printf("💬 [%s→%s]: %s", msg.From, msg.To, truncate(msg.Text, 50))
+
+		// Process bot commands
+		if msg.Type == "chat" && msg.Text != "" {
+			botMsg := bot.Message{
+				ID:        msg.ID,
+				From:      msg.From,
+				To:        msg.To,
+				Text:      msg.Text,
+				Timestamp: msg.Ts,
+				Type:      msg.Type,
+			}
+			triggered := botMgr.ProcessMessage(botMsg)
+			if len(triggered) > 0 {
+				log.Printf("🤖 Triggered %d bot(s) for message from %s", len(triggered), msg.From)
+			}
+		}
 
 		// Save chat messages to SQLite
 		if msg.Type == "chat" {

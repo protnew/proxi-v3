@@ -18,6 +18,9 @@ const (
 // Binary frame type byte — first byte of a binary WebSocket frame.
 const BinaryFrameVoice byte = 0x02
 
+// BinaryFrameStream is the prefix byte for binary stream video frames.
+const BinaryFrameStream byte = 0x03
+
 // BroadcastTarget is used in the "to" field to indicate a broadcast message.
 const BroadcastTarget = "broadcast"
 

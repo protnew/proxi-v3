@@ -234,6 +234,59 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("create push_subscriptions: %w", err)
 	}
 
+	// Sticker packs table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS sticker_packs (
+			id         TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			owner_npub TEXT NOT NULL DEFAULT '',
+			created_at INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create sticker_packs: %w", err)
+	}
+
+	// Stickers table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS stickers (
+			id      TEXT PRIMARY KEY,
+			pack_id TEXT NOT NULL,
+			url     TEXT NOT NULL DEFAULT '',
+			emoji   TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY (pack_id) REFERENCES sticker_packs(id)
+		)`); err != nil {
+		return fmt.Errorf("create stickers: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_stickers_pack ON stickers(pack_id)`); err != nil {
+		return fmt.Errorf("create index stickers_pack: %w", err)
+	}
+
+	// Bots table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS bots (
+			id         TEXT PRIMARY KEY,
+			name       TEXT NOT NULL,
+			token      TEXT NOT NULL DEFAULT '',
+			owner_npub TEXT NOT NULL DEFAULT '',
+			command    TEXT NOT NULL DEFAULT '',
+			active     INTEGER NOT NULL DEFAULT 1,
+			created_at INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create bots: %w", err)
+	}
+
+	// Streams table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS streams (
+			id           TEXT PRIMARY KEY,
+			channel_name TEXT NOT NULL DEFAULT '',
+			streamer_id  TEXT NOT NULL DEFAULT '',
+			viewer_count INTEGER NOT NULL DEFAULT 0,
+			active       INTEGER NOT NULL DEFAULT 1,
+			started_at   INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create streams: %w", err)
+	}
+
 	return nil
 }
 

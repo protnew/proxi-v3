@@ -15,6 +15,8 @@ require (
 
 require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
+	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
+	github.com/klauspost/reedsolomon v1.14.0 // indirect
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )

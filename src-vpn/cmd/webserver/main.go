@@ -14,6 +14,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
@@ -21,6 +22,7 @@ import (
 	"github.com/unkillable-messenger/vpn/middleware"
 	"github.com/unkillable-messenger/vpn/nat"
 	"github.com/unkillable-messenger/vpn/nostr"
+	"github.com/unkillable-messenger/vpn/stream"
 	"github.com/unkillable-messenger/vpn/tor"
 	"github.com/unkillable-messenger/vpn/store"
 
@@ -42,6 +44,10 @@ var ipfsClient *ipfs.Client
 var torDialer *tor.TorDialer
 
 var meshNet *mesh.MeshNet
+
+var streamMgr = stream.NewManager()
+var botMgr = bot.NewManager()
+var stickerMgr = bot.NewStickerManager()
 
 // ========== Per-user rate limiter ==========
 
@@ -505,6 +511,20 @@ func run() error {
 	http.HandleFunc("/api/nat/discover", apiChain(handleNATDiscover))
 	http.HandleFunc("/api/tor/status", apiChain(handleTorStatus))
 	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
+
+	// Stream endpoints (Sprint 3 — Task 1)
+	http.HandleFunc("/api/stream/create", apiChain(handleStreamCreate))
+	http.HandleFunc("/api/stream/list", apiChain(handleStreamList))
+	http.HandleFunc("/api/stream/end", apiChain(handleStreamEnd))
+	http.HandleFunc("/api/stream/subscribe", apiChain(handleStreamSubscribe))
+
+	// Bot endpoints (Sprint 3 — Task 2)
+	http.HandleFunc("/api/bots/register", apiChain(handleBotRegister))
+	http.HandleFunc("/api/bots/list", apiChain(handleBotList))
+
+	// Sticker endpoints (Sprint 3 — Task 2)
+	http.HandleFunc("/api/stickers/packs", apiChain(handleStickerPacks))
+	http.HandleFunc("/api/stickers/pack/", apiChain(handleStickerPackGet))
 
 	// Mesh network endpoints
 	http.HandleFunc("/api/mesh/peers", apiChain(handleMeshPeers))
@@ -1227,4 +1247,180 @@ func handleMeshAdd(w http.ResponseWriter, r *http.Request) {
 		"status": "added",
 		"id":     peer.ID,
 	})
+}
+
+// ==================== Stream Handlers (Sprint 3 — Task 1) ====================
+
+// handleStreamCreate — POST /api/stream/create
+func handleStreamCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		ChannelName string `json:"channelName"`
+		StreamerID  string `json:"streamerId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.StreamerID == "" {
+		req.StreamerID = "anonymous"
+	}
+	if req.ChannelName == "" {
+		req.ChannelName = "Live Stream"
+	}
+	s := streamMgr.CreateStream(req.ChannelName, req.StreamerID)
+	writeJSON(w, 201, s)
+	log.Printf("📺 Stream created: %s by %s (%s)", s.ID, req.StreamerID, req.ChannelName)
+}
+
+// handleStreamList — GET /api/stream/list
+func handleStreamList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	streams := streamMgr.ListStreams()
+	if streams == nil {
+		streams = []stream.Stream{}
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"streams": streams,
+		"count":   len(streams),
+	})
+}
+
+// handleStreamEnd — POST /api/stream/end
+func handleStreamEnd(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		StreamID string `json:"streamId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.StreamID == "" {
+		writeError(w, 400, "BAD_REQUEST", "streamId required")
+		return
+	}
+	if err := streamMgr.EndStream(req.StreamID); err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"status": "ended", "streamId": req.StreamID})
+	log.Printf("📺 Stream ended: %s", req.StreamID)
+}
+
+// handleStreamSubscribe — POST /api/stream/subscribe
+func handleStreamSubscribe(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		StreamID string `json:"streamId"`
+		UserID   string `json:"userId"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.StreamID == "" {
+		writeError(w, 400, "BAD_REQUEST", "streamId required")
+		return
+	}
+	if err := streamMgr.Subscribe(req.StreamID, req.UserID); err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+	writeJSON(w, 200, map[string]interface{}{"status": "subscribed", "streamId": req.StreamID})
+}
+
+// ==================== Bot Handlers (Sprint 3 — Task 2) ====================
+
+// handleBotRegister — POST /api/bots/register
+func handleBotRegister(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Name      string `json:"name"`
+		OwnerNpub string `json:"ownerNpub"`
+		Command   string `json:"command"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if req.Name == "" {
+		writeError(w, 400, "BAD_REQUEST", "name required")
+		return
+	}
+	if req.OwnerNpub == "" {
+		req.OwnerNpub = "anonymous"
+	}
+	reg := botMgr.RegisterBot(req.Name, req.OwnerNpub, req.Command, &bot.EchoBot{})
+	writeJSON(w, 201, reg)
+	log.Printf("🤖 Bot registered: %s (%s) by %s", req.Name, req.Command, req.OwnerNpub)
+}
+
+// handleBotList — GET /api/bots/list
+func handleBotList(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	bots := botMgr.ListBots()
+	if bots == nil {
+		bots = []bot.BotRegistration{}
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"bots":  bots,
+		"count": len(bots),
+	})
+}
+
+// ==================== Sticker Handlers (Sprint 3 — Task 2) ====================
+
+// handleStickerPacks — GET /api/stickers/packs
+func handleStickerPacks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	packs := stickerMgr.ListPacks()
+	if packs == nil {
+		packs = []bot.StickerPack{}
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"packs": packs,
+		"count": len(packs),
+	})
+}
+
+// handleStickerPackGet — GET /api/stickers/pack/:id
+func handleStickerPackGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
+		return
+	}
+	// Extract ID from path: /api/stickers/pack/:id
+	packID := strings.TrimPrefix(r.URL.Path, "/api/stickers/pack/")
+	if packID == "" {
+		writeError(w, 400, "BAD_REQUEST", "pack ID required")
+		return
+	}
+	pack, err := stickerMgr.GetPack(packID)
+	if err != nil {
+		writeError(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+	writeJSON(w, 200, pack)
 }
