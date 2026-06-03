@@ -1,7 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { messages, myId, showToast } from '../lib/stores.js';
-  import { sendMessage, getWS } from '../lib/api.js';
+  import { sendMessage, getWS } from '../lib/ws.js';
+  import { createWebSocket, getMessages as apiGetMessages } from '../lib/api.js';
   import * as VoiceMessages from '../lib/voice.js';
   import * as OfflineStorage from '../lib/offline.js';
   import * as WebRTCCall from '../lib/webrtc.js';
@@ -16,12 +17,84 @@
   let currentTTL = $state(0);
   let showCallPanel = $state(false); // Managed internally, not bindable
 
+  // Real-time WS via API
+  let realtimeWS = $state(null);
+  let realtimeStatus = $state('disconnected');
+
   const ttlOptions = [0, 60, 300, 3600];
   const ttlLabels = ['⏱0', '⏱1м', '⏱5м', '⏱1ч'];
 
   let msgListEl;
   let typingIndicator = $state('');
   let typingTimeout;
+
+  // Connect to real-time WS via createWebSocket
+  function connectRealtimeWS() {
+    if (realtimeWS && realtimeWS.readyState === WebSocket.OPEN) return;
+
+    realtimeWS = createWebSocket('/ws');
+    realtimeStatus = 'connecting';
+
+    realtimeWS.onopen = () => {
+      realtimeStatus = 'connected';
+    };
+
+    realtimeWS.onmessage = async (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'chat') {
+          const id = $myId;
+          const isMe = msg.from === id;
+          const time = new Date().toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' });
+          messages.update((msgs) => [
+            ...msgs,
+            {
+              id: msg.id || 'rt-' + Date.now(),
+              from: msg.from,
+              text: msg.text,
+              isMe,
+              isSystem: false,
+              isVoice: false,
+              time,
+              replyTo: msg.replyTo || null,
+              replyToFrom: msg.replyToFrom || null,
+              replyToText: msg.replyToText || null,
+              forwardedFrom: msg.forwardedFrom || null,
+              ttl: msg.ttl || 0,
+            },
+          ]);
+        } else if (msg.type === 'typing') {
+          typingIndicator = msg.from?.substring(0, 12) + ' печатает...';
+          clearTimeout(typingTimeout);
+          typingTimeout = setTimeout(() => { typingIndicator = ''; }, 3000);
+        }
+      } catch {}
+    };
+
+    realtimeWS.onclose = () => {
+      realtimeStatus = 'disconnected';
+      // Reconnect after delay
+      setTimeout(connectRealtimeWS, 3000);
+    };
+
+    realtimeWS.onerror = () => {
+      realtimeStatus = 'error';
+    };
+  }
+
+  // Send message via real-time WS
+  function sendViaWS(text) {
+    if (realtimeWS && realtimeWS.readyState === WebSocket.OPEN) {
+      const msg = {
+        type: 'chat',
+        from: $myId,
+        to: 'broadcast',
+        text: text,
+        ts: (Date.now() / 1000) | 0,
+      };
+      realtimeWS.send(JSON.stringify(msg));
+    }
+  }
 
   // Auto-scroll
   $effect(() => {
@@ -37,6 +110,7 @@
     const text = inputText.trim();
     if (!text) return;
     sendMessage(text, replyToId, replyToFrom, replyToText, currentTTL);
+    sendViaWS(text);
     inputText = '';
     cancelReply();
   }
@@ -71,13 +145,11 @@
       showToast('❌ Нет подключения');
       return;
     }
-    import('../lib/api.js').then((api) => {
-      const id = $myId;
-      const msg = { type: 'chat', from: id, to: 'broadcast', text: text, ts: (Date.now() / 1000) | 0, forwardedFrom: from };
-      ws.send(JSON.stringify(msg));
-      sendMessage(text, null, '', '', 0);
-      showToast('↗ Сообщение переслано');
-    });
+    const id = $myId;
+    const msg = { type: 'chat', from: id, to: 'broadcast', text: text, ts: (Date.now() / 1000) | 0, forwardedFrom: from };
+    ws.send(JSON.stringify(msg));
+    sendViaWS(text);
+    showToast('↗ Сообщение переслано');
   }
 
   async function ipfsAttach() {
@@ -155,6 +227,12 @@
         WebRTCCall.rejectCall();
       }
     });
+
+    // Connect real-time WS via API
+    connectRealtimeWS();
+
+    // Load message history from API
+    apiGetMessages('broadcast', 50).catch(() => {});
   });
 </script>
 

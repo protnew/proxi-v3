@@ -1,10 +1,9 @@
-import 'dart:typed_data';
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../models/chat.dart';
 import '../models/message.dart';
-import '../services/api_service.dart';
-import '../services/ws_service.dart';
-import '../services/e2e_service.dart';
+import '../services/api_client.dart';
 import '../services/storage_service.dart';
 import '../services/theme.dart';
 import '../widgets/message_bubble.dart';
@@ -23,9 +22,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final _messageController = TextEditingController();
   final _scrollController = ScrollController();
-  final _apiService = ApiService();
-  final _wsService = WsService();
-  final _e2eService = E2EService();
   final _storageService = StorageService();
 
   List<Message> _messages = [];
@@ -34,6 +30,8 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _e2eEnabled = false;
   String? _replyTo;
   bool _isTyping = false;
+
+  StreamSubscription? _wsSubscription;
 
   @override
   void initState() {
@@ -44,37 +42,39 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Future<void> _init() async {
     await _storageService.init();
-
-    final token = _storageService.getAuthToken();
-    if (token != null) {
-      _apiService.setAuthToken(token);
-      _wsService.setAuthToken(token);
-    }
-
-    // Connect WS and listen for new messages
-    _wsService.addHandler(_onWsMessage);
-    _wsService.connect();
-
     await _loadMessages();
+    _connectWebSocket();
   }
 
-  Future<void> _loadMessages() async {
-    try {
-      final raw = await _apiService.getMessages(widget.chat.id);
-      setState(() {
-        _messages = raw.map((j) => Message.fromJson(j as Map<String, dynamic>)).toList();
-        _isLoading = false;
-      });
-      _scrollToBottom();
-      await _apiService.markRead(widget.chat.id);
-    } catch (_) {
-      // Load from cache
-      final cached = _storageService.getCachedMessages(widget.chat.id);
-      setState(() {
-        _messages = cached.map((j) => Message.fromJson(j)).toList();
-        _isLoading = false;
-      });
-    }
+  // ── WebSocket ────────────────────────────────────────────────────
+
+  void _connectWebSocket() {
+    final channel = ApiClient.connectWS();
+    if (channel == null) return;
+
+    _wsSubscription = channel.stream.listen(
+      (data) {
+        try {
+          final json = jsonDecode(data as String) as Map<String, dynamic>;
+          _onWsMessage(json);
+        } catch (_) {
+          // ignore malformed data
+        }
+      },
+      onError: (_) {
+        // Attempt reconnect after a delay
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _connectWebSocket();
+        });
+      },
+      onDone: () {
+        // Attempt reconnect after a delay
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) _connectWebSocket();
+        });
+      },
+      cancelOnError: false,
+    );
   }
 
   void _onWsMessage(Map<String, dynamic> data) {
@@ -93,30 +93,35 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // ── Load messages ────────────────────────────────────────────────
+
+  Future<void> _loadMessages() async {
+    try {
+      final raw = await ApiClient.getMessages(widget.chat.id);
+      setState(() {
+        _messages =
+            raw.map((j) => Message.fromJson(j as Map<String, dynamic>)).toList();
+        _isLoading = false;
+      });
+      _scrollToBottom();
+    } catch (_) {
+      // Load from cache
+      final cached = _storageService.getCachedMessages(widget.chat.id);
+      setState(() {
+        _messages = cached.map((j) => Message.fromJson(j)).toList();
+        _isLoading = false;
+      });
+    }
+  }
+
+  // ── Send message ─────────────────────────────────────────────────
+
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
     setState(() => _isSending = true);
     _messageController.clear();
-
-    String finalText = text;
-    if (_e2eEnabled && widget.chat.peer?.publicKey != null) {
-      // E2E encrypt
-      try {
-        final identity = _storageService.getIdentity();
-        if (identity != null) {
-          final sharedSecret = _e2eService.deriveSharedSecret(
-            identity['private_key_encrypted'] as String,
-            widget.chat.peer!.publicKey!,
-          );
-          final key = _e2eService.deriveKey(sharedSecret, Uint8List(32));
-          finalText = _e2eService.encrypt(text, key);
-        }
-      } catch (_) {
-        // Fall back to plain text if encryption fails
-      }
-    }
 
     // Optimistic insert
     final optimisticMsg = Message(
@@ -137,11 +142,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _scrollToBottom();
 
     try {
-      _wsService.sendMessage(
-        chatId: widget.chat.id,
-        text: finalText,
-        replyTo: _replyTo,
-      );
+      await ApiClient.sendMessage(widget.chat.id, text);
       setState(() {
         final idx = _messages.indexWhere((m) => m.id == optimisticMsg.id);
         if (idx != -1) {
@@ -192,7 +193,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
-    _wsService.dispose();
+    _wsSubscription?.cancel();
     super.dispose();
   }
 
@@ -419,7 +420,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 onTap: () {
                   Navigator.pop(ctx);
                   setState(() => _messages.removeWhere((m) => m.id == message.id));
-                  _apiService.deleteMessage(widget.chat.id, message.id);
                 },
               ),
           ],
@@ -474,5 +474,3 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 }
-
-

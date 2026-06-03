@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../services/api_service.dart';
+import '../services/api_client.dart';
 import '../services/e2e_service.dart';
 import '../services/storage_service.dart';
 import '../services/theme.dart';
@@ -13,14 +13,13 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final _npubController = TextEditingController();
   final _usernameController = TextEditingController();
-  final _restoreIdController = TextEditingController();
-  final _apiService = ApiService();
   final _e2eService = E2EService();
   final _storageService = StorageService();
 
   bool _isLoading = false;
-  bool _isRestoreMode = false;
+  bool _isLoginMode = true; // true = login, false = signup
   String? _error;
 
   @override
@@ -32,15 +31,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _checkExistingIdentity() async {
     await _storageService.init();
     final identity = _storageService.getIdentity();
-    if (identity != null) {
+    final token = _storageService.getAuthToken();
+    if (identity != null && token != null) {
+      ApiClient.token = token;
       _navigateToMain();
     }
   }
 
-  Future<void> _createIdentity() async {
-    final username = _usernameController.text.trim();
-    if (username.isEmpty || username.length < 3) {
-      setState(() => _error = 'Username must be at least 3 characters');
+  Future<void> _submit() async {
+    final npub = _npubController.text.trim();
+    if (npub.isEmpty) {
+      setState(() => _error = 'Please enter your npub key');
       return;
     }
 
@@ -50,65 +51,37 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      // Generate E2E key pair
-      final keyPair = _e2eService.generateKeyPair();
-
-      // Register on server
-      final response = await _apiService.createIdentity(username, keyPair['public_key']!);
-
-      final identity = {
-        'id': response['identity_id'] ?? response['id'],
-        'username': username,
-        'public_key': keyPair['public_key'],
-        'private_key_encrypted': keyPair['private_key'],
-      };
-
-      // Save locally
-      await _storageService.saveIdentity(identity);
-      if (response['token'] != null) {
-        await _storageService.saveAuthToken(response['token'] as String);
+      if (_isLoginMode) {
+        // Login flow
+        await ApiClient.login(npub);
+      } else {
+        // Signup flow
+        final username = _usernameController.text.trim();
+        if (username.isEmpty || username.length < 3) {
+          setState(() {
+            _error = 'Username must be at least 3 characters';
+            _isLoading = false;
+          });
+          return;
+        }
+        await ApiClient.signup(npub, username);
       }
 
-      _navigateToMain();
-    } catch (e) {
-      setState(() {
-        _error = 'Failed to create identity: $e';
-        _isLoading = false;
+      // Save token locally
+      if (ApiClient.token != null) {
+        await _storageService.saveAuthToken(ApiClient.token!);
+      }
+
+      // Save a basic identity record
+      await _storageService.saveIdentity({
+        'npub': npub,
+        'username': _isLoginMode ? '' : _usernameController.text.trim(),
       });
-    }
-  }
-
-  Future<void> _restoreIdentity() async {
-    final identityId = _restoreIdController.text.trim();
-    if (identityId.isEmpty) {
-      setState(() => _error = 'Enter your Identity ID');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    try {
-      final response = await _apiService.restoreIdentity(identityId);
-
-      final identity = {
-        'id': identityId,
-        'username': response['username'] ?? 'user',
-        'public_key': response['public_key'],
-        'private_key_encrypted': response['private_key_encrypted'],
-      };
-
-      await _storageService.saveIdentity(identity);
-      if (response['token'] != null) {
-        await _storageService.saveAuthToken(response['token'] as String);
-      }
 
       _navigateToMain();
     } catch (e) {
       setState(() {
-        _error = 'Failed to restore: $e';
+        _error = '${_isLoginMode ? "Login" : "Signup"} failed: $e';
         _isLoading = false;
       });
     }
@@ -122,8 +95,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
+    _npubController.dispose();
     _usernameController.dispose();
-    _restoreIdController.dispose();
     super.dispose();
   }
 
@@ -167,7 +140,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 48),
 
-                // Mode toggle
+                // Mode toggle (Login / Signup)
                 Container(
                   decoration: BoxDecoration(
                     color: ProxiTheme.surfaceVariant,
@@ -177,18 +150,18 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(() => _isRestoreMode = false),
+                          onTap: () => setState(() => _isLoginMode = true),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: !_isRestoreMode ? ProxiTheme.primary : Colors.transparent,
+                              color: _isLoginMode ? ProxiTheme.primary : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'Create',
+                              'Login',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: !_isRestoreMode ? Colors.white : ProxiTheme.muted,
+                                color: _isLoginMode ? Colors.white : ProxiTheme.muted,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -197,18 +170,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       Expanded(
                         child: GestureDetector(
-                          onTap: () => setState(() => _isRestoreMode = true),
+                          onTap: () => setState(() => _isLoginMode = false),
                           child: Container(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             decoration: BoxDecoration(
-                              color: _isRestoreMode ? ProxiTheme.primary : Colors.transparent,
+                              color: !_isLoginMode ? ProxiTheme.primary : Colors.transparent,
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Text(
-                              'Restore',
+                              'Sign Up',
                               textAlign: TextAlign.center,
                               style: TextStyle(
-                                color: _isRestoreMode ? Colors.white : ProxiTheme.muted,
+                                color: !_isLoginMode ? Colors.white : ProxiTheme.muted,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -243,8 +216,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
 
-                if (!_isRestoreMode) ...[
-                  // Create identity form
+                // npub field
+                TextField(
+                  controller: _npubController,
+                  style: const TextStyle(color: ProxiTheme.onBackground),
+                  decoration: const InputDecoration(
+                    hintText: 'Enter your npub key',
+                    prefixIcon: Icon(Icons.key, color: ProxiTheme.muted),
+                  ),
+                  onSubmitted: (_) => _submit(),
+                ),
+                const SizedBox(height: 16),
+
+                // Username field (signup only)
+                if (!_isLoginMode) ...[
                   TextField(
                     controller: _usernameController,
                     style: const TextStyle(color: ProxiTheme.onBackground),
@@ -252,33 +237,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       hintText: 'Choose a username',
                       prefixIcon: Icon(Icons.person_outline, color: ProxiTheme.muted),
                     ),
-                    onSubmitted: (_) => _createIdentity(),
+                    onSubmitted: (_) => _submit(),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'A new encryption key pair will be generated for you.',
-                    style: Theme.of(context).textTheme.labelSmall,
-                    textAlign: TextAlign.center,
-                  ),
-                ] else ...[
-                  // Restore identity form
-                  TextField(
-                    controller: _restoreIdController,
-                    style: const TextStyle(color: ProxiTheme.onBackground),
-                    decoration: const InputDecoration(
-                      hintText: 'Enter your Identity ID',
-                      prefixIcon: Icon(Icons.key, color: ProxiTheme.muted),
-                    ),
-                    onSubmitted: (_) => _restoreIdentity(),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Enter the Identity ID you saved during registration.',
-                    style: Theme.of(context).textTheme.labelSmall,
-                    textAlign: TextAlign.center,
-                  ),
                 ],
 
+                Text(
+                  _isLoginMode
+                      ? 'Enter your Nostr public key (npub) to log in.'
+                      : 'A new encryption key pair will be generated for you.',
+                  style: Theme.of(context).textTheme.labelSmall,
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 32),
 
                 // Submit button
@@ -286,9 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _isLoading
-                        ? null
-                        : (_isRestoreMode ? _restoreIdentity : _createIdentity),
+                    onPressed: _isLoading ? null : _submit,
                     child: _isLoading
                         ? const SizedBox(
                             width: 24,
@@ -298,7 +266,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               strokeWidth: 2,
                             ),
                           )
-                        : Text(_isRestoreMode ? 'Restore Identity' : 'Create Identity'),
+                        : Text(_isLoginMode ? 'Login' : 'Create Account'),
                   ),
                 ),
               ],

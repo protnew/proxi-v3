@@ -497,6 +497,35 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("create vote_records: %w", err)
 	}
 
+	// Users table (JWT auth)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS users (
+			id            TEXT PRIMARY KEY,
+			npub          TEXT UNIQUE,
+			username      TEXT NOT NULL DEFAULT '',
+			password_hash TEXT NOT NULL DEFAULT '',
+			created_at    INTEGER NOT NULL,
+			refresh_token TEXT NOT NULL DEFAULT ''
+		)`); err != nil {
+		return fmt.Errorf("create users: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_users_npub ON users(npub)`); err != nil {
+		return fmt.Errorf("create index users_npub: %w", err)
+	}
+
+	// PreKey bundles table (E2E key exchange)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS prekey_bundles (
+			user_id         TEXT PRIMARY KEY,
+			identity_key    BLOB NOT NULL,
+			signed_prekey   BLOB NOT NULL,
+			signature       BLOB NOT NULL,
+			one_time_prekey BLOB NOT NULL,
+			created_at      INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create prekey_bundles: %w", err)
+	}
+
 	return nil
 }
 
@@ -1555,4 +1584,107 @@ func (s *Store) UpdateFederationPeerSync(url string, lastSync int64) error {
 		return fmt.Errorf("update federation peer sync %s: %w", url, err)
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Users (JWT auth)
+// ---------------------------------------------------------------------------
+
+// User represents a registered user account.
+type User struct {
+	ID           string `json:"id"`
+	Npub         string `json:"npub"`
+	Username     string `json:"username"`
+	PasswordHash string `json:"-"`
+	CreatedAt    int64  `json:"createdAt"`
+	RefreshToken string `json:"-"`
+}
+
+// SaveUser creates or updates a user record.
+func (s *Store) SaveUser(user User) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO users (id, npub, username, password_hash, created_at, refresh_token)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		user.ID, user.Npub, user.Username, user.PasswordHash, user.CreatedAt, user.RefreshToken,
+	)
+	if err != nil {
+		return fmt.Errorf("save user %s: %w", user.ID, err)
+	}
+	return nil
+}
+
+// GetUserByNpub returns a user by their npub (Nostr public key).
+func (s *Store) GetUserByNpub(npub string) (*User, error) {
+	var u User
+	err := s.db.QueryRow(
+		`SELECT id, npub, username, password_hash, created_at, refresh_token FROM users WHERE npub = ?`,
+		npub,
+	).Scan(&u.ID, &u.Npub, &u.Username, &u.PasswordHash, &u.CreatedAt, &u.RefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("get user by npub %s: %w", npub, err)
+	}
+	return &u, nil
+}
+
+// GetUserByID returns a user by their ID.
+func (s *Store) GetUserByID(id string) (*User, error) {
+	var u User
+	err := s.db.QueryRow(
+		`SELECT id, npub, username, password_hash, created_at, refresh_token FROM users WHERE id = ?`,
+		id,
+	).Scan(&u.ID, &u.Npub, &u.Username, &u.PasswordHash, &u.CreatedAt, &u.RefreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("get user by id %s: %w", id, err)
+	}
+	return &u, nil
+}
+
+// UpdateRefreshToken updates the refresh token for a user.
+func (s *Store) UpdateRefreshToken(id, token string) error {
+	_, err := s.db.Exec(`UPDATE users SET refresh_token = ? WHERE id = ?`, token, id)
+	if err != nil {
+		return fmt.Errorf("update refresh token for %s: %w", id, err)
+	}
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// PreKey Bundles (E2E key exchange)
+// ---------------------------------------------------------------------------
+
+// PreKeyBundleRow represents a stored prekey bundle.
+type PreKeyBundleRow struct {
+	UserID        string `json:"userId"`
+	IdentityKey   []byte `json:"identityKey"`
+	SignedPreKey  []byte `json:"signedPreKey"`
+	Signature     []byte `json:"signature"`
+	OneTimePreKey []byte `json:"oneTimePreKey"`
+	CreatedAt     int64  `json:"createdAt"`
+}
+
+// StorePreKeyBundle persists a prekey bundle for a user.
+func (s *Store) StorePreKeyBundle(userID string, identityKey, signedPreKey, signature, oneTimePreKey []byte) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO prekey_bundles (user_id, identity_key, signed_prekey, signature, one_time_prekey, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		userID, identityKey, signedPreKey, signature, oneTimePreKey, nowUnix(),
+	)
+	if err != nil {
+		return fmt.Errorf("store prekey bundle for %s: %w", userID, err)
+	}
+	return nil
+}
+
+// GetPreKeyBundle retrieves a prekey bundle for a user.
+func (s *Store) GetPreKeyBundle(userID string) (*PreKeyBundleRow, error) {
+	var p PreKeyBundleRow
+	err := s.db.QueryRow(
+		`SELECT user_id, identity_key, signed_prekey, signature, one_time_prekey, created_at
+		 FROM prekey_bundles WHERE user_id = ?`,
+		userID,
+	).Scan(&p.UserID, &p.IdentityKey, &p.SignedPreKey, &p.Signature, &p.OneTimePreKey, &p.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get prekey bundle for %s: %w", userID, err)
+	}
+	return &p, nil
 }

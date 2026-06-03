@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../models/chat.dart';
-import '../models/message.dart';
-import '../services/api_service.dart';
+import '../services/api_client.dart';
 import '../services/storage_service.dart';
 import '../services/theme.dart';
 import '../widgets/contact_avatar.dart';
@@ -18,7 +16,6 @@ class ChatListScreen extends StatefulWidget {
 }
 
 class _ChatListScreenState extends State<ChatListScreen> {
-  final _apiService = ApiService();
   final _storageService = StorageService();
   List<Chat> _chats = [];
   bool _isLoading = true;
@@ -33,18 +30,22 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Future<void> _loadChats() async {
     try {
       await _storageService.init();
-      // Try API first, fallback to cache
-      try {
-        final token = _storageService.getAuthToken();
-        if (token != null) _apiService.setAuthToken(token);
 
-        final raw = await _apiService.getChats();
+      // Try API first via ApiClient
+      try {
+        final raw = await ApiClient.getChannels();
+        final channels = raw
+            .map((j) => Chat.fromJson(j as Map<String, dynamic>))
+            .toList();
         setState(() {
-          _chats = raw.map((j) => Chat.fromJson(j as Map<String, dynamic>)).toList();
+          _chats = channels;
           _isLoading = false;
         });
 
-        await _storageService.cacheChats(raw.cast<Map<String, dynamic>>());
+        // Cache for offline use
+        await _storageService.cacheChats(
+          raw.cast<Map<String, dynamic>>(),
+        );
       } catch (_) {
         // Offline: load from cache
         final cached = _storageService.getCachedChats();
@@ -107,7 +108,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
     if (peerId != null && peerId.isNotEmpty) {
       try {
-        final response = await _apiService.createChat(peerId, e2e: true);
+        // Create chat via ApiClient
+        final response = await ApiClient.post('/api/chats/create', {
+          'peer_id': peerId,
+          'e2e': true,
+        });
         await _loadChats();
         if (mounted) {
           final chat = Chat.fromJson(response);

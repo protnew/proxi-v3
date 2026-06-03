@@ -1,5 +1,11 @@
 <script>
-  let { currentTab = 'chat', switchTab } = $props();
+  import { onMount } from 'svelte';
+  import { getChannels } from '../lib/api.js';
+  import { channels } from '../lib/stores.js';
+
+  let { currentTab = 'chat', switchTab, onLogout } = $props();
+
+  let unreadCounts = $state({});
 
   const tabs = [
     { id: 'chat', icon: '💬', label: 'Чат' },
@@ -7,6 +13,36 @@
     { id: 'channels', icon: '📡', label: 'Каналы' },
     { id: 'identity', icon: '👤', label: 'Я' },
   ];
+
+  async function loadChannels() {
+    try {
+      const data = await getChannels();
+      const chList = data.channels || data || [];
+      channels.set(chList);
+
+      // Compute unread counts from API data
+      const counts = {};
+      for (const ch of chList) {
+        if (ch.unread && ch.unread > 0) {
+          counts[ch.id] = ch.unread;
+        }
+      }
+      unreadCounts = counts;
+    } catch (e) {
+      // Fallback: keep existing store data
+    }
+  }
+
+  let totalUnread = $derived(
+    Object.values(unreadCounts).reduce((sum, n) => sum + n, 0)
+  );
+
+  onMount(() => {
+    loadChannels();
+    // Refresh channels periodically
+    const interval = setInterval(loadChannels, 30000);
+    return () => clearInterval(interval);
+  });
 </script>
 
 <nav class="sidebar">
@@ -21,9 +57,21 @@
       >
         <span class="icon">{tab.icon}</span>
         <span class="label">{tab.label}</span>
+        {#if tab.id === 'channels' && totalUnread > 0}
+          <span class="badge">{totalUnread > 99 ? '99+' : totalUnread}</span>
+        {/if}
       </button>
     </div>
   {/each}
+
+  {#if onLogout}
+    <div class="tab-wrap logout-wrap">
+      <button class="tab" onclick={onLogout} title="Выход">
+        <span class="icon">🚪</span>
+        <span class="label">Выход</span>
+      </button>
+    </div>
+  {/if}
 </nav>
 
 <style>
@@ -42,6 +90,9 @@
     font-size: 28px;
     margin-bottom: 12px;
     cursor: pointer;
+  }
+  .tab-wrap {
+    position: relative;
   }
   .tab {
     width: 56px;
@@ -71,6 +122,25 @@
   }
   .label {
     font-size: 9px;
+  }
+  .badge {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: #c62828;
+    color: #fff;
+    font-size: 9px;
+    min-width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 4px;
+    font-weight: 600;
+  }
+  .logout-wrap {
+    margin-top: auto;
   }
   @media (max-width: 600px) {
     .sidebar {

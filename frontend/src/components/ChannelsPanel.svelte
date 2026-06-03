@@ -1,15 +1,15 @@
 <script>
   import { onMount } from 'svelte';
   import { channels, myId, showToast, escHtml } from '../lib/stores.js';
+  import { getChannels, apiFetch } from '../lib/api.js';
 
   let chName = $state('');
   let chDesc = $state('');
 
   async function loadChannels() {
     try {
-      const r = await fetch('/api/channels');
-      const d = await r.json();
-      channels.set(d.channels || []);
+      const data = await getChannels();
+      channels.set(data.channels || data || []);
     } catch (e) {
       channels.set([]);
     }
@@ -21,30 +21,24 @@
       return;
     }
     try {
-      const r = await fetch('/api/channels', {
+      await apiFetch('/api/channels', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: chName.trim(), description: chDesc.trim(), creator: $myId || 'anonymous' }),
       });
-      if (!r.ok) {
-        const d = await r.json();
-        showToast('❌ ' + (d.error?.message || 'Ошибка'));
-        return;
-      }
+      const name = chName.trim();
       chName = '';
       chDesc = '';
-      showToast('✅ Канал «' + chName.trim() + '» создан!');
+      showToast('✅ Канал «' + name + '» создан!');
       loadChannels();
     } catch (e) {
-      showToast('❌ Ошибка создания канала');
+      showToast('❌ ' + (e.message || 'Ошибка создания канала'));
     }
   }
 
   async function subscribeChannel(channelId) {
     try {
-      await fetch('/api/channels/subscribe', {
+      await apiFetch('/api/channels/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channelId }),
       });
       showToast('📡 Вы подписались на канал');
@@ -84,10 +78,13 @@
           {/if}
           <div class="channel-footer">
             <div class="channel-meta">
-              {ch.subscribers} подписчик(ов) · {ch.creator?.substring(0, 12) || 'unknown'}...
+              {ch.subscribers || 0} подписчик(ов) · {ch.creator?.substring(0, 12) || 'unknown'}...
             </div>
             <button onclick={() => subscribeChannel(ch.id)} class="sub-btn">Подписаться</button>
           </div>
+          {#if ch.unread && ch.unread > 0}
+            <div class="channel-unread">{ch.unread} новых</div>
+          {/if}
         </div>
       {/each}
     {/if}
@@ -190,5 +187,11 @@
   }
   .sub-btn:hover {
     background: #1565c0;
+  }
+  .channel-unread {
+    margin-top: 6px;
+    font-size: 11px;
+    color: #4fc3f7;
+    font-weight: 500;
   }
 </style>
