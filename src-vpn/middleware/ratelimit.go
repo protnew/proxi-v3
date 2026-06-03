@@ -24,6 +24,19 @@ import (
 type userLimiter struct {
 	limiter  *rate.Limiter
 	lastSeen time.Time
+	mu       sync.RWMutex
+}
+
+func (ul *userLimiter) setLastSeen(t time.Time) {
+	ul.mu.Lock()
+	ul.lastSeen = t
+	ul.mu.Unlock()
+}
+
+func (ul *userLimiter) getLastSeen() time.Time {
+	ul.mu.RLock()
+	defer ul.mu.RUnlock()
+	return ul.lastSeen
 }
 
 // RateLimiter provides per-user HTTP rate limiting via token buckets.
@@ -72,7 +85,7 @@ func (rl *RateLimiter) Allow(userID string) bool {
 	})
 
 	ul := val.(*userLimiter)
-	ul.lastSeen = now
+	ul.setLastSeen(now)
 
 	return ul.limiter.Allow()
 }
@@ -134,14 +147,17 @@ func (rl *RateLimiter) extractUserID(r *http.Request) string {
 
 // gcLoop periodically removes stale limiters that haven't been accessed recently.
 func (rl *RateLimiter) gcLoop() {
-	ticker := time.NewTicker(rl.interval)
-	defer ticker.Stop()
-
 	for {
+		rl.mu.Lock()
+		interval := rl.interval
+		rl.mu.Unlock()
+
+		timer := time.NewTimer(interval)
 		select {
-		case <-ticker.C:
+		case <-timer.C:
 			rl.cleanup()
 		case <-rl.stopGC:
+			timer.Stop()
 			return
 		}
 	}
@@ -150,11 +166,15 @@ func (rl *RateLimiter) gcLoop() {
 // cleanup removes limiters that haven't been used for maxAge duration.
 func (rl *RateLimiter) cleanup() {
 	now := time.Now()
+	rl.mu.Lock()
+	maxAge := rl.maxAge
+	rl.mu.Unlock()
+
 	var removed int
 
 	rl.limiters.Range(func(key, value interface{}) bool {
 		ul := value.(*userLimiter)
-		if now.Sub(ul.lastSeen) > rl.maxAge {
+		if now.Sub(ul.getLastSeen()) > maxAge {
 			rl.limiters.Delete(key)
 			removed++
 		}

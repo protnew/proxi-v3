@@ -227,25 +227,26 @@ func TestMiddlewareFallbackToIP(t *testing.T) {
 }
 
 func TestRateLimiterGC(t *testing.T) {
+	// Create limiter then stop default gcLoop
 	rl := NewRateLimiter(100, 100)
-	defer rl.Stop()
+	rl.Stop() // kill default gcLoop
 
-	// Override GC settings for fast test
-	rl.mu.Lock()
-	rl.interval = 50 * time.Millisecond
-	rl.maxAge = 100 * time.Millisecond
-	rl.mu.Unlock()
-
-	// Restart GC with new settings
-	close(rl.stopGC)
-	rl.stopGC = make(chan struct{})
-	go rl.gcLoop()
+	// Create fresh limiter with short GC settings via separate construction
+	rl2 := &RateLimiter{
+		rate:     100,
+		burst:    100,
+		stopGC:   make(chan struct{}),
+		interval: 50 * time.Millisecond,
+		maxAge:   100 * time.Millisecond,
+	}
+	go rl2.gcLoop()
+	defer rl2.Stop()
 
 	// Add some users
-	rl.Allow("user1")
-	rl.Allow("user2")
+	rl2.Allow("user1")
+	rl2.Allow("user2")
 
-	stats := rl.Stats()
+	stats := rl2.Stats()
 	if stats["activeLimiters"].(int) < 2 {
 		t.Errorf("expected at least 2 active limiters, got %v", stats["activeLimiters"])
 	}
@@ -253,7 +254,7 @@ func TestRateLimiterGC(t *testing.T) {
 	// Wait for GC to kick in (entries should be stale after maxAge)
 	time.Sleep(300 * time.Millisecond)
 
-	stats = rl.Stats()
+	stats = rl2.Stats()
 	if stats["activeLimiters"].(int) != 0 {
 		t.Errorf("expected 0 active limiters after GC, got %v", stats["activeLimiters"])
 	}
