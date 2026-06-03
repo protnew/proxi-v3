@@ -63,6 +63,10 @@ func NewStore(dbPath string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := s.migrate(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate tables: %w", err)
+	}
 	return s, nil
 }
 

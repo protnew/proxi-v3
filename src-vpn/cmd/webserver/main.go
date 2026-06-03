@@ -815,7 +815,7 @@ func deadMansSwitchLoop() {
 			encoded, _ := chatMsg.Encode()
 			hub.Broadcast(encoded, "")
 			db.MarkSwitchTriggered(dms.ID)
-			log.Printf("💀 Switch triggered: %s (user %s, %d days inactive)", dms.ID, dms.UserNpub[:12], dms.IntervalDays)
+			log.Printf("💀 Switch triggered: %s (user %s, %d days inactive)", dms.ID, truncate(dms.UserNpub, 12), dms.IntervalDays)
 		}
 	}
 }
@@ -921,7 +921,7 @@ func handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
 		"id":           dms.ID,
 		"intervalDays": req.IntervalDays,
 	})
-	log.Printf("💀 Switch created: %s (user %s, %d days)", dms.ID, req.UserNpub[:12], req.IntervalDays)
+	log.Printf("💀 Switch created: %s (user %s, %d days)", dms.ID, truncate(req.UserNpub, 12), req.IntervalDays)
 }
 
 // handleSwitchCheckIn — POST /api/switch/check-in
