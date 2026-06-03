@@ -1,0 +1,39 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc musl-dev
+          cd src-vpn && go mod download
+
+      - name: Build
+        run: |
+          cd src-vpn
+          CGO_ENABLED=1 go build -o ../messenger-server ./cmd/webserver/
+
+      - name: Test
+        run: |
+          cd src-vpn
+          CGO_ENABLED=1 go test ./... -v
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: messenger-server
+          path: messenger-server
