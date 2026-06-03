@@ -341,6 +341,162 @@ func (s *Store) migrate() error {
 		return fmt.Errorf("create invites: %w", err)
 	}
 
+	// Analytics events table (Sprint 9 — S9.2)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS analytics_events (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id    TEXT NOT NULL,
+			event      TEXT NOT NULL,
+			properties TEXT NOT NULL DEFAULT '{}',
+			created_at INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create analytics_events: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_analytics_events_user ON analytics_events(user_id)`); err != nil {
+		return fmt.Errorf("create index analytics_events_user: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_analytics_events_event ON analytics_events(event)`); err != nil {
+		return fmt.Errorf("create index analytics_events_event: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_analytics_events_created ON analytics_events(created_at)`); err != nil {
+		return fmt.Errorf("create index analytics_events_created: %w", err)
+	}
+
+	// Referrals table (Sprint 9 — S9.3)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS referrals (
+			code        TEXT PRIMARY KEY,
+			referrer_id TEXT NOT NULL,
+			uses        INTEGER NOT NULL DEFAULT 0,
+			max_uses    INTEGER NOT NULL DEFAULT 100,
+			created_at  INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create referrals: %w", err)
+	}
+	if _, err := s.db.Exec(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id)`); err != nil {
+		return fmt.Errorf("create index referrals_referrer: %w", err)
+	}
+
+	// Referral uses tracking table
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS referral_uses (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			code        TEXT NOT NULL,
+			new_user_id TEXT NOT NULL,
+			bonus_days  INTEGER NOT NULL DEFAULT 30,
+			used_at     INTEGER NOT NULL,
+			FOREIGN KEY (code) REFERENCES referrals(code)
+		)`); err != nil {
+		return fmt.Errorf("create referral_uses: %w", err)
+	}
+
+	// Subscriptions table (Sprint 7 — Premium)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS subscriptions (
+			user_id     TEXT PRIMARY KEY,
+			tier        TEXT NOT NULL DEFAULT 'free',
+			expires_at  INTEGER,
+			auto_renew  INTEGER NOT NULL DEFAULT 0
+		)`); err != nil {
+		return fmt.Errorf("create subscriptions: %w", err)
+	}
+
+	// Donations table (Sprint 7 — Lightning)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS donations (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			from_user   TEXT NOT NULL,
+			to_channel  TEXT NOT NULL,
+			amount_sats INTEGER NOT NULL,
+			created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+		)`); err != nil {
+		return fmt.Errorf("create donations: %w", err)
+	}
+
+	// Stories table (Sprint 8 — disappearing content)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS stories (
+			id          INTEGER PRIMARY KEY AUTOINCREMENT,
+			author      TEXT NOT NULL,
+			media_url   TEXT NOT NULL,
+			media_type  TEXT NOT NULL DEFAULT 'image',
+			created_at  INTEGER NOT NULL,
+			expires_at  INTEGER NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create stories: %w", err)
+	}
+
+	// Threads table (Sprint 8 — threaded replies)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS threads (
+			id       INTEGER PRIMARY KEY AUTOINCREMENT,
+			root_id  TEXT NOT NULL,
+			reply_id TEXT NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create threads: %w", err)
+	}
+
+	// Webhooks table (Sprint 8 — bot webhooks)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS webhooks (
+			id     TEXT PRIMARY KEY,
+			bot_id TEXT NOT NULL,
+			url    TEXT NOT NULL,
+			secret TEXT NOT NULL DEFAULT '',
+			events TEXT NOT NULL DEFAULT '[]'
+		)`); err != nil {
+		return fmt.Errorf("create webhooks: %w", err)
+	}
+
+	// Audit log table (Sprint 11 — compliance)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS audit_log (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			user_id    TEXT NOT NULL,
+			action     TEXT NOT NULL,
+			resource   TEXT NOT NULL DEFAULT '',
+			details    TEXT NOT NULL DEFAULT '{}',
+			created_at TEXT NOT NULL DEFAULT (datetime('now'))
+		)`); err != nil {
+		return fmt.Errorf("create audit_log: %w", err)
+	}
+
+	// Brand config table (Sprint 11 — white-label)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS brand_config (
+			app_name      TEXT NOT NULL DEFAULT 'Proxi',
+			logo_url      TEXT NOT NULL DEFAULT '',
+			primary_color TEXT NOT NULL DEFAULT '#6AB2F3',
+			accent_color  TEXT NOT NULL DEFAULT ''
+		)`); err != nil {
+		return fmt.Errorf("create brand_config: %w", err)
+	}
+
+	// Votes table (Sprint 12 — governance)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS votes (
+			id         TEXT PRIMARY KEY,
+			channel_id TEXT NOT NULL,
+			initiator  TEXT NOT NULL,
+			question   TEXT NOT NULL,
+			options    TEXT NOT NULL,
+			ends_at    INTEGER NOT NULL,
+			status     TEXT NOT NULL DEFAULT 'open'
+		)`); err != nil {
+		return fmt.Errorf("create votes: %w", err)
+	}
+
+	// Vote records table (Sprint 12 — governance)
+	if _, err := s.db.Exec(`
+		CREATE TABLE IF NOT EXISTS vote_records (
+			id      INTEGER PRIMARY KEY AUTOINCREMENT,
+			vote_id TEXT NOT NULL,
+			user_id TEXT NOT NULL,
+			option  TEXT NOT NULL
+		)`); err != nil {
+		return fmt.Errorf("create vote_records: %w", err)
+	}
+
 	return nil
 }
 
