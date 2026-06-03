@@ -59,7 +59,7 @@ func NewStore(dbPath string) (*Store, error) {
 	}
 
 	s := &Store{db: db}
-	if err := s.migrate(); err != nil {
+	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -990,15 +990,28 @@ func (s *Store) SearchProfiles(query string) ([]map[string]interface{}, error) {
 
 // SearchMessages performs a text search across messages visible to the given npub.
 func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message, error) {
-	rows, err := s.db.Query(
-		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
+	var rows *sql.Rows
+	var err error
+	if npub == "" {
+		rows, err = s.db.Query(
+			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
+		 FROM messages
+		 WHERE text LIKE ?
+		 ORDER BY timestamp DESC
+		 LIMIT ?`,
+			"%"+query+"%", limit,
+		)
+	} else {
+		rows, err = s.db.Query(
+			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages
 		 WHERE text LIKE ?
 		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)
 		 ORDER BY timestamp DESC
 		 LIMIT ?`,
-		"%"+query+"%", npub, npub, limit,
-	)
+			"%"+query+"%", npub, npub, limit,
+		)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("search messages: %w", err)
 	}

@@ -31,15 +31,17 @@ func GenerateID() string {
 // CreateInvite creates a new invite link.
 func CreateInvite(db *store.Store, channel, group, createdBy string, maxUses int, ttlSeconds int64) (*Invite, error) {
 	id := GenerateID()
+	code := GenerateID()[:8] // short invite code
 	var expiresAt int64
 	if ttlSeconds > 0 {
 		expiresAt = time.Now().Unix() + ttlSeconds
 	}
+	createdAt := time.Now().Unix()
 
 	d := db.DB()
 	_, err := d.Exec(
-		"INSERT INTO invites (id, channel, group_name, created_by, expires_at, max_uses, uses) VALUES (?, ?, ?, ?, ?, ?, 0)",
-		id, channel, group, createdBy, expiresAt, maxUses,
+		"INSERT INTO invites (id, code, channel, group_name, created_by, expires_at, max_uses, uses, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
+		id, code, channel, group, createdBy, expiresAt, maxUses, createdAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create invite: %w", err)

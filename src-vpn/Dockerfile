@@ -1,22 +1,25 @@
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache gcc musl-dev
 
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
-COPY . .
 
+COPY . .
 RUN CGO_ENABLED=1 go build -o /messenger-server ./cmd/webserver/
 
-FROM alpine:3.19
+FROM alpine:3.20
 RUN apk add --no-cache ca-certificates wget
-COPY --from=builder /messenger-server /app/messenger-server
-COPY --from=builder /build/../dist /app/dist
 
-EXPOSE 9999
+WORKDIR /app
+COPY --from=builder /messenger-server .
+COPY ../dist ./dist/ 2>/dev/null || true
 
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -q --spider http://localhost:9999/api/status || exit 1
+EXPOSE 8080
 
-CMD ["/app/messenger-server"]
+VOLUME ["/app/data"]
+
+HEALTHCHECK --interval=30s --timeout=5s --retries=3   CMD wget -q --spider http://localhost:8080/api/health || exit 1
+
+ENTRYPOINT ["./messenger-server"]
