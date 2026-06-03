@@ -12,8 +12,13 @@ import (
 	"strings"
 	"time"
 
+	"encoding/hex"
+	"os/signal"
+	"syscall"
+
 	"github.com/getsentry/sentry-go"
 	"github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/auth"
 	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/federation"
@@ -363,9 +368,14 @@ func run() error {
 		log.Printf("📁 Serving static files from %s", distDir)
 	}
 
-	// Initialize SQLite store
+		// Initialize SQLite store
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "/tmp/um-prod"
+	}
+	os.MkdirAll(dataDir, 0755)
 	var dbErr error
-	db, dbErr = store.NewStore(getDataDir() + "/messenger.db")
+	db, dbErr = store.NewStore(dataDir + "/messenger.db")
 	if dbErr != nil {
 		return fmt.Errorf("failed to initialize SQLite store: %w", dbErr)
 	}
@@ -568,6 +578,76 @@ func run() error {
 	}))
 	http.HandleFunc("/api/federation/sync", apiChain(handleFederationSync))
 
+	// Auth endpoints (D1 — JWT authentication)
+	authService := auth.NewAuthService(os.Getenv("JWT_SECRET"))
+	http.HandleFunc("/api/auth/signup", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
+			return
+		}
+		var body struct {
+			Npub     string `json:"npub"`
+			Username string `json:"username"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		if body.Npub == "" {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
+			return
+		}
+		userID := hex.EncodeToString([]byte(body.Npub))[:16]
+		username := body.Username
+		if username == "" {
+			username = "user_" + userID[:8]
+		}
+		db.DB().Exec("INSERT OR IGNORE INTO users (id, npub, username, created_at) VALUES (?, ?, ?, ?)",
+			userID, body.Npub, username, time.Now().Unix())
+		accessToken, refreshToken, err := authService.GenerateTokenPair(userID, body.Npub)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "TOKEN_ERROR", err.Error())
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
+	}))
+	http.HandleFunc("/api/auth/login", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
+			return
+		}
+		var body struct{ Npub string `json:"npub"` }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		var userID, npub string
+		err := db.DB().QueryRow("SELECT id, npub FROM users WHERE npub = ?", body.Npub).Scan(&userID, &npub)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "NOT_FOUND", "user not found")
+			return
+		}
+		accessToken, refreshToken, _ := authService.GenerateTokenPair(userID, npub)
+		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
+	}))
+	http.HandleFunc("/api/auth/refresh", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
+			return
+		}
+		var body struct{ RefreshToken string `json:"refresh_token"` }
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		newAccess, newRefresh, err := authService.RefreshToken(body.RefreshToken)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", err.Error())
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"access_token": newAccess, "refresh_token": newRefresh})
+	}))
+
 	// Static files + SPA fallback
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		// Security headers for all responses
@@ -603,9 +683,38 @@ func run() error {
 	log.Printf("   API:  http://0.0.0.0:%s/api/status", port)
 	log.Printf("   Chat: http://0.0.0.0:%s/api/messages", port)
 
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		return fmt.Errorf("HTTP server error: %w", err)
+	srv := &http.Server{Addr: ":" + port}
+
+	// Graceful shutdown on SIGINT/SIGTERM
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		sig := <-sigCh
+		log.Printf("📴 Received %s, shutting down gracefully...", sig)
+		if hub != nil {
+			hub.RawBroadcastJSON(map[string]string{"type": "system", "text": "server shutting down"}, "")
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("Shutdown error: %v", err)
+		}
+	}()
+
+	// HTTPS if TLS certs configured
+	tlsCert := os.Getenv("TLS_CERT")
+	tlsKey := os.Getenv("TLS_KEY")
+	if tlsCert != "" && tlsKey != "" {
+		log.Printf("   TLS:  https (certs: %s)", tlsCert)
+		if err := srv.ListenAndServeTLS(tlsCert, tlsKey); err != http.ErrServerClosed {
+			return fmt.Errorf("HTTPS server error: %w", err)
+		}
+	} else {
+		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+			return fmt.Errorf("HTTP server error: %w", err)
+		}
 	}
+	log.Println("✅ Server stopped")
 	return nil
 }
 
