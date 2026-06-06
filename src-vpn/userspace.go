@@ -98,6 +98,8 @@ type UserspaceConfig struct {
 	// StaticPublicKey is the Curve25519 public key (hex or base64).
 	// If empty, it is derived from the private key.
 	StaticPublicKey string
+	// OnReceive is called when decrypted data is received from a peer.
+	OnReceive func(peerID string, plaintext []byte)
 }
 
 // PeerInfo represents a remote peer configuration.
@@ -504,12 +506,13 @@ func (u *UserspaceVPN) handleDataPacket(data []byte) {
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 
-	for _, session := range u.peers {
+	for id, session := range u.peers {
 		plain, err := u.decryptDataPacket(session, data)
 		if err == nil {
 			session.lastActive.Store(time.Now().Unix())
-			// In a full implementation, forward plaintext to application
-			_ = plain
+			if u.config.OnReceive != nil {
+				u.config.OnReceive(id, plain)
+			}
 			return
 		}
 	}
