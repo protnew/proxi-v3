@@ -297,6 +297,9 @@ func (u *UserspaceVPN) AddPeer(info PeerInfo) error {
 		}
 	}
 
+	// Initiate handshake
+	_ = u.sendHandshakeInit(session)
+
 	return nil
 }
 
@@ -520,13 +523,74 @@ func (u *UserspaceVPN) handleDataPacket(data []byte) {
 
 // handleHandshakeInit handles an incoming handshake initiation.
 func (u *UserspaceVPN) handleHandshakeInit(data []byte) {
-	// Simplified: in a full implementation, complete the Noise_IK handshake
-	// For now, this is a placeholder for the handshake protocol
+	if len(data) < 56 { // 4(type)+4(sender)+32(pubkey)+16(mac1)
+		return
+	}
+	var peerPub [32]byte
+	copy(peerPub[:], data[8:40])
+
+	peerHex := hex.EncodeToString(peerPub[:])
+	peerID := peerHex
+	if len(peerID) > 16 {
+		peerID = peerID[:16]
+	}
+
+	u.mu.RLock()
+	session, ok := u.peers[peerID]
+	u.mu.RUnlock()
+
+	if ok {
+		expectedMAC := computeMAC1(u.staticPublic[:], data[:40])
+		if constantTimeEqual(data[40:56], expectedMAC) {
+			u.sendHandshakeResponse(session)
+		}
+	}
 }
 
 // handleHandshakeResponse handles a handshake response.
 func (u *UserspaceVPN) handleHandshakeResponse(data []byte) {
-	// Simplified: complete handshake
+	if len(data) < 28 { // 4(type)+4(sender)+4(receiver)+16(mac1)
+		return
+	}
+	u.mu.RLock()
+	defer u.mu.RUnlock()
+	
+	for _, session := range u.peers {
+		expectedMAC := computeMAC1(u.staticPublic[:], data[:12])
+		if constantTimeEqual(data[12:28], expectedMAC) {
+			session.handshakeAt = time.Now()
+			return
+		}
+	}
+}
+
+// sendHandshakeInit sends a handshake initiation to a peer.
+func (u *UserspaceVPN) sendHandshakeInit(session *peerSession) error {
+	packet := make([]byte, 56)
+	packet[0] = packetTypeHandshakeInit
+	copy(packet[8:], u.staticPublic[:])
+	mac1 := computeMAC1(session.peerStatic[:], packet[:40])
+	copy(packet[40:], mac1)
+
+	if session.conn != nil {
+		_, err := session.conn.Write(packet)
+		return err
+	}
+	return nil
+}
+
+// sendHandshakeResponse sends a handshake response to a peer.
+func (u *UserspaceVPN) sendHandshakeResponse(session *peerSession) error {
+	packet := make([]byte, 28)
+	packet[0] = packetTypeHandshakeResponse
+	mac1 := computeMAC1(session.peerStatic[:], packet[:12])
+	copy(packet[12:], mac1)
+
+	if session.conn != nil {
+		_, err := session.conn.Write(packet)
+		return err
+	}
+	return nil
 }
 
 // keepaliveLoop sends periodic keepalive packets to all peers.
