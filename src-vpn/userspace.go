@@ -64,6 +64,8 @@ type UserspaceVPN struct {
 	state     atomic.Int32 // 0=stopped, 1=running
 	conn      *net.UDPConn
 
+	localPort int
+
 	// Keys
 	staticPrivate [keySize]byte
 	staticPublic  [keySize]byte
@@ -86,7 +88,7 @@ type UserspaceVPN struct {
 
 // UserspaceConfig holds configuration for the userspace VPN transport.
 type UserspaceConfig struct {
-	// ListenAddr is the local UDP address to bind (e.g. ":51820").
+	// ListenAddr is the local UDP address to bind (e.g. ":0" for random).
 	ListenAddr string
 	// MTU for packets (default 1280).
 	MTU int
@@ -124,7 +126,7 @@ func NewUserspaceVPN(config UserspaceConfig) (*UserspaceVPN, error) {
 		config.MTU = 1280
 	}
 	if config.ListenAddr == "" {
-		config.ListenAddr = ":51820"
+		config.ListenAddr = ":0"
 	}
 
 	u := &UserspaceVPN{
@@ -191,6 +193,9 @@ func (u *UserspaceVPN) Start() error {
 		return fmt.Errorf("listen UDP: %w", err)
 	}
 	u.conn = conn
+	if udpAddr, ok := conn.LocalAddr().(*net.UDPAddr); ok {
+		u.localPort = udpAddr.Port
+	}
 
 	u.ctx, u.cancel = context.WithCancel(context.Background())
 
@@ -203,6 +208,11 @@ func (u *UserspaceVPN) Start() error {
 	go u.keepaliveLoop()
 
 	return nil
+}
+
+// GetLocalPort returns the actual UDP port bound by the listener.
+func (u *UserspaceVPN) GetLocalPort() int {
+	return u.localPort
 }
 
 // Stop shuts down the VPN transport.
