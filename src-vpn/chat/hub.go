@@ -124,9 +124,9 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 		select {
 		case c.Send <- data:
 		default:
-			// Client buffer full — best-effort drop; the WritePump will detect
-			// and disconnect.
-			log.Printf("[chat] send buffer full for user %s, dropping message", uid)
+			// Client buffer full — drop message and disconnect to force offline sync.
+			log.Printf("[chat] send buffer full for user %s, dropping message and closing connection", uid)
+			c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
 		}
 	}
 }
@@ -145,8 +145,9 @@ func (h *ChatHub) SendTo(userID string, data []byte) bool {
 	case c.Send <- data:
 		return true
 	default:
-		log.Printf("[chat] send buffer full for user %s, dropping direct message", userID)
-		return true // user is connected, just slow
+		log.Printf("[chat] send buffer full for user %s, dropping direct message and closing connection", userID)
+		c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+		return false
 	}
 }
 

@@ -8,6 +8,7 @@ package crdt
 
 import (
 	"sync"
+	"sync/atomic"
 )
 
 // ==================== LWWRegister ====================
@@ -273,8 +274,7 @@ var timestampCounter int64
 
 // nextTimestamp returns the next unique timestamp.
 func nextTimestamp() int64 {
-	timestampCounter++
-	return timestampCounter
+	return atomic.AddInt64(&timestampCounter, 1)
 }
 
 // compareBytes compares two byte slices lexicographically.

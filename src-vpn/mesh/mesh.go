@@ -45,9 +45,14 @@ func (m *MeshNet) AddPeer(info PeerInfo) {
 	m.peers[info.ID] = &info
 	m.knownIDs[info.ID] = true
 
-	// Learn about peers this peer knows about
+	// Learn about peers this peer knows about (limit to 50 to prevent OOM/Sybil)
+	count := 0
 	for _, peerID := range info.Peers {
+		if count >= 50 {
+			break
+		}
 		m.knownIDs[peerID] = true
+		count++
 	}
 }
 
