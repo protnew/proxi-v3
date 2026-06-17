@@ -216,10 +216,8 @@ func handleContactsSave(w http.ResponseWriter, r *http.Request) {
 			_ = vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint)
 		}
 	} else {
-		// They don't have access, try to remove them from WireGuard (vpnMgr uses PublicKey as peerID mostly, wait let's check how vpnMgr uses RemovePeer)
-		// Usually vpn.RemovePeer takes the peer ID (which is the pubkey in our implementation).
-		if req.PublicKey != "" {
-			_ = vpnMgr.RemovePeer(req.PublicKey)
+		if len(req.PublicKey) >= 16 {
+			_ = vpnMgr.RemovePeer(req.PublicKey[:16])
 		}
 	}
 
@@ -257,8 +255,8 @@ func handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clean up VPN peer if necessary
-	if req.PublicKey != "" {
-		_ = vpnMgr.RemovePeer(req.PublicKey)
+	if len(req.PublicKey) >= 16 {
+		_ = vpnMgr.RemovePeer(req.PublicKey[:16])
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{

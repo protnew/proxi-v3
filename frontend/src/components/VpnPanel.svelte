@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { showToast, contacts } from '../lib/stores.js';
 
   let vpnSharing = $state(false);
@@ -80,6 +80,10 @@
 
   onMount(() => {
     // Optionally fetch status from VPN RPC
+  });
+  
+  onDestroy(() => {
+    clearInterval(vpnTimer);
   });
 </script>
 
