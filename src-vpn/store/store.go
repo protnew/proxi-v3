@@ -44,6 +44,18 @@ type Channel struct {
 	CreatedAt   int64  `json:"createdAt"`
 }
 
+// Contact represents a known peer/friend with access roles.
+type Contact struct {
+	ID                string `json:"id"` // npub
+	Name              string `json:"name"`
+	PublicKey         string `json:"publicKey"`
+	Endpoint          string `json:"endpoint"`
+	IsMessengerFriend bool   `json:"isMessengerFriend"`
+	GrantVPNAccess    bool   `json:"grantVpnAccess"`
+	UseAsVPNNode      bool   `json:"useAsVpnNode"`
+	CreatedAt         int64  `json:"createdAt"`
+}
+
 // NewStore opens (or creates) an SQLite database at dbPath and runs
 // auto-migration to ensure all required tables exist.
 func NewStore(dbPath string) (*Store, error) {
@@ -104,6 +116,17 @@ func (s *Store) migrate() error {
 			public_key  TEXT NOT NULL DEFAULT '',
 			endpoint    TEXT NOT NULL DEFAULT '',
 			allowed_ips TEXT NOT NULL DEFAULT ''
+		)`,
+
+		`CREATE TABLE IF NOT EXISTS contacts (
+			id                  TEXT PRIMARY KEY,
+			name                TEXT NOT NULL DEFAULT '',
+			public_key          TEXT NOT NULL DEFAULT '',
+			endpoint            TEXT NOT NULL DEFAULT '',
+			is_messenger_friend INTEGER NOT NULL DEFAULT 1,
+			grant_vpn_access    INTEGER NOT NULL DEFAULT 0,
+			use_as_vpn_node     INTEGER NOT NULL DEFAULT 0,
+			created_at          INTEGER NOT NULL
 		)`,
 
 		`CREATE TABLE IF NOT EXISTS identity (
@@ -689,6 +712,50 @@ func (s *Store) SubscribeChannel(channelID string) error {
 // ---------------------------------------------------------------------------
 // Peers
 // ---------------------------------------------------------------------------
+
+// SaveContact creates or updates a contact.
+func (s *Store) SaveContact(c Contact) error {
+	_, err := s.db.Exec(
+		`INSERT INTO contacts (id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			name=excluded.name,
+			public_key=excluded.public_key,
+			endpoint=excluded.endpoint,
+			is_messenger_friend=excluded.is_messenger_friend,
+			grant_vpn_access=excluded.grant_vpn_access,
+			use_as_vpn_node=excluded.use_as_vpn_node`,
+		c.ID, c.Name, c.PublicKey, c.Endpoint,
+		c.IsMessengerFriend, c.GrantVPNAccess, c.UseAsVPNNode,
+		time.Now().Unix(),
+	)
+	return err
+}
+
+// GetContacts retrieves all stored contacts.
+func (s *Store) GetContacts() ([]Contact, error) {
+	rows, err := s.db.Query(`SELECT id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at FROM contacts`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []Contact
+	for rows.Next() {
+		var c Contact
+		if err := rows.Scan(&c.ID, &c.Name, &c.PublicKey, &c.Endpoint, &c.IsMessengerFriend, &c.GrantVPNAccess, &c.UseAsVPNNode, &c.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// DeleteContact removes a contact by ID.
+func (s *Store) DeleteContact(id string) error {
+	_, err := s.db.Exec(`DELETE FROM contacts WHERE id = ?`, id)
+	return err
+}
 
 // SavePeer persists a WireGuard peer configuration.
 func (s *Store) SavePeer(id, name, pubKey, endpoint, allowedIPs string) error {

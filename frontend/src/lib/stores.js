@@ -9,6 +9,7 @@ export const connText = writable('Подключение...');
 export const activeTab = writable('chat');
 export const messages = writable([]);
 export const onlineUsers = writable([]);
+export const contacts = writable([]);
 export const peers = writable([]);
 export const channels = writable([]);
 export const groups = writable([]);

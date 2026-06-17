@@ -112,6 +112,19 @@ export function connectWS() {
       } else if (msg.type === 'leave') {
         addSystemMessage(msg.from + ' отключился');
         refreshOnline();
+      } else if (msg.type === 'users') {
+        const baseUsers = msg.users || [];
+        const testUsers = [
+          { id: "npub1testsuperuser0000000000000000000000000000000000000000001", name: "📱 Смартфон 1", status: "online", active: true },
+          { id: "npub1testsuperuser0000000000000000000000000000000000000000002", name: "📱 Смартфон 2", status: "online", active: true },
+          { id: "npub1testsuperuser0000000000000000000000000000000000000000003", name: "📱 Смартфон 3", status: "online", active: true }
+        ];
+        testUsers.forEach(tu => {
+          if (!baseUsers.find(u => u.id === tu.id)) {
+            baseUsers.push(tu);
+          }
+        });
+        onlineUsers.set(baseUsers);
       } else if (msg.type === 'typing') {
         // handled in component
       } else if (msg.type === 'message_edited') {
@@ -247,7 +260,18 @@ export async function refreshOnline() {
   try {
     const r = await fetch('/api/online');
     const d = await r.json();
-    onlineUsers.set(d.users || []);
+    const baseUsers = d.users || [];
+    const testUsers = [
+      { id: "npub1testsuperuser0000000000000000000000000000000000000000001", name: "📱 Смартфон 1", status: "online", active: true },
+      { id: "npub1testsuperuser0000000000000000000000000000000000000000002", name: "📱 Смартфон 2", status: "online", active: true },
+      { id: "npub1testsuperuser0000000000000000000000000000000000000000003", name: "📱 Смартфон 3", status: "online", active: true }
+    ];
+    testUsers.forEach(tu => {
+      if (!baseUsers.find(u => u.id === tu.id)) {
+        baseUsers.push(tu);
+      }
+    });
+    onlineUsers.set(baseUsers);
   } catch (e) {}
 }
 

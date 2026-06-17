@@ -56,24 +56,24 @@
     error = '';
   }
 
-  async function handleTestLogin() {
+  async function loginAsTestUser(num) {
     error = '';
     loading = true;
     try {
-      const testNpub = "npub1testsuperuser0000000000000000000000000000000000000000000";
+      const testNpub = `npub1testsuperuser000000000000000000000000000000000000000000${num}`;
       try {
         await login(testNpub);
       } catch (err) {
         if (err.status === 401) {
-          await signup(testNpub, "TestUser");
+          await signup(testNpub, `Смартфон ${num}`);
         } else {
           throw err;
         }
       }
-      showToast('✅ Вход под тестовым пользователем!');
+      showToast(`✅ Вход: Смартфон ${num}`);
       if (onSuccess) onSuccess();
     } catch (err) {
-      error = err.message || 'Ошибка тестового входа';
+      error = err.message || `Ошибка тестового входа ${num}`;
     } finally {
       loading = false;
     }
@@ -126,9 +126,11 @@
         {/if}
       </button>
 
-      <button type="button" class="test-login-btn" onclick={handleTestLogin} disabled={loading}>
-        🧪 Войти как тестовый пользователь
-      </button>
+      <div class="test-users-container">
+        <button type="button" class="test-login-btn" onclick={() => loginAsTestUser(1)} disabled={loading}>📱 Смартфон 1</button>
+        <button type="button" class="test-login-btn" onclick={() => loginAsTestUser(2)} disabled={loading}>📱 Смартфон 2</button>
+        <button type="button" class="test-login-btn" onclick={() => loginAsTestUser(3)} disabled={loading}>📱 Смартфон 3</button>
+      </div>
     </form>
 
     <button class="toggle-mode" onclick={toggleMode}>
@@ -150,44 +152,48 @@
     background: #0a0a0a;
   }
   .login-card {
-    background: #111;
-    border: 1px solid #222;
-    border-radius: 20px;
+    background: rgba(15, 15, 15, 0.75);
+    backdrop-filter: blur(30px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 24px;
     padding: 40px 32px;
     width: 100%;
-    max-width: 380px;
+    max-width: 400px;
     text-align: center;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6);
   }
   .login-logo {
-    font-size: 48px;
-    margin-bottom: 12px;
+    font-size: 52px;
+    margin-bottom: 16px;
+    filter: drop-shadow(0 0 15px rgba(255, 82, 82, 0.5));
   }
   .login-title {
-    font-size: 22px;
-    font-weight: 600;
-    color: #e0e0e0;
-    margin-bottom: 6px;
+    font-size: 24px;
+    font-weight: 700;
+    color: #ffffff;
+    margin-bottom: 8px;
   }
   .login-subtitle {
-    font-size: 12px;
-    color: #555;
-    margin-bottom: 28px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 30px;
     line-height: 1.5;
   }
   .login-form {
     display: flex;
     flex-direction: column;
-    gap: 14px;
-    margin-bottom: 20px;
+    gap: 16px;
+    margin-bottom: 24px;
   }
   .login-error {
-    background: #1a0a0a;
-    border: 1px solid #c62828;
-    border-radius: 8px;
-    padding: 10px 14px;
-    color: #ef5350;
+    background: rgba(255, 82, 82, 0.1);
+    border: 1px solid rgba(255, 82, 82, 0.3);
+    border-radius: 12px;
+    padding: 12px 16px;
+    color: #ff5252;
     font-size: 13px;
     text-align: left;
+    font-weight: 500;
   }
   .form-group {
     text-align: left;
@@ -195,58 +201,63 @@
   .form-group label {
     display: block;
     font-size: 11px;
-    color: #666;
+    color: rgba(255, 255, 255, 0.6);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 6px;
+    letter-spacing: 0.8px;
+    margin-bottom: 8px;
+    font-weight: 600;
   }
   .form-group input {
     width: 100%;
-    padding: 12px 14px;
-    background: #0a0a0a;
-    border: 1px solid #333;
-    border-radius: 10px;
-    color: #e0e0e0;
-    font-size: 14px;
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 14px;
+    color: #ffffff;
+    font-size: 15px;
     outline: none;
-    transition: border-color 0.2s;
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .form-group input:focus {
-    border-color: #1e88e5;
+    border-color: #4fc3f7;
+    background: rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0 4px rgba(79, 195, 247, 0.15);
   }
   .form-group input:disabled {
     opacity: 0.5;
   }
   .login-btn {
     width: 100%;
-    padding: 14px;
-    background: #1e88e5;
-    color: #fff;
+    padding: 16px;
+    background: linear-gradient(135deg, #1e88e5, #1565c0);
+    color: #ffffff;
     border: none;
-    border-radius: 12px;
+    border-radius: 14px;
     cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    transition: all 0.2s;
+    font-size: 16px;
+    font-weight: 600;
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
+    box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
   }
   .login-btn:hover:not(:disabled) {
-    background: #1565c0;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(30, 136, 229, 0.6);
   }
   .login-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
   }
   .btn-spinner {
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: #fff;
+    border-top-color: #ffffff;
     border-radius: 50%;
-    animation: spin 0.6s linear infinite;
+    animation: spin 0.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
   }
   @keyframes spin {
     to { transform: rotate(360deg); }
@@ -254,38 +265,47 @@
   .toggle-mode {
     background: none;
     border: none;
-    color: #555;
-    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
     cursor: pointer;
     padding: 8px;
+    transition: color 0.2s;
   }
   .toggle-mode:hover {
-    color: #888;
+    color: #ffffff;
   }
   .link {
     color: #4fc3f7;
+    font-weight: 500;
+  }
+  .test-users-container {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
   }
   .test-login-btn {
     width: 100%;
-    padding: 12px;
-    background: #2a2a2a;
-    color: #a0a0a0;
-    border: 1px solid #444;
-    border-radius: 12px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 500;
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 4px;
   }
   .test-login-btn:hover:not(:disabled) {
-    background: #333;
-    color: #fff;
-    border-color: #666;
+    background: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
   }
   .test-login-btn:disabled {
     opacity: 0.6;

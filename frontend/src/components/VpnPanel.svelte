@@ -1,13 +1,12 @@
 <script>
   import { onMount } from 'svelte';
-  import { peers, showToast, escHtml } from '../lib/stores.js';
+  import { showToast, contacts } from '../lib/stores.js';
 
   let vpnSharing = $state(false);
   let vpnSeconds = $state(0);
   let vpnTimer = null;
-  let peerName = $state('');
-  let peerPubKey = $state('');
-  let peerEndpoint = $state('');
+  let connectingTo = $state(null); // publicKey of node we are connecting to
+  let isConnectedToNode = $state(false);
 
   function toggleVpn() {
     if (vpnSharing) {
@@ -18,92 +17,75 @@
       fetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'stop_exit_node' }),
+        body: JSON.stringify({ method: 'stop_exit_node', params: {} }),
       }).catch(() => {});
     } else {
       vpnSharing = true;
       fetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'start_exit_node' }),
+        body: JSON.stringify({ method: 'start_exit_node', params: {} }),
       }).catch(() => {});
 
       setTimeout(() => {
         showToast('✅ Точка доступа запущена!');
         vpnTimer = setInterval(() => {
           vpnSeconds++;
-          if (vpnSeconds % 10 === 0) loadPeers();
         }, 1000);
       }, 1500);
     }
   }
 
-  async function loadPeers() {
-    try {
-      const r = await fetch('/api/peers');
-      const d = await r.json();
-      peers.set(d.peers || []);
-    } catch (e) {}
-  }
-
-  async function addPeerFromForm() {
-    if (!peerPubKey.trim()) {
-      showToast('❌ Публичный ключ обязателен');
+  async function connectToNode(c) {
+    if (isConnectedToNode && connectingTo === c.publicKey) {
+      // Disconnect
+      fetch('/api/vpn/rpc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'disconnect', params: {} }),
+      }).catch(() => {});
+      isConnectedToNode = false;
+      connectingTo = null;
+      showToast('Отключено от узла ' + c.name);
       return;
     }
+
+    connectingTo = c.publicKey;
+    showToast('Подключение к ' + c.name + '...');
     try {
-      const r = await fetch('/api/peers', {
+      const r = await fetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: peerName.trim(),
-          publicKey: peerPubKey.trim(),
-          endpoint: peerEndpoint.trim(),
+          method: 'connect_to_exit_node',
+          params: { publicKey: c.publicKey, endpoint: c.endpoint }
         }),
       });
-      const d = await r.json();
-      if (!r.ok) {
-        showToast('❌ ' + (d.error?.message || 'Ошибка'));
-        return;
+      if (r.ok) {
+        showToast('✅ Подключено к ' + c.name);
+        isConnectedToNode = true;
+      } else {
+        showToast('❌ Ошибка подключения');
+        connectingTo = null;
       }
-      peers.set(d.peers || []);
-      peerName = '';
-      peerPubKey = '';
-      peerEndpoint = '';
-      showToast('✅ ' + (peerName || 'Пир') + ' добавлен!');
     } catch (e) {
-      showToast('❌ Ошибка добавления пира');
+      showToast('❌ Ошибка подключения');
+      connectingTo = null;
     }
   }
 
-  async function removePeer(peerId) {
-    if (!confirm('Удалить пира ' + peerId + '?')) return;
-    try {
-      const r = await fetch('/api/peers', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ peerId }),
-      });
-      const d = await r.json();
-      if (!r.ok) {
-        showToast('❌ ' + (d.error?.message || 'Ошибка'));
-        return;
-      }
-      peers.set(d.peers || []);
-      showToast('🗑 Пир удалён');
-    } catch (e) {
-      showToast('❌ Ошибка удаления пира');
-    }
-  }
+  // Derive separated lists
+  let clients = $derived($contacts.filter(c => c.grantVpnAccess));
+  let providers = $derived($contacts.filter(c => c.useAsVpnNode));
 
   onMount(() => {
-    loadPeers();
+    // Optionally fetch status from VPN RPC
   });
 </script>
 
 <div class="vpn-panel">
   <div class="header-row">
-    <h1>🌐 Поделись интернет</h1>
+    <h1>🌐 Управление интернетом</h1>
     <span class="status" class:off={!vpnSharing} class:ok={vpnSharing}>
       {#if vpnSharing}
         🟢 Делю интернет ({Math.floor(vpnSeconds / 60)}:{String(vpnSeconds % 60).padStart(2, '0')})
@@ -115,38 +97,52 @@
 
   <div class="share-section">
     <button class="share-btn" class:active={vpnSharing} onclick={toggleVpn} disabled={false}>
-      {vpnSharing ? '⏹ Остановить точку' : '🚀 Поделись интернетом'}
+      {vpnSharing ? '⏹ Остановить раздачу' : '🚀 Раздать интернет'}
     </button>
-    <p class="hint">Нажми — друзья смогут подключиться через тебя</p>
+    <p class="hint">Ваши контакты с доступом "Дать интернет" смогут подключаться.</p>
   </div>
 
-  <div class="id-card" style="margin-top:8px">
-    <h3>➕ Добавить друга</h3>
-    <div style="margin-bottom:10px">
-      <input bind:value={peerName} placeholder="Имя друга" class="form-input" />
-    </div>
-    <div style="margin-bottom:10px">
-      <input bind:value={peerPubKey} placeholder="Публичный ключ" class="form-input mono" />
-    </div>
-    <div style="margin-bottom:12px">
-      <input bind:value={peerEndpoint} placeholder="Endpoint (ip:port)" class="form-input" />
-    </div>
-    <button onclick={addPeerFromForm} class="submit-btn">Добавить</button>
-  </div>
-
-  <div class="peers" style="margin-top:16px">
-    <h3>Подключённые пиры</h3>
-    {#if $peers.length === 0}
-      <div class="empty-peers">Пока никто не подключён</div>
+  <div class="section-card">
+    <h3>📡 Кому я раздаю (Мои клиенты)</h3>
+    {#if clients.length === 0}
+      <div class="empty">У вас нет контактов с доступом к вашему VPN.</div>
     {:else}
-      {#each $peers as p}
-        <div class="peer-item">
-          <div class="peer-dot" class:offline={!p.online}></div>
-          <div class="peer-name">{p.name || p.id}</div>
-          <div class="peer-ip">{p.allowedIPs || p.endpoint || ''}</div>
-          <button class="peer-remove" onclick={() => removePeer(p.id)}>✕</button>
-        </div>
-      {/each}
+      <div class="list">
+        {#each clients as c}
+          <div class="item">
+            <div class="i-info">
+              <span class="i-name">{c.name}</span>
+              <span class="i-ep">{c.endpoint || 'Нет endpoint'}</span>
+            </div>
+            <div class="i-status ok">Доступ разрешён</div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <div class="section-card">
+    <h3>🌍 Доступные VPN-узлы (Страны/Друзья)</h3>
+    {#if providers.length === 0}
+      <div class="empty">У вас нет контактов, чей интернет можно использовать.</div>
+    {:else}
+      <div class="list">
+        {#each providers as c}
+          <div class="item">
+            <div class="i-info">
+              <span class="i-name">{c.name}</span>
+              <span class="i-ep">{c.endpoint || 'Нет endpoint'}</span>
+            </div>
+            <button class="action-btn" class:active={isConnectedToNode && connectingTo === c.publicKey} onclick={() => connectToNode(c)}>
+              {#if isConnectedToNode && connectingTo === c.publicKey}
+                Отключиться
+              {:else}
+                Подключиться
+              {/if}
+            </button>
+          </div>
+        {/each}
+      </div>
     {/if}
   </div>
 </div>
@@ -154,8 +150,9 @@
 <style>
   .vpn-panel {
     padding: 24px;
-    max-width: 500px;
+    max-width: 600px;
     overflow-y: auto;
+    height: 100%;
   }
   .header-row {
     display: flex;
@@ -171,10 +168,12 @@
     font-size: 13px;
     padding: 4px 10px;
     border-radius: 8px;
-    background: #111;
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(255,255,255,0.1);
   }
-  .status.ok { color: #4caf50; }
-  .status.off { color: #666; }
+  .status.ok { color: #81c784; border-color: rgba(76, 175, 80, 0.3); }
+  .status.off { color: rgba(255,255,255,0.5); }
+  
   .share-section {
     text-align: center;
     margin: 32px 0;
@@ -195,111 +194,93 @@
     box-shadow: 0 4px 20px rgba(30, 136, 229, 0.3);
   }
   .share-btn.active {
-    background: linear-gradient(135deg, #c62828, #b71c1c);
+    background: linear-gradient(135deg, #e53935, #c62828);
+    box-shadow: 0 4px 20px rgba(229, 57, 53, 0.3);
   }
   .hint {
     margin-top: 10px;
-    color: #555;
+    color: rgba(255,255,255,0.5);
     font-size: 12px;
   }
-  .id-card {
-    background: #111;
+
+  .section-card {
+    background: rgba(20, 20, 20, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
     padding: 20px;
-    border: 1px solid #222;
-    margin-bottom: 16px;
+    margin-bottom: 20px;
+    backdrop-filter: blur(10px);
   }
-  .id-card h3 {
-    font-size: 13px;
-    color: #888;
-    margin-bottom: 12px;
+  .section-card h3 {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
-  .form-input {
-    width: 100%;
-    padding: 10px 14px;
-    background: #0a0a0a;
-    border: 1px solid #333;
-    border-radius: 8px;
-    color: #e0e0e0;
-    font-size: 13px;
-    outline: none;
+  .empty {
+    color: rgba(255, 255, 255, 0.4);
+    text-align: center;
+    padding: 20px;
+    font-size: 14px;
+    background: rgba(0,0,0,0.2);
+    border-radius: 10px;
   }
-  .form-input.mono {
+  .list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 12px 16px;
+  }
+  .i-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .i-name {
+    font-weight: 600;
+    font-size: 15px;
+  }
+  .i-ep {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
     font-family: monospace;
   }
-  .submit-btn {
-    width: 100%;
-    padding: 12px;
-    background: #1e88e5;
-    color: #fff;
-    border: none;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.2s;
-  }
-  .submit-btn:hover {
-    background: #1565c0;
-  }
-  .peers {
-    margin-top: 24px;
-  }
-  .peers h3 {
-    font-size: 13px;
-    color: #888;
-    margin-bottom: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-  .empty-peers {
-    color: #333;
+  .i-status.ok {
     font-size: 12px;
-    padding: 20px;
-    text-align: center;
-  }
-  .peer-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px;
-    background: #111;
-    border-radius: 10px;
-    margin-bottom: 8px;
-    border: 1px solid #1a1a1a;
-  }
-  .peer-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #4caf50;
-  }
-  .peer-dot.offline {
-    background: #555;
-  }
-  .peer-name {
-    font-size: 13px;
-    flex: 1;
-  }
-  .peer-ip {
-    font-size: 11px;
-    color: #555;
-  }
-  .peer-remove {
-    padding: 4px 10px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    color: #f44336;
+    color: #81c784;
+    background: rgba(76, 175, 80, 0.1);
+    padding: 4px 8px;
     border-radius: 6px;
+  }
+  .action-btn {
+    padding: 8px 16px;
+    background: rgba(30, 136, 229, 0.1);
+    color: #64b5f6;
+    border: 1px solid rgba(30, 136, 229, 0.3);
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 13px;
+    font-weight: 600;
     transition: all 0.2s;
   }
-  .peer-remove:hover {
-    background: #f44336;
-    color: #fff;
-    border-color: #f44336;
+  .action-btn:hover {
+    background: rgba(30, 136, 229, 0.2);
+  }
+  .action-btn.active {
+    background: rgba(244, 67, 54, 0.1);
+    color: #e57373;
+    border-color: rgba(244, 67, 54, 0.3);
+  }
+  .action-btn.active:hover {
+    background: rgba(244, 67, 54, 0.2);
   }
 </style>

@@ -12,6 +12,7 @@
   import VpnPanel from './components/VpnPanel.svelte';
   import ChannelsPanel from './components/ChannelsPanel.svelte';
   import IdentityPanel from './components/IdentityPanel.svelte';
+  import ContactsPanel from './components/ContactsPanel.svelte';
   import WebRtcMvp from './components/WebRtcMvp.svelte';
 
   let currentTab = $state('chat');
@@ -112,6 +113,8 @@
       <ChannelsPanel />
     {:else if currentTab === 'identity'}
       <IdentityPanel />
+    {:else if currentTab === 'contacts'}
+      <ContactsPanel />
     {:else if currentTab === 'mvp'}
       <WebRtcMvp />
     {/if}
@@ -128,25 +131,32 @@
     box-sizing: border-box;
   }
   :global(body) {
-    font-family: -apple-system, 'Segoe UI', sans-serif;
-    background: #0a0a0a;
-    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: #050505;
+    color: #ffffff;
     height: 100vh;
     overflow: hidden;
   }
+  :global(::selection) {
+    background: rgba(30, 136, 229, 0.5);
+    color: #ffffff;
+  }
   :global(:focus-visible) {
-    outline: 2px solid #1e88e5;
+    outline: 2px solid #ffffff;
     outline-offset: 2px;
   }
   .app {
     display: flex;
     height: 100vh;
+    background: radial-gradient(circle at top left, #111111, #000000);
   }
   .content {
     flex: 1;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    background: rgba(10, 10, 10, 0.7);
+    backdrop-filter: blur(20px);
   }
   .content:focus {
     outline: none;
@@ -156,13 +166,17 @@
     bottom: 80px;
     left: 50%;
     transform: translateX(-50%);
-    padding: 10px 20px;
-    background: #1e88e5;
-    color: #fff;
-    border-radius: 10px;
-    font-size: 13px;
+    padding: 14px 24px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    color: #ffffff;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
     opacity: 0;
-    transition: opacity 0.3s;
+    transition: opacity 0.3s ease-out;
     pointer-events: none;
     z-index: 100;
     white-space: nowrap;
@@ -177,18 +191,20 @@
     justify-content: center;
     height: 100vh;
     gap: 16px;
+    background: #000000;
   }
   .loading-screen p {
-    color: #555;
-    font-size: 14px;
+    color: #ffffff;
+    font-size: 16px;
+    font-weight: 500;
   }
   .loading-spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #222;
-    border-top-color: #1e88e5;
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: #ffffff;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
   }
   @keyframes spin {
     to { transform: rotate(360deg); }

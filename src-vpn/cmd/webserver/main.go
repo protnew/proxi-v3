@@ -496,14 +496,14 @@ func run() error {
 		}
 	}))
 	http.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
-	http.HandleFunc("/api/peers", apiChain(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/contacts", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handlePeersGet(w, r)
+			handleContactsGet(w, r)
 		case "POST":
-			handlePeersAdd(w, r)
+			handleContactsSave(w, r)
 		case "DELETE":
-			handlePeersRemove(w, r)
+			handleContactsRemove(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
 		}

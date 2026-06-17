@@ -110,7 +110,6 @@
     const text = inputText.trim();
     if (!text) return;
     sendMessage(text, replyToId, replyToFrom, replyToText, currentTTL);
-    sendViaWS(text);
     inputText = '';
     cancelReply();
   }
@@ -148,7 +147,6 @@
     const id = $myId;
     const msg = { type: 'chat', from: id, to: 'broadcast', text: text, ts: (Date.now() / 1000) | 0, forwardedFrom: from };
     ws.send(JSON.stringify(msg));
-    sendViaWS(text);
     showToast('↗ Сообщение переслано');
   }
 
@@ -318,31 +316,34 @@
   }
   .typing {
     padding: 4px 16px;
-    font-size: 11px;
-    color: #555;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
     min-height: 20px;
+    font-style: italic;
   }
   .reply-bar {
     padding: 8px 12px;
-    background: #111;
-    border-top: 1px solid #222;
+    background: rgba(20, 20, 20, 0.8);
+    backdrop-filter: blur(10px);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
     display: flex;
     align-items: center;
     gap: 8px;
   }
   .reply-preview {
     flex: 1;
-    font-size: 12px;
-    color: #888;
-    border-left: 2px solid #1e88e5;
-    padding-left: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+    border-left: 3px solid #4fc3f7;
+    padding-left: 10px;
   }
   .rp-from {
-    color: #1e88e5;
-    font-size: 11px;
+    color: #4fc3f7;
+    font-size: 12px;
+    font-weight: 500;
   }
   .rp-text {
-    color: #aaa;
+    color: rgba(255, 255, 255, 0.7);
     margin-top: 2px;
     max-width: 300px;
     overflow: hidden;
@@ -352,53 +353,70 @@
   .reply-cancel {
     background: none;
     border: none;
-    color: #555;
+    color: rgba(255, 255, 255, 0.6);
     cursor: pointer;
-    font-size: 18px;
+    font-size: 20px;
     padding: 4px;
+    transition: color 0.2s;
   }
   .reply-cancel:hover {
-    color: #e0e0e0;
+    color: #ffffff;
   }
   .input-bar {
     display: flex;
-    padding: 12px;
-    border-top: 1px solid #222;
-    gap: 8px;
-    background: #0a0a0a;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    gap: 10px;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(15px);
   }
   .input-bar input {
     flex: 1;
     padding: 12px 16px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    border-radius: 12px;
-    color: #e0e0e0;
-    font-size: 14px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 20px;
+    color: #ffffff;
+    font-size: 15px;
     outline: none;
+    transition: all 0.2s;
+  }
+  .input-bar input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
   }
   .input-bar input:focus {
-    border-color: #1e88e5;
+    border-color: #4fc3f7;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 10px rgba(79, 195, 247, 0.2);
   }
   .input-bar button {
     padding: 12px 20px;
-    background: #1e88e5;
-    color: #fff;
+    background: linear-gradient(135deg, #1e88e5, #1565c0);
+    color: #ffffff;
     border: none;
-    border-radius: 12px;
+    border-radius: 20px;
     cursor: pointer;
     font-size: 16px;
+    font-weight: 500;
     transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(30, 136, 229, 0.3);
   }
   .input-bar button:hover {
-    background: #1565c0;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(30, 136, 229, 0.5);
   }
   .tool-btn {
-    min-width: 42px;
-    font-size: 14px !important;
-    background: #1a1a1a !important;
+    min-width: 44px;
+    font-size: 16px !important;
+    background: rgba(255, 255, 255, 0.1) !important;
+    border-radius: 50% !important;
+    padding: 0 !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: none !important;
   }
   .tool-btn:hover {
-    background: #222 !important;
+    background: rgba(255, 255, 255, 0.2) !important;
   }
 </style>

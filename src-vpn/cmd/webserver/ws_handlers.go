@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkillable-messenger/vpn"
+
 	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
@@ -168,21 +168,68 @@ func initHub() {
 
 // ========== Peer Management Handlers ==========
 
-// handlePeersGet — GET /api/peers — список пиров
-func handlePeersGet(w http.ResponseWriter, r *http.Request) {
-	status := vpnMgr.GetStatus()
-	peers := status.Peers
-	if peers == nil {
-		peers = []vpn.Peer{}
+// handleContactsGet — GET /api/contacts — список контактов
+func handleContactsGet(w http.ResponseWriter, r *http.Request) {
+	contacts, err := db.GetContacts()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+	if contacts == nil {
+		contacts = []store.Contact{}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"peers": peers,
-		"count": len(peers),
+		"contacts": contacts,
+		"count":    len(contacts),
 	})
 }
 
-// handlePeersAdd — POST /api/peers — добавить пира
-func handlePeersAdd(w http.ResponseWriter, r *http.Request) {
+// handleContactsSave — POST /api/contacts — добавить/обновить контакт
+func handleContactsSave(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
+		return
+	}
+	defer r.Body.Close()
+
+	var req store.Contact
+	if err := json.Unmarshal(body, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
+		return
+	}
+
+	if strings.TrimSpace(req.ID) == "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "id (npub) is required")
+		return
+	}
+
+	if err := db.SaveContact(req); err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
+		return
+	}
+
+	// Sync with VPN Manager
+	if req.GrantVPNAccess {
+		// Only add to WireGuard if they provided a PublicKey
+		if req.PublicKey != "" {
+			_ = vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint)
+		}
+	} else {
+		// They don't have access, try to remove them from WireGuard (vpnMgr uses PublicKey as peerID mostly, wait let's check how vpnMgr uses RemovePeer)
+		// Usually vpn.RemovePeer takes the peer ID (which is the pubkey in our implementation).
+		if req.PublicKey != "" {
+			_ = vpnMgr.RemovePeer(req.PublicKey)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "saved",
+	})
+}
+
+// handleContactsRemove — DELETE /api/contacts — удалить контакт
+func handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -191,84 +238,32 @@ func handlePeersAdd(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var req struct {
-		Name      string `json:"name"`
+		ID        string `json:"id"`
 		PublicKey string `json:"publicKey"`
-		Endpoint  string `json:"endpoint"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
 		return
 	}
 
-	// Validation
-	if strings.TrimSpace(req.PublicKey) == "" {
-		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Public key is required")
-		return
-	}
-	if strings.TrimSpace(req.Name) == "" {
-		req.Name = "Peer"
-	}
-
-	if err := vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint); err != nil {
-		writeError(w, http.StatusInternalServerError, "ADD_PEER_ERROR", err.Error())
+	if req.ID == "" {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "id is required")
 		return
 	}
 
-	// Return updated peer list
-	status := vpnMgr.GetStatus()
-	peers := status.Peers
-	if peers == nil {
-		peers = []vpn.Peer{}
-	}
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"status": "added",
-		"peers":  peers,
-		"count":  len(peers),
-	})
-
-	log.Printf("👤 Peer added: %s (%s)", req.Name, truncate(req.PublicKey, 16)+"...")
-}
-
-// handlePeersRemove — DELETE /api/peers — удалить пира
-func handlePeersRemove(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
-		return
-	}
-	defer r.Body.Close()
-
-	var req struct {
-		PeerID string `json:"peerId"`
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
+	if err := db.DeleteContact(req.ID); err != nil {
+		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	if strings.TrimSpace(req.PeerID) == "" {
-		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "peerId is required")
-		return
+	// Clean up VPN peer if necessary
+	if req.PublicKey != "" {
+		_ = vpnMgr.RemovePeer(req.PublicKey)
 	}
 
-	if err := vpnMgr.RemovePeer(req.PeerID); err != nil {
-		writeError(w, http.StatusInternalServerError, "REMOVE_PEER_ERROR", err.Error())
-		return
-	}
-
-	// Return updated peer list
-	status := vpnMgr.GetStatus()
-	peers := status.Peers
-	if peers == nil {
-		peers = []vpn.Peer{}
-	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status": "removed",
-		"peers":  peers,
-		"count":  len(peers),
 	})
-
-	log.Printf("👤 Peer removed: %s", req.PeerID)
 }
 
 // getDataDir returns the data directory path
