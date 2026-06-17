@@ -5,8 +5,8 @@
   let { showPanel = false } = $props();
   let callStatus = $state('Звоним...');
   let muted = $state(false);
-  let remoteVideoEl;
-  let localVideoEl;
+  let remoteVideoEl = $state();
+  let localVideoEl = $state();
 
   onMount(() => {
     WebRTCCall.setOnStateChange((state) => {

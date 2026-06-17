@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -655,8 +656,8 @@ func run() error {
 		w.Header().Set("X-Frame-Options", "DENY")
 
 		// Path traversal protection
-		cleanPath := filepath.Clean(r.URL.Path)
-		if containsPathTraversal(r.URL.Path) || cleanPath != r.URL.Path {
+		cleanPath := path.Clean(r.URL.Path)
+		if strings.Contains(r.URL.Path, "..") || cleanPath != r.URL.Path {
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}

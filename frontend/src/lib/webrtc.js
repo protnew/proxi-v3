@@ -10,7 +10,7 @@ const ICE_SERVERS = [
 let peerConnection = null;
 let localStream = null;
 let remoteStream = null;
-let callState = $state('idle');
+let callState = 'idle';
 let currentPeer = null;
 let ws = null;
 

@@ -55,6 +55,29 @@
     mode = mode === 'login' ? 'signup' : 'login';
     error = '';
   }
+
+  async function handleTestLogin() {
+    error = '';
+    loading = true;
+    try {
+      const testNpub = "npub1testsuperuser0000000000000000000000000000000000000000000";
+      try {
+        await login(testNpub);
+      } catch (err) {
+        if (err.status === 401) {
+          await signup(testNpub, "TestUser");
+        } else {
+          throw err;
+        }
+      }
+      showToast('✅ Вход под тестовым пользователем!');
+      if (onSuccess) onSuccess();
+    } catch (err) {
+      error = err.message || 'Ошибка тестового входа';
+    } finally {
+      loading = false;
+    }
+  }
 </script>
 
 <div class="login-screen">
@@ -101,6 +124,10 @@
         {:else}
           {mode === 'login' ? '🔑 Войти' : '🚀 Создать аккаунт'}
         {/if}
+      </button>
+
+      <button type="button" class="test-login-btn" onclick={handleTestLogin} disabled={loading}>
+        🧪 Войти как тестовый пользователь
       </button>
     </form>
 
@@ -237,5 +264,31 @@
   }
   .link {
     color: #4fc3f7;
+  }
+  .test-login-btn {
+    width: 100%;
+    padding: 12px;
+    background: #2a2a2a;
+    color: #a0a0a0;
+    border: 1px solid #444;
+    border-radius: 12px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .test-login-btn:hover:not(:disabled) {
+    background: #333;
+    color: #fff;
+    border-color: #666;
+  }
+  .test-login-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>
