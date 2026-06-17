@@ -60,6 +60,7 @@ type Status struct {
     Uptime    int64    `json:"uptime"`
     BytesUp   int64    `json:"bytesUp"`
     BytesDown int64    `json:"bytesDown"`
+    Transport string   `json:"transport"`
 }
 
 // Manager — управление WireGuard VPN
@@ -360,12 +361,20 @@ func (m *Manager) GetStatus() Status {
         uptime = int64(time.Since(m.startTime).Seconds())
     }
 
+    transport := "kernel"
+    if m.stubMode {
+        transport = "stub"
+    } else if m.userspace != nil {
+        transport = "userspace"
+    }
+
     return Status{
         State:     m.state,
         MyIP:      m.myIP,
         MyPubKey:  m.pubKey,
         Peers:     peers,
         Uptime:    uptime,
+        Transport: transport,
     }
 }
 

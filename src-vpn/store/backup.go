@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // storePath holds the original database path for backup/restore.
@@ -81,7 +81,7 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 	dst.Sync()
 
 	// Reopen database
-	db, err := sql.Open("sqlite3", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
+	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("store: reopen db: %w", err)
 	}

@@ -10,6 +10,7 @@
 package nostr
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -25,17 +26,25 @@ const nip44Version = 0x02
 // ==================== Conversation Key ====================
 
 // computeConversationKey derives the NIP-44 v2 conversation key from ECDH.
-// conversation_key = SHA256(echd_shared_secret_x || "nip44-v2")
+//
+// Per the NIP-44 v2 spec the conversation key is an HKDF-Extract over the
+// ECDH shared x-coordinate using the ASCII salt "nip44-v2":
+//
+//	conversation_key = HKDF-Extract(salt="nip44-v2", ikm=shared_x)
+//	                 = HMAC-SHA256(key="nip44-v2", msg=shared_x)
+//
+// This produces a 32-byte pseudorandom key that is identical for both parties
+// because ECDH on secp256k1 is commutative.
 func computeConversationKey(privKey *btcec.PrivateKey, pubKey *btcec.PublicKey) ([32]byte, error) {
-	// ECDH: shared_x = privKey * pubKey (x-coordinate)
+	// ECDH: shared_x = privKey * pubKey (x-coordinate, 32 bytes)
 	sharedX := btcec.GenerateSharedSecret(privKey, pubKey)
 
-	// conversation_key = SHA256(shared_x || "nip44-v2")
-	h := sha256.New()
-	h.Write(sharedX)
-	h.Write([]byte("nip44-v2"))
+	// conversation_key = HMAC-SHA256("nip44-v2", shared_x)  [HKDF-Extract]
+	mac := hmac.New(sha256.New, []byte("nip44-v2"))
+	mac.Write(sharedX)
+
 	var key [32]byte
-	copy(key[:], h.Sum(nil))
+	copy(key[:], mac.Sum(nil))
 	return key, nil
 }
 

@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"crypto/rand"
+	"fmt"
 	"net"
 	"testing"
 )
@@ -126,9 +127,9 @@ func TestTransportStats(t *testing.T) {
 	}
 	defer tr2.Close()
 
-	// Set up peer addresses for bidirectional communication
-	tr1.peerAddr, _ = net.ResolveUDPAddr("udp", tr2.LocalAddr())
-	tr2.peerAddr, _ = net.ResolveUDPAddr("udp", tr1.LocalAddr())
+	// Set up peer addresses for bidirectional communication using localhost
+	tr1.peerAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("127.0.0.1:%d", tr2.localPort))
+	tr2.peerAddr, _ = net.ResolveUDPAddr("udp", fmt.Sprintf("127.0.0.1:%d", tr1.localPort))
 
 	// Send 3 packets
 	for i := 0; i < 3; i++ {

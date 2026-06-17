@@ -62,7 +62,7 @@ func (m *Manager) RegisterBot(name, ownerNpub, command string, handler BotHandle
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	id := fmt.Sprintf("bot-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("bot-%d-%d", time.Now().UnixNano(), len(m.bots))
 	reg := &BotRegistration{
 		ID:        id,
 		Name:      name,
@@ -197,7 +197,7 @@ func (sm *StickerManager) CreatePack(name, ownerNpub string, stickers []Sticker)
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	id := fmt.Sprintf("spk-%d", time.Now().UnixNano())
+	id := fmt.Sprintf("spk-%d-%d", time.Now().UnixNano(), len(sm.packs))
 	pack := &StickerPack{
 		ID:        id,
 		Name:      name,

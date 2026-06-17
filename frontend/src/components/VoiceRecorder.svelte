@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { showToast, myId } from '../lib/stores.js';
-  import { getWS } from '../lib/api.js';
+  import { getWS } from '../lib/ws.js';
   import * as VoiceMessages from '../lib/voice.js';
 
   let isRecording = $state(false);

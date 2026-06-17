@@ -253,3 +253,89 @@ func (l *TokenLedger) TotalSupply() int64 {
 	defer l.mu.RUnlock()
 	return l.total
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Integration hooks: economy rewards & slashing for proof-of-storage / bandwidth
+// ──────────────────────────────────────────────────────────────────────────────
+//
+// These hooks tie the token ledger and reputation system to the proof loops.
+// The storage/bandwidth schedulers call them via SchedulerCallbacks so that
+// verified work is rewarded and missed work is slashed.
+
+// Default reward and penalty amounts (in token units) when the caller does not
+// specify an explicit amount.
+const (
+	DefaultStorageProofReward   int64 = 100
+	DefaultBandwidthProofReward int64 = 50
+	DefaultSlashAmount          int64 = 50
+)
+
+// RewardForStorageProof mints a reward to a node for a verified storage proof
+// and raises its reputation. If amount <= 0 the default storage reward is used.
+// Returns the amount minted.
+func RewardForStorageProof(ledger *TokenLedger, rep *ReputationManager, nodeID string, amount int64) (int64, error) {
+	if nodeID == "" {
+		return 0, fmt.Errorf("nodeID must not be empty")
+	}
+	if amount <= 0 {
+		amount = DefaultStorageProofReward
+	}
+	if err := ledger.Mint(nodeID, amount, TokenReward); err != nil {
+		return 0, err
+	}
+	if rep != nil {
+		rep.UpdateReputation(nodeID, true)
+	}
+	return amount, nil
+}
+
+// RewardForBandwidthProof mints a reward to a node for verified bandwidth
+// (bytes served) and raises its reputation. If amount <= 0 the default
+// bandwidth reward is used. Returns the amount minted.
+func RewardForBandwidthProof(ledger *TokenLedger, rep *ReputationManager, nodeID string, amount int64) (int64, error) {
+	if nodeID == "" {
+		return 0, fmt.Errorf("nodeID must not be empty")
+	}
+	if amount <= 0 {
+		amount = DefaultBandwidthProofReward
+	}
+	if err := ledger.Mint(nodeID, amount, TokenReward); err != nil {
+		return 0, err
+	}
+	if rep != nil {
+		rep.UpdateReputation(nodeID, true)
+	}
+	return amount, nil
+}
+
+// SlashForStorageFailure penalizes a node that failed or timed out a storage
+// challenge. It lowers the node's reputation and slashes its stake (capped at
+// the current stake). If the node has no stake, only reputation is penalized.
+// If amount <= 0 the default slash amount is used. Returns the amount actually
+// slashed (may be 0 if the node has no stake).
+func SlashForStorageFailure(ledger *TokenLedger, rep *ReputationManager, nodeID string, amount int64) (int64, error) {
+	if nodeID == "" {
+		return 0, fmt.Errorf("nodeID must not be empty")
+	}
+	if amount <= 0 {
+		amount = DefaultSlashAmount
+	}
+	if rep != nil {
+		rep.UpdateReputation(nodeID, false)
+	}
+	if ledger == nil {
+		return 0, nil
+	}
+	staked := ledger.StakedBalance(nodeID)
+	if staked <= 0 {
+		return 0, nil
+	}
+	actual := amount
+	if actual > staked {
+		actual = staked
+	}
+	if err := ledger.Slash(nodeID, actual); err != nil {
+		return 0, err
+	}
+	return actual, nil
+}

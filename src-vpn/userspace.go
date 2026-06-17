@@ -21,6 +21,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash"
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -84,6 +85,8 @@ type UserspaceVPN struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	replayWindow *ReplayWindow
 }
 
 // UserspaceConfig holds configuration for the userspace VPN transport.
@@ -120,6 +123,10 @@ type peerSession struct {
 	lastActive  atomic.Int64 // unix timestamp
 	handshakeAt time.Time
 	conn        *net.UDPConn // cached connection to peer endpoint
+
+	// [0-05] Handshake retransmission
+	handshakeTimer *RetransmitTimer
+	handshakeDone  atomic.Bool
 }
 
 // NewUserspaceVPN creates a new userspace VPN transport.
@@ -132,8 +139,9 @@ func NewUserspaceVPN(config UserspaceConfig) (*UserspaceVPN, error) {
 	}
 
 	u := &UserspaceVPN{
-		config: config,
-		peers:  make(map[string]*peerSession),
+		config:       config,
+		peers:        make(map[string]*peerSession),
+		replayWindow: NewReplayWindow(0), // Uses DefaultReplayWindowSize
 	}
 
 	// Initialize keys
@@ -279,9 +287,10 @@ func (u *UserspaceVPN) AddPeer(info PeerInfo) error {
 	sessionKey := deriveSessionKey(sharedSecret, u.staticPublic[:], peerPub[:])
 
 	session := &peerSession{
-		info:       info,
-		peerStatic: peerPub,
-		handshakeAt: time.Now(),
+		info:           info,
+		peerStatic:     peerPub,
+		handshakeAt:    time.Now(),
+		handshakeTimer: NewRetransmitTimer(),
 	}
 	copy(session.sessionKey[:], sessionKey)
 
@@ -297,8 +306,9 @@ func (u *UserspaceVPN) AddPeer(info PeerInfo) error {
 		}
 	}
 
-	// Initiate handshake
-	_ = u.sendHandshakeInit(session)
+	// [0-05] Initiate handshake with retransmission
+	u.wg.Add(1)
+	go u.manageHandshake(session)
 
 	return nil
 }
@@ -526,6 +536,14 @@ func (u *UserspaceVPN) handleHandshakeInit(data []byte) {
 	if len(data) < 56 { // 4(type)+4(sender)+32(pubkey)+16(mac1)
 		return
 	}
+
+	// [0-04] Cookie replay protection
+	if !u.replayWindow.Check(data) {
+		// Drop replayed handshake packet silently or log it
+		log.Printf("[VPN] Dropping replayed handshake init packet")
+		return
+	}
+
 	var peerPub [32]byte
 	copy(peerPub[:], data[8:40])
 
@@ -552,6 +570,12 @@ func (u *UserspaceVPN) handleHandshakeResponse(data []byte) {
 	if len(data) < 28 { // 4(type)+4(sender)+4(receiver)+16(mac1)
 		return
 	}
+
+	// [0-04] Cookie replay protection
+	if !u.replayWindow.Check(data) {
+		return
+	}
+
 	u.mu.RLock()
 	defer u.mu.RUnlock()
 	
@@ -559,6 +583,10 @@ func (u *UserspaceVPN) handleHandshakeResponse(data []byte) {
 		expectedMAC := computeMAC1(u.staticPublic[:], data[:12])
 		if constantTimeEqual(data[12:28], expectedMAC) {
 			session.handshakeAt = time.Now()
+			session.handshakeDone.Store(true)
+			if session.handshakeTimer != nil {
+				session.handshakeTimer.Reset()
+			}
 			return
 		}
 	}
@@ -591,6 +619,51 @@ func (u *UserspaceVPN) sendHandshakeResponse(session *peerSession) error {
 		return err
 	}
 	return nil
+}
+
+// manageHandshake handles the retransmission loop for handshake initiations.
+func (u *UserspaceVPN) manageHandshake(session *peerSession) {
+	defer u.wg.Done()
+
+	// Send initial handshake
+	_ = u.sendHandshakeInit(session)
+
+	for {
+		if session.handshakeTimer == nil {
+			return // Cannot retransmit without timer
+		}
+		if session.handshakeDone.Load() {
+			return
+		}
+		if u.ctx != nil && u.ctx.Err() != nil {
+			return
+		}
+
+		if session.handshakeTimer.ShouldRetransmit() {
+			attempts, err := session.handshakeTimer.RecordRetransmit()
+			if err != nil {
+				log.Printf("[VPN] Handshake max retries exceeded for peer %s", session.info.ID)
+				return
+			}
+			log.Printf("[VPN] Retransmitting handshake init for peer %s (attempt %d)", session.info.ID, attempts)
+			_ = u.sendHandshakeInit(session)
+		}
+
+		delay := session.handshakeTimer.NextBackoff()
+		if delay == 0 {
+			return // Budget exhausted
+		}
+
+		if u.ctx == nil {
+			<-time.After(delay)
+		} else {
+			select {
+			case <-time.After(delay):
+			case <-u.ctx.Done():
+				return
+			}
+		}
+	}
 }
 
 // keepaliveLoop sends periodic keepalive packets to all peers.

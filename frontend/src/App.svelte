@@ -12,6 +12,7 @@
   import VpnPanel from './components/VpnPanel.svelte';
   import ChannelsPanel from './components/ChannelsPanel.svelte';
   import IdentityPanel from './components/IdentityPanel.svelte';
+  import WebRtcMvp from './components/WebRtcMvp.svelte';
 
   let currentTab = $state('chat');
   let toastMsg = $state('');
@@ -111,6 +112,8 @@
       <ChannelsPanel />
     {:else if currentTab === 'identity'}
       <IdentityPanel />
+    {:else if currentTab === 'mvp'}
+      <WebRtcMvp />
     {/if}
   </div>
 </div>

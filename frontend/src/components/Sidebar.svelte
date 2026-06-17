@@ -12,6 +12,7 @@
     { id: 'vpn', icon: '🌐', label: 'VPN' },
     { id: 'channels', icon: '📡', label: 'Каналы' },
     { id: 'identity', icon: '👤', label: 'Я' },
+    { id: 'mvp', icon: '🧪', label: 'MVP' },
   ];
 
   async function loadChannels() {
