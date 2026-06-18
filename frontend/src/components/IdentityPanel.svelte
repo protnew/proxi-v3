@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { connState, connText, myId, onlineUsers, groups, showToast, escHtml } from '../lib/stores.js';
+  import { apiFetch } from '../lib/api.js';
 
   let npub = $state('загрузка...');
   let seedCard = $state(false);
@@ -19,8 +20,7 @@
 
   async function loadIdentity() {
     try {
-      const r = await fetch('/api/identity');
-      const d = await r.json();
+      const d = await apiFetch('/api/identity');
       npub = d.npub;
       if (d.isNew && d.mnemonic) {
         seedCard = true;
@@ -35,8 +35,7 @@
     showGroupMembers = true;
 
     try {
-      const r = await fetch('/api/groups/members?group_id=' + encodeURIComponent(groupId));
-      const d = await r.json();
+      const d = await apiFetch('/api/groups/members?group_id=' + encodeURIComponent(groupId));
       groupMembers = d.members || d || [];
     } catch (e) {
       groupMembers = [];
@@ -47,19 +46,14 @@
     const name = prompt('Название группы:');
     if (!name || !name.trim()) return;
     try {
-      const r = await fetch('/api/groups/create', {
+      await apiFetch('/api/groups/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), creator: npub || 'anonymous' }),
       });
-      if (!r.ok) {
-        const d = await r.json();
-        showToast('❌ ' + (d.error?.message || 'Ошибка'));
-        return;
-      }
       showToast('✅ Группа «' + name.trim() + '» создана!');
     } catch (e) {
-      showToast('❌ Ошибка создания группы');
+      showToast('❌ ' + (e.message || 'Ошибка создания группы'));
     }
   }
 

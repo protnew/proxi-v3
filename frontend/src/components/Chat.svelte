@@ -1,8 +1,8 @@
 <script>
   import { onMount } from 'svelte';
-  import { messages, myId, showToast } from '../lib/stores.js';
+  import { messages, myId, showToast, escHtml } from '../lib/stores.js';
   import { sendMessage, getWS } from '../lib/ws.js';
-  import { createWebSocket, getMessages as apiGetMessages } from '../lib/api.js';
+  import { createWebSocket, getMessages as apiGetMessages, apiFetch } from '../lib/api.js';
   import * as VoiceMessages from '../lib/voice.js';
   import * as OfflineStorage from '../lib/offline.js';
   import * as WebRTCCall from '../lib/webrtc.js';
@@ -152,8 +152,7 @@
 
   async function ipfsAttach() {
     try {
-      const r = await fetch('/api/ipfs/status');
-      const d = await r.json();
+      const d = await apiFetch('/api/ipfs/status');
       if (!d.available) {
         showToast('IPFS недоступен');
         return;
@@ -173,7 +172,13 @@
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const r = await fetch('/api/ipfs/upload', { method: 'POST', body: fd });
+      
+      const token = localStorage.getItem('proxi_jwt') || '';
+      const r = await fetch('/api/ipfs/upload', { 
+        method: 'POST', 
+        body: fd,
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         showToast('❌ Ошибка загрузки: ' + (err.error || r.statusText));

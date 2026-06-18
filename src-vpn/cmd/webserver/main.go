@@ -303,8 +303,19 @@ func truncate(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
-func containsPathTraversal(path string) bool {
-	return strings.Contains(path, "..") || strings.Contains(path, "\\")
+func containsPathTraversal(pathStr string) bool {
+	return strings.Contains(pathStr, "..") || strings.Contains(pathStr, "\\")
+}
+
+func secureJoin(baseDir, targetFile string) (string, error) {
+	cleanBase := filepath.Clean(baseDir)
+	targetPath := filepath.Join(cleanBase, targetFile)
+	cleanTarget := filepath.Clean(targetPath)
+	
+	if !strings.HasPrefix(cleanTarget, cleanBase+string(filepath.Separator)) {
+		return "", fmt.Errorf("path traversal attempt")
+	}
+	return cleanTarget, nil
 }
 
 // ========== Server startup ==========
@@ -469,12 +480,17 @@ func run() error {
 	fs := http.FileServer(http.Dir(distDir))
 
 	// API routes with middleware chain
-	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
+	publicApiChain := func(h http.HandlerFunc) http.HandlerFunc {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
 
-	http.HandleFunc("/api/health", apiChain(handleHealth))
-	http.HandleFunc("/api/status", apiChain(handleStatus))
+	authService := auth.NewAuthService(os.Getenv("JWT_SECRET"))
+	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
+		return publicApiChain(authMiddleware(authService, h))
+	}
+
+	http.HandleFunc("/api/health", publicApiChain(handleHealth))
+	http.HandleFunc("/api/status", publicApiChain(handleStatus))
 	http.HandleFunc("/api/messages", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
@@ -580,8 +596,7 @@ func run() error {
 	http.HandleFunc("/api/federation/sync", apiChain(handleFederationSync))
 
 	// Auth endpoints (D1 — JWT authentication)
-	authService := auth.NewAuthService(os.Getenv("JWT_SECRET"))
-	http.HandleFunc("/api/auth/signup", apiChain(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
@@ -612,7 +627,7 @@ func run() error {
 		}
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
 	}))
-	http.HandleFunc("/api/auth/login", apiChain(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/auth/login", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
@@ -631,7 +646,7 @@ func run() error {
 		accessToken, refreshToken, _ := authService.GenerateTokenPair(userID, npub)
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
 	}))
-	http.HandleFunc("/api/auth/refresh", apiChain(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/auth/refresh", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return

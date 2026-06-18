@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { contacts, showToast, escHtml } from '../lib/stores.js';
+  import { apiFetch } from '../lib/api.js';
 
   let contactId = $state('');
   let contactName = $state('');
@@ -12,8 +13,7 @@
 
   async function loadContacts() {
     try {
-      const r = await fetch('/api/contacts');
-      const d = await r.json();
+      const d = await apiFetch('/api/contacts');
       contacts.set(d.contacts || []);
     } catch (e) {
       console.warn('Failed to load contacts', e);
@@ -26,7 +26,7 @@
       return;
     }
     try {
-      const r = await fetch('/api/contacts', {
+      const d = await apiFetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -39,11 +39,6 @@
           useAsVpnNode: useAsVpnNode
         }),
       });
-      const d = await r.json();
-      if (!r.ok) {
-        showToast('❌ ' + (d.error?.message || 'Ошибка сохранения'));
-        return;
-      }
       
       // Reset form
       contactId = '';
@@ -57,27 +52,22 @@
       showToast('✅ Контакт сохранен!');
       loadContacts();
     } catch (e) {
-      showToast('❌ Ошибка сохранения контакта');
+      showToast('❌ ' + (e.message || 'Ошибка сохранения контакта'));
     }
   }
 
   async function removeContact(id, publicKey) {
     if (!confirm('Удалить контакт ' + id + '?')) return;
     try {
-      const r = await fetch('/api/contacts', {
+      await apiFetch('/api/contacts', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, publicKey }),
       });
-      if (!r.ok) {
-        const d = await r.json();
-        showToast('❌ ' + (d.error?.message || 'Ошибка'));
-        return;
-      }
       showToast('🗑 Контакт удалён');
       loadContacts();
     } catch (e) {
-      showToast('❌ Ошибка удаления контакта');
+      showToast('❌ ' + (e.message || 'Ошибка удаления контакта'));
     }
   }
 
@@ -105,7 +95,7 @@
 
     for (const tf of testFriends) {
       try {
-        await fetch('/api/contacts', {
+        await apiFetch('/api/contacts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(tf),

@@ -146,7 +146,8 @@ func handleFileGet(w http.ResponseWriter, r *http.Request) {
 // handleFileDownload serves a file by ID.
 func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 	// Security check
-	if containsPathTraversal(fileID) {
+	filePath, err := secureJoin(uploadDir(), fileID)
+	if err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
@@ -159,11 +160,15 @@ func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 	}
 
 	// Serve the file
-	filePath := filepath.Join(uploadDir(), fileID)
+	disposition := "attachment"
+	if strings.HasPrefix(fm.Type, "image/") || strings.HasPrefix(fm.Type, "video/") || strings.HasPrefix(fm.Type, "audio/") {
+		disposition = "inline"
+	}
+	
 	if fm.Type != "" {
 		w.Header().Set("Content-Type", fm.Type)
 	}
-	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, fm.Name))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, fm.Name))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", fm.Size))
 	http.ServeFile(w, r, filePath)
 }
@@ -187,13 +192,13 @@ func handleFileList(w http.ResponseWriter, r *http.Request) {
 
 // handleFileDelete removes a file by ID.
 func handleFileDelete(w http.ResponseWriter, r *http.Request, fileID string) {
-	if containsPathTraversal(fileID) {
+	filePath, err := secureJoin(uploadDir(), fileID)
+	if err != nil {
 		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
 	// Delete from disk
-	filePath := filepath.Join(uploadDir(), fileID)
 	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 		log.Printf("WARNING: failed to delete file %s: %v", filePath, err)
 	}

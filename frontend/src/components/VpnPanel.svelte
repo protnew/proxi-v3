@@ -1,6 +1,7 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
   import { showToast, contacts } from '../lib/stores.js';
+  import { apiFetch } from '../lib/api.js';
 
   let vpnSharing = $state(false);
   let vpnSeconds = $state(0);
@@ -14,14 +15,14 @@
       clearInterval(vpnTimer);
       vpnSeconds = 0;
       showToast('Точка доступа остановлена');
-      fetch('/api/vpn/rpc', {
+      apiFetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method: 'stop_exit_node', params: {} }),
       }).catch(() => {});
     } else {
       vpnSharing = true;
-      fetch('/api/vpn/rpc', {
+      apiFetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method: 'start_exit_node', params: {} }),
@@ -39,7 +40,7 @@
   async function connectToNode(c) {
     if (isConnectedToNode && connectingTo === c.publicKey) {
       // Disconnect
-      fetch('/api/vpn/rpc', {
+      apiFetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ method: 'disconnect', params: {} }),
@@ -53,7 +54,7 @@
     connectingTo = c.publicKey;
     showToast('Подключение к ' + c.name + '...');
     try {
-      const r = await fetch('/api/vpn/rpc', {
+      await apiFetch('/api/vpn/rpc', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -61,15 +62,10 @@
           params: { publicKey: c.publicKey, endpoint: c.endpoint }
         }),
       });
-      if (r.ok) {
-        showToast('✅ Подключено к ' + c.name);
-        isConnectedToNode = true;
-      } else {
-        showToast('❌ Ошибка подключения');
-        connectingTo = null;
-      }
+      showToast('✅ Подключено к ' + c.name);
+      isConnectedToNode = true;
     } catch (e) {
-      showToast('❌ Ошибка подключения');
+      showToast('❌ ' + (e.message || 'Ошибка подключения'));
       connectingTo = null;
     }
   }

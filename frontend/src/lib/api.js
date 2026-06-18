@@ -72,7 +72,7 @@ export async function login(npub) {
     method: 'POST',
     body: JSON.stringify({ npub }),
   });
-  if (data.token) setToken(data.token);
+  if (data.access_token) setToken(data.access_token);
   return data;
 }
 
@@ -81,7 +81,7 @@ export async function signup(npub, username) {
     method: 'POST',
     body: JSON.stringify({ npub, username }),
   });
-  if (data.token) setToken(data.token);
+  if (data.access_token) setToken(data.access_token);
   return data;
 }
 
