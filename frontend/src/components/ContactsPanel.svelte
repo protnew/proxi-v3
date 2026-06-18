@@ -90,7 +90,7 @@
         endpoint: '192.168.1.102:51820',
         isMessengerFriend: true,
         grantVpnAccess: true,
-        useAsVpnNode: false
+        useAsVpnNode: true
       },
       {
         id: 'npub1mocktestfriend3smartphone000000000000000000000000000000000',
@@ -98,7 +98,7 @@
         publicKey: 'mockwgkey3smartphone00000000000000000000000=',
         endpoint: '192.168.1.103:51820',
         isMessengerFriend: true,
-        grantVpnAccess: false,
+        grantVpnAccess: true,
         useAsVpnNode: true
       }
     ];
