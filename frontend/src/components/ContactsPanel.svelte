@@ -81,6 +81,43 @@
     }
   }
 
+  async function generateTestFriends() {
+    const testFriends = [
+      {
+        id: 'npub1mocktestfriend2smartphone000000000000000000000000000000000',
+        name: 'Смартфон 2',
+        publicKey: 'mockwgkey2smartphone00000000000000000000000=',
+        endpoint: '192.168.1.102:51820',
+        isMessengerFriend: true,
+        grantVpnAccess: true,
+        useAsVpnNode: false
+      },
+      {
+        id: 'npub1mocktestfriend3smartphone000000000000000000000000000000000',
+        name: 'Смартфон 3',
+        publicKey: 'mockwgkey3smartphone00000000000000000000000=',
+        endpoint: '192.168.1.103:51820',
+        isMessengerFriend: true,
+        grantVpnAccess: false,
+        useAsVpnNode: true
+      }
+    ];
+
+    for (const tf of testFriends) {
+      try {
+        await fetch('/api/contacts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tf),
+        });
+      } catch (e) {
+        console.warn('Failed to save test friend', e);
+      }
+    }
+    showToast('✅ Тестовые друзья сгенерированы!');
+    loadContacts();
+  }
+
   onMount(() => {
     loadContacts();
   });
@@ -122,6 +159,11 @@
     </div>
 
     <button onclick={addContact} class="submit-btn">Сохранить контакт</button>
+  </div>
+
+  <div class="card test-actions">
+    <h3>🧪 Тестирование</h3>
+    <button onclick={generateTestFriends} class="submit-btn generate-btn">Сгенерировать тестовых друзей</button>
   </div>
 
   <div class="contacts-list">
