@@ -1,75 +1,27 @@
-# 🔥 Unkillable Messenger
+# Proxi - Unkillable Messenger
 
-Децентрализованный мессенджер + VPN + контент-платформа.
+A decentralized peer-to-peer messenger with built-in VPN capabilities. No accounts, no phone numbers, no central servers. Pure P2P communication that cannot be shut down by any single authority.
 
-## Killer Feature: «Поделись интернет»
+## Why This Project Exists
 
-Нажал кнопку → друг получил VPN-точку через твоё устройство. Без серверов. Без провайдеров. P2P.
+Internet censorship affects over 3 billion people worldwide (Freedom House). In restricted regions people cannot freely communicate or access information. Traditional messengers rely on central servers that can be blocked or shut down. Even VPN services can be detected and blocked.
 
-## Архитектура
+Proxi takes a different approach: every device is both a client and a relay node. No central server to block, no company to subpoena, no single point of failure.
 
-```
-┌─────────────────────────────────────────────────┐
-│                  UI (Tauri + Svelte)             │
-├─────────────┬──────────────┬────────────────────┤
-│  Nostr Chat │  VPN Module  │   IPFS Storage     │
-│  (текст/мей)│  (Netbird/WG)│   (файлы/видео)    │
-├─────────────┴──────────────┴────────────────────┤
-│              P2P Mesh Network                    │
-│         WireGuard + STUN/TURN + libp2p           │
-└─────────────────────────────────────────────────┘
-```
+## Core Innovation: Share Internet
 
-## Стек
+One tap turns your device into a VPN endpoint for contacts in censored regions. Your friend connects through you, bypassing firewalls, without any central infrastructure to detect and block. Real peer-to-peer internet sharing.
 
-| Компонент | Технология |
-|---|---|
-| UI Framework | Tauri 2.x + Svelte 5 |
-| VPN ядро | Netbird (Go, BSD-3) |
-| Мессенджер | Nostr protocol |
-| Хранение | IPFS / Helia |
-| Шифрование | WireGuard (ChaCha20-Poly1305) |
-| Анонимность | Tor (опционально) |
+## Current State
 
-## Быстрый старт
+Solo-developer project. The core P2P stack is functional:
 
-```bash
-# Установка зависимостей
-npm install
+- Peer discovery via distributed hash table (DHT)
+- NAT traversal with UDP hole-punching and relay fallback
+- End-to-end encrypted messaging (double-ratchet protocol, same as Signal)
+- VPN relay functionality
+- Go-based single binary with no external dependencies
 
-# Разработка
-npm run tauri dev
+## Vision
 
-# Сборка
-npm run tauri build
-```
-
-## Roadmap
-
-### Phase 0: VPN-ядро (MVP) — 4 недели
-- Netbird fork → desktop клиент
-- Кнопка «Поделись интернет» (exit node)
-- WireGuard mesh между 2+ устройствами
-
-### Phase 1: Мессенджер — 6 недель
-- Nostr-клиент (чат 1-1)
-- Peer discovery через Nostr relays
-- Шифрованные сообщения (NIP-04/NIP-44)
-
-### Phase 2: Каналы + контент — 8 недель
-- Nostr channels (публичные каналы)
-- IPFS для файлов/фото
-- Push-to-talk голос
-
-### Phase 3: Платформа — 12 недель
-- Видео (HLS сегменты через IPFS)
-- Подписки на каналы
-- Premium ($3/мес)
-
-## Лицензия
-
-AGPL-3.0 — open source, все изменения должны быть открыты
-
-## Контакты
-
-Alexey Shekhovtsov — TG: @Alex1452
+Build the definitive anti-censorship communication platform: iOS and Android mobile clients, file sharing through the P2P network, group messaging with efficient multicast, Tor bridge integration for extreme censorship scenarios, bandwidth optimization for satellite connections, and 15+ language interface. Make free communication available to everyone on the planet.
