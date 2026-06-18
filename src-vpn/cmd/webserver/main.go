@@ -322,6 +322,7 @@ func secureJoin(baseDir, targetFile string) (string, error) {
 
 var startTime time.Time
 var distDir string
+var globalAuthService *auth.AuthService
 
 func main() {
 	// Initialize Sentry (no-op if SENTRY_DSN is empty)
@@ -484,9 +485,9 @@ func run() error {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
 
-	authService := auth.NewAuthService(os.Getenv("JWT_SECRET"))
+	globalAuthService = auth.NewAuthService(os.Getenv("JWT_SECRET"))
 	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
-		return publicApiChain(authMiddleware(authService, h))
+		return publicApiChain(authMiddleware(globalAuthService, h))
 	}
 
 	http.HandleFunc("/api/health", publicApiChain(handleHealth))

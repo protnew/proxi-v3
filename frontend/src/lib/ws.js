@@ -16,8 +16,15 @@ export function getWS() {
 
 export function connectWS() {
   const id = get(myId);
+  const token = localStorage.getItem('proxi_jwt');
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const url = proto + '//' + location.host + '/ws?userId=' + encodeURIComponent(id);
+  
+  let url = proto + '//' + location.host + '/ws?';
+  if (token) {
+    url += 'token=' + encodeURIComponent(token) + '&';
+  }
+  url += 'userId=' + encodeURIComponent(id);
+  
   ws = new WebSocket(url);
   ws.binaryType = 'arraybuffer';
 

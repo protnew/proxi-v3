@@ -24,7 +24,18 @@ var hub *chat.ChatHub
 
 // handleWS upgrades HTTP to WebSocket and registers client
 func handleWS(w http.ResponseWriter, r *http.Request) {
-	userId := r.URL.Query().Get("userId")
+	userId := ""
+	tokenStr := r.URL.Query().Get("token")
+	if tokenStr != "" && globalAuthService != nil {
+		if claims, err := globalAuthService.ValidateToken(tokenStr); err == nil {
+			userId = claims.UserID
+		}
+	}
+	
+	if userId == "" {
+		userId = r.URL.Query().Get("userId")
+	}
+	
 	if userId == "" {
 		userId = "anon-" + randomHex(4)
 	}
