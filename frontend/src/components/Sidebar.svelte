@@ -79,26 +79,28 @@
 <style>
   .sidebar {
     width: 80px;
-    background: rgba(10, 10, 10, 0.9);
-    backdrop-filter: blur(20px);
+    background: var(--bg-panel);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     display: flex;
     flex-direction: column;
     align-items: center;
-    padding: 20px 0;
+    padding: 24px 0;
     gap: 12px;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    border-right: 1px solid var(--border-glass);
     flex-shrink: 0;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+    box-shadow: 2px 0 15px var(--shadow-glass);
     z-index: 50;
   }
   .logo {
     font-size: 32px;
     margin-bottom: 20px;
     cursor: pointer;
-    transition: transform 0.2s;
+    transition: transform 0.2s, filter 0.2s;
   }
   .logo:hover {
     transform: scale(1.1);
+    filter: drop-shadow(0 0 10px rgba(255, 100, 100, 0.6));
   }
   .tab-wrap {
     position: relative;
@@ -110,50 +112,52 @@
     width: 60px;
     height: 60px;
     background: transparent;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
+    border: 1px solid transparent;
+    color: var(--text-muted);
     border-radius: 16px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 6px;
     transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .tab:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: var(--bg-glass);
+    border-color: var(--border-glass);
+    color: var(--text-primary);
     transform: translateY(-2px);
   }
   .tab.active {
-    background: linear-gradient(135deg, #1e88e5, #1565c0);
-    color: #ffffff;
-    box-shadow: 0 4px 15px rgba(30, 136, 229, 0.4);
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #ffffff; /* Active button text is always white regardless of theme */
+    box-shadow: 0 4px 15px rgba(2, 136, 209, 0.4);
+    border-color: transparent;
   }
   .icon {
     font-size: 22px;
   }
   .label {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 500;
   }
   .badge {
     position: absolute;
-    top: -2px;
-    right: 6px;
-    background: #ff5252;
+    top: -4px;
+    right: 4px;
+    background: var(--error);
     color: #ffffff;
     font-size: 10px;
-    min-width: 18px;
-    height: 18px;
-    border-radius: 9px;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0 4px;
     font-weight: 700;
-    box-shadow: 0 2px 5px rgba(255, 82, 82, 0.5);
+    box-shadow: 0 2px 8px rgba(211, 47, 47, 0.5);
   }
   .logout-wrap {
     margin-top: auto;

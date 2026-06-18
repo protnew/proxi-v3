@@ -192,21 +192,25 @@
   .header-row h1 {
     font-size: 20px;
     font-weight: 600;
+    color: var(--text-primary);
   }
   .card {
-    background: rgba(20, 20, 20, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-glass);
     border-radius: 14px;
     padding: 20px;
     margin-bottom: 20px;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: var(--shadow-glass);
   }
   .card h3 {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
   }
   .form-group {
     margin-bottom: 12px;
@@ -214,16 +218,18 @@
   .form-input {
     width: 100%;
     padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-strong);
     border-radius: 10px;
-    color: #fff;
+    color: var(--text-primary);
     font-size: 14px;
     outline: none;
-    transition: border-color 0.2s;
+    transition: all 0.2s;
   }
   .form-input:focus {
-    border-color: #1e88e5;
+    border-color: var(--accent);
+    background: var(--bg-body);
+    box-shadow: 0 0 10px rgba(2, 136, 209, 0.2);
   }
   .form-input.mono {
     font-family: monospace;
@@ -241,39 +247,41 @@
     gap: 12px;
     font-size: 14px;
     cursor: pointer;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
   }
   .toggle-row input[type="checkbox"] {
     width: 18px;
     height: 18px;
-    accent-color: #1e88e5;
+    accent-color: var(--accent);
   }
   .submit-btn {
     width: 100%;
     padding: 14px;
-    background: linear-gradient(135deg, #1e88e5, #1565c0);
-    color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #ffffff;
     border: none;
     border-radius: 10px;
     cursor: pointer;
     font-size: 15px;
     font-weight: 600;
     transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(2, 136, 209, 0.3);
   }
   .submit-btn:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 15px rgba(30, 136, 229, 0.3);
+    box-shadow: 0 6px 20px rgba(2, 136, 209, 0.5);
   }
   
   .contacts-list h3 {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
   }
   .empty {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-muted);
     text-align: center;
     padding: 20px;
     font-size: 14px;
@@ -282,11 +290,17 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(20, 20, 20, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-body);
+    border: 1px solid var(--border-glass);
     border-radius: 12px;
     padding: 16px;
     margin-bottom: 12px;
+    transition: all 0.2s;
+  }
+  .contact-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
   .c-info {
     display: flex;
@@ -296,11 +310,12 @@
   .c-name {
     font-weight: 600;
     font-size: 15px;
+    color: var(--text-primary);
   }
   .c-id {
     font-family: monospace;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
   }
   .c-roles {
     display: flex;
@@ -311,7 +326,7 @@
     font-size: 10px;
     padding: 2px 8px;
     border-radius: 10px;
-    font-weight: 600;
+    font-weight: 700;
     text-transform: uppercase;
   }
   .badge-chat { background: rgba(76, 175, 80, 0.2); color: #81c784; }
@@ -320,7 +335,7 @@
   
   .remove-btn {
     background: rgba(244, 67, 54, 0.1);
-    color: #f44336;
+    color: var(--error);
     border: 1px solid rgba(244, 67, 54, 0.3);
     width: 32px;
     height: 32px;
@@ -332,7 +347,7 @@
     transition: all 0.2s;
   }
   .remove-btn:hover {
-    background: rgba(244, 67, 54, 0.8);
-    color: #fff;
+    background: var(--error);
+    color: #ffffff;
   }
 </style>

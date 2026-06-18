@@ -245,11 +245,15 @@ func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Message too long (max 10000 chars)")
 		return
 	}
-	if req.From == "" {
-		req.From = "anonymous"
-	}
 	if req.To == "" {
 		req.To = "broadcast"
+	}
+	
+	// Force sender from context (JWT token) to prevent spoofing
+	if userNpub, ok := r.Context().Value("npub").(string); ok && userNpub != "" {
+		req.From = userNpub
+	} else if req.From == "" {
+		req.From = "anonymous"
 	}
 
 	msg := store.Message{

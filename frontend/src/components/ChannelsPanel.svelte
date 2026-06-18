@@ -98,95 +98,114 @@
   .channels-panel h1 {
     font-size: 20px;
     margin-bottom: 24px;
+    color: var(--text-primary);
   }
   .id-card {
-    background: #111;
+    background: var(--bg-panel);
     border-radius: 14px;
     padding: 20px;
-    border: 1px solid #222;
+    border: 1px solid var(--border-glass);
     margin-bottom: 16px;
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: var(--shadow-glass);
   }
   .id-card h3 {
     font-size: 13px;
-    color: #888;
+    color: var(--text-secondary);
     margin-bottom: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
   }
   .form-input {
     width: 100%;
-    padding: 10px 14px;
-    background: #0a0a0a;
-    border: 1px solid #333;
-    border-radius: 8px;
-    color: #e0e0e0;
+    padding: 12px 16px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    color: var(--text-primary);
     font-size: 13px;
     outline: none;
+    transition: all 0.2s;
+  }
+  .form-input:focus {
+    border-color: var(--accent);
+    background: var(--bg-body);
+    box-shadow: 0 0 10px rgba(2, 136, 209, 0.2);
   }
   .submit-btn {
     width: 100%;
-    padding: 12px;
-    background: #1e88e5;
-    color: #fff;
+    padding: 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #ffffff;
     border: none;
     border-radius: 10px;
     cursor: pointer;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     transition: all 0.2s;
+    box-shadow: 0 4px 15px rgba(2, 136, 209, 0.3);
   }
   .submit-btn:hover {
-    background: #1565c0;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(2, 136, 209, 0.5);
   }
   .empty {
-    color: #333;
+    color: var(--text-muted);
     font-size: 12px;
     padding: 20px;
     text-align: center;
   }
   .channel-card {
     padding: 16px;
-    background: #111;
+    background: var(--bg-body);
     border-radius: 12px;
-    border: 1px solid #1a1a1a;
+    border: 1px solid var(--border-glass);
     margin-bottom: 10px;
     cursor: pointer;
     transition: all 0.2s;
   }
   .channel-card:hover {
-    border-color: #1e88e5;
-    background: #151515;
+    border-color: var(--accent);
+    background: var(--bg-glass);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
   .channel-name {
-    font-size: 14px;
-    font-weight: 500;
+    font-size: 15px;
+    font-weight: 600;
     margin-bottom: 4px;
+    color: var(--text-primary);
   }
   .channel-desc {
     font-size: 12px;
-    color: #666;
+    color: var(--text-secondary);
   }
   .channel-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 8px;
+    margin-top: 10px;
   }
   .channel-meta {
     font-size: 11px;
-    color: #444;
+    color: var(--text-muted);
   }
   .sub-btn {
-    padding: 4px 12px;
-    background: #1e88e5;
-    color: #fff;
+    padding: 6px 14px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #ffffff;
     border: none;
-    border-radius: 6px;
+    border-radius: 8px;
     cursor: pointer;
     font-size: 11px;
+    font-weight: 600;
+    transition: all 0.2s;
   }
   .sub-btn:hover {
-    background: #1565c0;
+    box-shadow: 0 4px 12px rgba(2, 136, 209, 0.4);
+    transform: translateY(-1px);
   }
   .channel-unread {
     margin-top: 6px;

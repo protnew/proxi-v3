@@ -314,23 +314,26 @@
   .welcome h3 {
     margin-bottom: 8px;
     font-size: 18px;
+    color: var(--text-primary);
   }
   .welcome p {
     font-size: 13px;
     line-height: 1.5;
+    color: var(--text-primary);
   }
   .typing {
     padding: 4px 16px;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     min-height: 20px;
     font-style: italic;
   }
   .reply-bar {
     padding: 8px 12px;
-    background: rgba(20, 20, 20, 0.8);
-    backdrop-filter: blur(10px);
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid var(--border-glass);
     display: flex;
     align-items: center;
     gap: 8px;
@@ -338,17 +341,17 @@
   .reply-preview {
     flex: 1;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.8);
-    border-left: 3px solid #4fc3f7;
+    color: var(--text-primary);
+    border-left: 3px solid var(--accent);
     padding-left: 10px;
   }
   .rp-from {
-    color: #4fc3f7;
+    color: var(--accent);
     font-size: 12px;
-    font-weight: 500;
+    font-weight: 600;
   }
   .rp-text {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     margin-top: 2px;
     max-width: 300px;
     overflow: hidden;
@@ -358,70 +361,73 @@
   .reply-cancel {
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 20px;
     padding: 4px;
     transition: color 0.2s;
   }
   .reply-cancel:hover {
-    color: #ffffff;
+    color: var(--error);
   }
   .input-bar {
     display: flex;
     padding: 12px 16px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid var(--border-glass);
     gap: 10px;
-    background: rgba(10, 10, 10, 0.8);
-    backdrop-filter: blur(15px);
+    background: var(--bg-panel);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
   }
   .input-bar input {
     flex: 1;
     padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-strong);
     border-radius: 20px;
-    color: #ffffff;
+    color: var(--text-primary);
     font-size: 15px;
     outline: none;
     transition: all 0.2s;
   }
   .input-bar input::placeholder {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-muted);
   }
   .input-bar input:focus {
-    border-color: #4fc3f7;
-    background: rgba(255, 255, 255, 0.1);
-    box-shadow: 0 0 10px rgba(79, 195, 247, 0.2);
+    border-color: var(--accent);
+    background: var(--bg-glass);
+    box-shadow: 0 0 12px rgba(2, 136, 209, 0.3);
   }
   .input-bar button {
     padding: 12px 20px;
-    background: linear-gradient(135deg, #1e88e5, #1565c0);
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
     color: #ffffff;
     border: none;
     border-radius: 20px;
     cursor: pointer;
     font-size: 16px;
-    font-weight: 500;
+    font-weight: 600;
     transition: all 0.2s;
-    box-shadow: 0 4px 15px rgba(30, 136, 229, 0.3);
+    box-shadow: 0 4px 15px rgba(2, 136, 209, 0.3);
   }
   .input-bar button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(30, 136, 229, 0.5);
+    box-shadow: 0 6px 20px rgba(2, 136, 209, 0.5);
   }
   .tool-btn {
     min-width: 44px;
     font-size: 16px !important;
-    background: rgba(255, 255, 255, 0.1) !important;
+    background: var(--bg-glass) !important;
+    border: 1px solid var(--border-glass) !important;
     border-radius: 50% !important;
     padding: 0 !important;
     display: flex;
     align-items: center;
     justify-content: center;
     box-shadow: none !important;
+    transition: all 0.2s;
   }
   .tool-btn:hover {
-    background: rgba(255, 255, 255, 0.2) !important;
+    background: var(--border-strong) !important;
   }
 </style>

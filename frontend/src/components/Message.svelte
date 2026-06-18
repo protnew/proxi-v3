@@ -28,7 +28,9 @@
           src={msg.audioUrl || (msg.audioBlob ? URL.createObjectURL(msg.audioBlob) : '')}
           style="height:32px;max-width:200px"
         ></audio>
-        <span style="font-size:10px;color:#666;margin-left:4px">{msg.duration}с</span>
+        {#if msg.type === 'audio'}
+          <span style="font-size:10px;color:var(--text-muted);margin-left:4px">{msg.duration}с</span>
+        {/if}
       </div>
     </div>
     <div class="msg-time">{msg.time}</div>
@@ -77,35 +79,37 @@
     margin-left: auto;
   }
   .msg-bubble {
-    padding: 12px 16px;
+    max-width: 75%;
+    padding: 10px 14px;
     border-radius: 18px;
     font-size: 15px;
     line-height: 1.4;
     word-wrap: break-word;
-    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    box-shadow: var(--shadow-glass);
   }
   .msg.me .msg-bubble {
-    background: linear-gradient(135deg, #1e88e5, #1565c0);
-    color: #ffffff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #ffffff; /* User bubble always white */
     border-bottom-right-radius: 4px;
   }
   .msg.other .msg-bubble {
-    background: rgba(40, 40, 40, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    background: var(--bg-panel);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
     border-bottom-left-radius: 4px;
   }
   .msg.system .msg-bubble {
     background: transparent;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     font-size: 12px;
     text-align: center;
     box-shadow: none;
   }
   .msg-time {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--text-muted);
     margin-top: 4px;
   }
   .msg.me .msg-time {
@@ -113,9 +117,9 @@
   }
   .msg-sender {
     font-size: 12px;
-    color: #4fc3f7;
+    color: var(--accent);
     margin-bottom: 4px;
-    font-weight: 500;
+    font-weight: 600;
   }
   .msg-actions {
     position: absolute;
@@ -131,9 +135,9 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: rgba(30, 30, 30, 0.9);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #ffffff;
+    background: var(--bg-body);
+    border: 1px solid var(--border-glass);
+    color: var(--text-primary);
     cursor: pointer;
     font-size: 14px;
     display: flex;
@@ -142,12 +146,13 @@
     transition: all 0.2s;
   }
   .msg-action-btn:hover {
-    background: #1e88e5;
-    border-color: #1e88e5;
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #ffffff;
   }
   .msg-reply {
-    background: rgba(30, 136, 229, 0.1);
-    border-left: 3px solid #1e88e5;
+    background: var(--bg-glass);
+    border-left: 3px solid var(--accent);
     padding: 6px 10px;
     margin-bottom: 6px;
     border-radius: 6px;
@@ -155,11 +160,11 @@
     cursor: pointer;
   }
   .mr-from {
-    color: #4fc3f7;
-    font-weight: 500;
+    color: var(--accent);
+    font-weight: 600;
   }
   .mr-text {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-secondary);
     margin-top: 2px;
     max-width: 300px;
     overflow: hidden;
@@ -168,15 +173,15 @@
   }
   .msg-fwd {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-muted);
     margin-bottom: 4px;
     font-style: italic;
   }
   .ttl-indicator {
     font-size: 10px;
-    color: #ff5252;
+    color: var(--error);
     margin-top: 4px;
-    font-weight: bold;
+    font-weight: 700;
   }
   .voice-msg {
     display: flex;

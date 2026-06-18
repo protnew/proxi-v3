@@ -163,16 +163,18 @@
   .header-row h1 {
     font-size: 20px;
     font-weight: 600;
+    color: var(--text-primary);
   }
   .status {
     font-size: 13px;
-    padding: 4px 10px;
+    padding: 6px 12px;
     border-radius: 8px;
-    background: rgba(0,0,0,0.5);
-    border: 1px solid rgba(255,255,255,0.1);
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
   }
-  .status.ok { color: #81c784; border-color: rgba(76, 175, 80, 0.3); }
-  .status.off { color: rgba(255,255,255,0.5); }
+  .status.ok { color: var(--success); border-color: var(--success); background: rgba(129, 199, 132, 0.1); }
+  .status.off { color: var(--text-muted); }
   
   .share-section {
     text-align: center;
@@ -181,49 +183,52 @@
   .share-btn {
     font-size: 16px;
     padding: 14px 36px;
-    background: linear-gradient(135deg, #1e88e5, #1565c0);
-    color: #fff;
+    background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+    color: #ffffff;
     border: none;
     border-radius: 14px;
     cursor: pointer;
     transition: all 0.3s;
-    font-weight: 500;
+    font-weight: 600;
   }
   .share-btn:hover {
     transform: scale(1.05);
-    box-shadow: 0 4px 20px rgba(30, 136, 229, 0.3);
+    box-shadow: 0 4px 20px rgba(2, 136, 209, 0.4);
   }
   .share-btn.active {
-    background: linear-gradient(135deg, #e53935, #c62828);
+    background: linear-gradient(135deg, var(--error), #c62828);
     box-shadow: 0 4px 20px rgba(229, 57, 53, 0.3);
   }
   .hint {
     margin-top: 10px;
-    color: rgba(255,255,255,0.5);
+    color: var(--text-muted);
     font-size: 12px;
   }
 
   .section-card {
-    background: rgba(20, 20, 20, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--bg-panel);
+    border: 1px solid var(--border-glass);
     border-radius: 14px;
     padding: 20px;
     margin-bottom: 20px;
-    backdrop-filter: blur(10px);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-shadow: var(--shadow-glass);
   }
   .section-card h3 {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
   }
   .empty {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--text-muted);
     text-align: center;
     padding: 20px;
     font-size: 14px;
-    background: rgba(0,0,0,0.2);
+    background: var(--bg-glass);
     border-radius: 10px;
   }
   .list {
@@ -235,10 +240,14 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: rgba(0, 0, 0, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: var(--bg-body);
+    border: 1px solid var(--border-glass);
     border-radius: 10px;
     padding: 12px 16px;
+    transition: all 0.2s;
+  }
+  .item:hover {
+    border-color: var(--accent);
   }
   .i-info {
     display: flex;
@@ -248,24 +257,25 @@
   .i-name {
     font-weight: 600;
     font-size: 15px;
+    color: var(--text-primary);
   }
   .i-ep {
     font-size: 12px;
-    color: rgba(255,255,255,0.5);
+    color: var(--text-muted);
     font-family: monospace;
   }
   .i-status.ok {
     font-size: 12px;
-    color: #81c784;
-    background: rgba(76, 175, 80, 0.1);
+    color: var(--success);
+    background: rgba(129, 199, 132, 0.1);
     padding: 4px 8px;
     border-radius: 6px;
   }
   .action-btn {
     padding: 8px 16px;
-    background: rgba(30, 136, 229, 0.1);
-    color: #64b5f6;
-    border: 1px solid rgba(30, 136, 229, 0.3);
+    background: var(--bg-glass);
+    color: var(--accent);
+    border: 1px solid var(--border-glass);
     border-radius: 8px;
     cursor: pointer;
     font-size: 13px;
@@ -273,14 +283,16 @@
     transition: all 0.2s;
   }
   .action-btn:hover {
-    background: rgba(30, 136, 229, 0.2);
+    background: var(--border-strong);
+    color: var(--text-primary);
   }
   .action-btn.active {
     background: rgba(244, 67, 54, 0.1);
-    color: #e57373;
+    color: var(--error);
     border-color: rgba(244, 67, 54, 0.3);
   }
   .action-btn.active:hover {
     background: rgba(244, 67, 54, 0.2);
+    color: #ffffff;
   }
 </style>

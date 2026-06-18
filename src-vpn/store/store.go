@@ -575,30 +575,30 @@ func (s *Store) SaveMessage(msg Message) error {
 }
 
 // EditMessage updates the text of an existing message. Returns error if not found.
-func (s *Store) EditMessage(messageID, newText string) error {
+func (s *Store) EditMessage(messageID, newText, senderNpub string) error {
 	res, err := s.db.Exec(
-		`UPDATE messages SET text = ? WHERE id = ?`,
-		newText, messageID,
+		`UPDATE messages SET text = ? WHERE id = ? AND sender = ?`,
+		newText, messageID, senderNpub,
 	)
 	if err != nil {
 		return fmt.Errorf("edit message %s: %w", messageID, err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("message %s not found", messageID)
+		return fmt.Errorf("message %s not found or unauthorized", messageID)
 	}
 	return nil
 }
 
 // DeleteMessage removes a message by ID. Returns error if not found.
-func (s *Store) DeleteMessage(messageID string) error {
-	res, err := s.db.Exec(`DELETE FROM messages WHERE id = ?`, messageID)
+func (s *Store) DeleteMessage(messageID, senderNpub string) error {
+	res, err := s.db.Exec(`DELETE FROM messages WHERE id = ? AND sender = ?`, messageID, senderNpub)
 	if err != nil {
 		return fmt.Errorf("delete message %s: %w", messageID, err)
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("message %s not found", messageID)
+		return fmt.Errorf("message %s not found or unauthorized", messageID)
 	}
 	return nil
 }

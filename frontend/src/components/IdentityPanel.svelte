@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { connState, connText, myId, onlineUsers, groups, showToast, escHtml } from '../lib/stores.js';
+  import { connState, connText, myId, onlineUsers, groups, showToast, escHtml, theme, toggleTheme } from '../lib/stores.js';
   import { apiFetch } from '../lib/api.js';
 
   let npub = $state('загрузка...');
@@ -63,6 +63,13 @@
 </script>
 
 <div class="identity-panel">
+  <div class="header-actions">
+    <h3>Профиль и Настройки</h3>
+    <button class="theme-toggle" onclick={toggleTheme} title="Переключить тему">
+      {$theme === 'dark' ? '☀️' : '🌙'}
+    </button>
+  </div>
+
   <div class="conn-status">
     <div class="conn-dot" class:on={$connState === 'on'} class:off={$connState === 'off'} class:trying={$connState === 'trying'}></div>
     <span>{$connText}</span>
@@ -81,7 +88,7 @@
     <h3>👥 Онлайн</h3>
     <div class="online-list">
       {#if $onlineUsers.length === 0}
-        <span style="color:#555">Только ты онлайн</span>
+        <span class="text-muted">Только ты онлайн</span>
       {:else}
         {#each $onlineUsers as user}
           <div style="padding:4px 0">🟢 {user.substring(0, 16)}...</div>
@@ -145,48 +152,79 @@
     max-width: 500px;
     overflow-y: auto;
   }
+  .header-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  .header-actions h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .theme-toggle {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+  }
+  .theme-toggle:hover {
+    background: var(--border-strong);
+    transform: rotate(15deg);
+  }
   .conn-status {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    background: #111;
-    border-radius: 10px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
     font-size: 12px;
-    margin-bottom: 16px;
+    margin-bottom: 24px;
   }
   .conn-dot {
     width: 8px;
     height: 8px;
     border-radius: 50%;
   }
-  .conn-dot.on { background: #4caf50; }
-  .conn-dot.off { background: #f44336; }
-  .conn-dot.trying { background: #ff9800; animation: pulse 1s infinite; }
+  .conn-dot.on { background: var(--success); }
+  .conn-dot.off { background: var(--error); }
+  .conn-dot.trying { background: #ffb74d; animation: pulse 1s infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
   .id-card {
-    background: #111;
-    border-radius: 14px;
+    background: var(--bg-glass);
+    border-radius: 16px;
     padding: 20px;
-    border: 1px solid #222;
+    border: 1px solid var(--border-glass);
     margin-bottom: 16px;
+    box-shadow: 0 4px 20px var(--shadow-glass);
   }
   .id-card h3 {
     font-size: 13px;
-    color: #888;
-    margin-bottom: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
   }
   .id-row {
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
   .id-row label {
     font-size: 11px;
-    color: #555;
+    color: var(--text-muted);
     width: 40px;
     flex-shrink: 0;
   }
@@ -194,62 +232,67 @@
     flex: 1;
     font-family: monospace;
     font-size: 12px;
-    color: #4fc3f7;
-    background: #0a0a0a;
-    padding: 8px 12px;
+    color: var(--accent);
+    background: var(--bg-body);
+    padding: 10px 14px;
     border-radius: 8px;
+    border: 1px solid var(--border-glass);
     word-break: break-all;
   }
   .copy-btn {
-    padding: 6px 12px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    color: #888;
+    padding: 8px 14px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    color: var(--text-secondary);
     border-radius: 8px;
     cursor: pointer;
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
   }
   .copy-btn:hover {
-    background: #222;
-    color: #e0e0e0;
+    background: var(--border-strong);
+    color: var(--text-primary);
   }
   .seed-box {
-    background: #1a0a0a;
-    border: 1px solid #f44336;
-    border-radius: 10px;
+    background: rgba(211, 47, 47, 0.05);
+    border: 1px solid var(--error);
+    border-radius: 12px;
     padding: 16px;
     margin-top: 12px;
   }
   .seed-box p {
     font-size: 11px;
-    color: #f44336;
+    color: var(--error);
     margin-bottom: 8px;
+    font-weight: 600;
   }
   .seed-words {
     font-family: monospace;
     font-size: 13px;
-    color: #e0e0e0;
+    color: var(--text-primary);
     line-height: 1.8;
   }
   .groups-create-btn {
     width: 100%;
-    padding: 10px;
-    background: #1a1a1a;
-    color: #4fc3f7;
-    border: 1px dashed #333;
+    padding: 12px;
+    background: var(--bg-glass);
+    color: var(--accent);
+    border: 1px dashed var(--border-strong);
     border-radius: 10px;
     cursor: pointer;
     font-size: 13px;
+    font-weight: 600;
     transition: all 0.2s;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
   }
   .groups-create-btn:hover {
-    background: #222;
-    border-color: #1e88e5;
-    color: #e0e0e0;
+    background: var(--border-strong);
+    border-color: var(--accent);
+    color: var(--text-primary);
   }
   .empty-groups {
-    color: #333;
+    color: var(--text-muted);
     font-size: 12px;
     padding: 16px;
     text-align: center;
@@ -257,72 +300,82 @@
   .group-card {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 10px;
-    background: #0a0a0a;
-    border-radius: 8px;
-    margin-bottom: 6px;
+    gap: 12px;
+    padding: 12px;
+    background: var(--bg-body);
+    border-radius: 10px;
+    margin-bottom: 8px;
     cursor: pointer;
-    border: 1px solid #1a1a1a;
+    border: 1px solid var(--border-glass);
     transition: all 0.2s;
   }
   .group-card:hover {
-    border-color: #1e88e5;
-    background: #0d1520;
+    border-color: var(--accent);
+    background: var(--bg-glass);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
   .g-icon { font-size: 20px; }
   .g-info { flex: 1; }
-  .g-name { font-size: 13px; font-weight: 500; }
-  .g-meta { font-size: 11px; color: #555; }
+  .g-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+  .g-meta { font-size: 11px; color: var(--text-muted); }
   .group-members-panel {
-    margin-top: 12px;
-    padding: 12px;
-    background: #0a0a0a;
-    border: 1px solid #222;
-    border-radius: 10px;
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg-body);
+    border: 1px solid var(--border-glass);
+    border-radius: 12px;
   }
   .group-members-panel h4 {
     font-size: 12px;
-    color: #888;
-    margin-bottom: 8px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    font-weight: 600;
   }
   .gm-item {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 6px 0;
+    gap: 10px;
+    padding: 8px 0;
     font-size: 13px;
-    border-bottom: 1px solid #111;
+    border-bottom: 1px solid var(--border-glass);
+    color: var(--text-primary);
   }
   .gm-item:last-child { border-bottom: none; }
   .gm-dot {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #4caf50;
+    background: var(--success);
   }
   .gm-role {
     font-size: 10px;
-    color: #1e88e5;
+    color: #ffffff;
     margin-left: auto;
-    padding: 2px 6px;
-    background: #0d1520;
-    border-radius: 4px;
+    padding: 2px 8px;
+    background: var(--accent);
+    border-radius: 10px;
+    font-weight: 600;
   }
   .back-to-groups {
-    padding: 6px 12px;
-    background: #1a1a1a;
-    border: 1px solid #333;
-    color: #4fc3f7;
-    border-radius: 6px;
+    padding: 8px 14px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    color: var(--accent);
+    border-radius: 8px;
     cursor: pointer;
-    font-size: 11px;
-    margin-bottom: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 16px;
+    transition: all 0.2s;
   }
   .back-to-groups:hover {
-    background: #222;
-    color: #e0e0e0;
+    background: var(--border-strong);
+    color: var(--text-primary);
+  }
+  .text-muted {
+    color: var(--text-muted);
   }
 </style>

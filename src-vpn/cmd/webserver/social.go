@@ -51,6 +51,10 @@ func handleReactionAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if userNpub, ok := r.Context().Value("npub").(string); ok && userNpub != "" {
+		req.UserNpub = userNpub
+	}
+
 	if strings.TrimSpace(req.MessageID) == "" {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "messageId is required")
 		return
@@ -97,6 +101,10 @@ func handleReactionRemove(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
 		return
+	}
+
+	if userNpub, ok := r.Context().Value("npub").(string); ok && userNpub != "" {
+		req.UserNpub = userNpub
 	}
 
 	if strings.TrimSpace(req.MessageID) == "" || strings.TrimSpace(req.UserNpub) == "" {
@@ -173,6 +181,10 @@ func handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
 		return
+	}
+	
+	if userNpub, ok := r.Context().Value("npub").(string); ok && userNpub != "" {
+		req.UserNpub = userNpub
 	}
 
 	if strings.TrimSpace(req.UserNpub) == "" {
@@ -271,6 +283,10 @@ func handleProfileSave(w http.ResponseWriter, r *http.Request) {
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
 		return
+	}
+
+	if npub, ok := r.Context().Value("npub").(string); ok && npub != "" {
+		req.Npub = npub
 	}
 
 	if strings.TrimSpace(req.Npub) == "" {
@@ -415,7 +431,13 @@ func handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "id and text required")
 		return
 	}
-	if err := db.EditMessage(req.ID, req.Text); err != nil {
+	
+	senderNpub := ""
+	if npub, ok := r.Context().Value("npub").(string); ok {
+		senderNpub = npub
+	}
+	
+	if err := db.EditMessage(req.ID, req.Text, senderNpub); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
 	}
@@ -452,7 +474,13 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "id required")
 		return
 	}
-	if err := db.DeleteMessage(req.ID); err != nil {
+	
+	senderNpub := ""
+	if npub, ok := r.Context().Value("npub").(string); ok {
+		senderNpub = npub
+	}
+
+	if err := db.DeleteMessage(req.ID, senderNpub); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
 	}

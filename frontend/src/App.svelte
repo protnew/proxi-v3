@@ -14,6 +14,7 @@
   import IdentityPanel from './components/IdentityPanel.svelte';
   import ContactsPanel from './components/ContactsPanel.svelte';
   import WebRtcMvp from './components/WebRtcMvp.svelte';
+  import { theme } from './lib/stores.js';
 
   let currentTab = $state('chat');
   let toastMsg = $state('');
@@ -78,6 +79,11 @@
   }
 
   onMount(() => {
+    // Initial theme set
+    theme.subscribe(t => {
+      document.body.className = t;
+    });
+
     const token = getToken();
     if (token) {
       isLoggedIn = true;
@@ -130,33 +136,81 @@
     padding: 0;
     box-sizing: border-box;
   }
+  
+  :global(:root) {
+    /* Base configuration */
+    --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+
+  /* Dark Theme Variables */
+  :global(body.dark) {
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --bg-body: #050505;
+    --bg-app-grad: radial-gradient(circle at top left, #15151f, #050505);
+    --bg-panel: rgba(20, 20, 25, 0.6);
+    --bg-glass: rgba(255, 255, 255, 0.05);
+    --border-glass: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.2);
+    --accent: #4fc3f7;
+    --accent-hover: #81d4fa;
+    --accent-active: #29b6f6;
+    --error: #ff5252;
+    --success: #81c784;
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    --selection-bg: rgba(30, 136, 229, 0.5);
+  }
+
+  /* Light Theme Variables */
+  :global(body.light) {
+    --text-primary: #000000;
+    --text-secondary: rgba(0, 0, 0, 0.65);
+    --text-muted: rgba(0, 0, 0, 0.4);
+    --bg-body: #f5f7fa;
+    --bg-app-grad: radial-gradient(circle at top left, #ffffff, #e4e7eb);
+    --bg-panel: rgba(255, 255, 255, 0.8);
+    --bg-glass: rgba(0, 0, 0, 0.03);
+    --border-glass: rgba(0, 0, 0, 0.06);
+    --border-strong: rgba(0, 0, 0, 0.15);
+    --accent: #0288d1;
+    --accent-hover: #039be5;
+    --accent-active: #0277bd;
+    --error: #d32f2f;
+    --success: #388e3c;
+    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
+    --selection-bg: rgba(30, 136, 229, 0.2);
+  }
+
   :global(body) {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: #050505;
-    color: #ffffff;
+    font-family: var(--font-family);
+    background: var(--bg-body);
+    color: var(--text-primary);
     height: 100vh;
     overflow: hidden;
+    transition: background 0.3s ease, color 0.3s ease;
   }
   :global(::selection) {
-    background: rgba(30, 136, 229, 0.5);
-    color: #ffffff;
+    background: var(--selection-bg);
+    color: var(--text-primary);
   }
   :global(:focus-visible) {
-    outline: 2px solid #ffffff;
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
   .app {
     display: flex;
     height: 100vh;
-    background: radial-gradient(circle at top left, #111111, #000000);
+    background: var(--bg-app-grad);
   }
   .content {
     flex: 1;
     overflow: hidden;
     display: flex;
     flex-direction: column;
-    background: rgba(10, 10, 10, 0.7);
-    backdrop-filter: blur(20px);
+    background: var(--bg-panel);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
   }
   .content:focus {
     outline: none;
@@ -167,11 +221,11 @@
     left: 50%;
     transform: translateX(-50%);
     padding: 14px 24px;
-    background: rgba(255, 255, 255, 0.15);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    color: #ffffff;
+    background: var(--bg-glass);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--border-glass);
+    box-shadow: var(--shadow-glass);
+    color: var(--text-primary);
     border-radius: 12px;
     font-size: 14px;
     font-weight: 500;
@@ -191,18 +245,18 @@
     justify-content: center;
     height: 100vh;
     gap: 16px;
-    background: #000000;
+    background: var(--bg-body);
   }
   .loading-screen p {
-    color: #ffffff;
+    color: var(--text-primary);
     font-size: 16px;
     font-weight: 500;
   }
   .loading-spinner {
     width: 40px;
     height: 40px;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-    border-top-color: #ffffff;
+    border: 3px solid var(--border-glass);
+    border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.8s cubic-bezier(0.5, 0, 0.5, 1) infinite;
   }
