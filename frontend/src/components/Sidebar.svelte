@@ -48,7 +48,10 @@
 </script>
 
 <nav class="sidebar">
-  <div class="logo" onclick={() => switchTab('identity')}>🔥</div>
+  <div class="logo-wrap" onclick={() => switchTab('identity')}>
+    <div class="logo">🔥</div>
+    <div class="version">v1.2.0 (ef4855a)</div>
+  </div>
   {#each tabs as tab}
     <div class="tab-wrap">
       <button
@@ -92,15 +95,27 @@
     box-shadow: 2px 0 15px var(--shadow-glass);
     z-index: 50;
   }
-  .logo {
-    font-size: 32px;
+  .logo-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     margin-bottom: 20px;
     cursor: pointer;
+  }
+  .logo {
+    font-size: 32px;
     transition: transform 0.2s, filter 0.2s;
   }
-  .logo:hover {
+  .logo-wrap:hover .logo {
     transform: scale(1.1);
     filter: drop-shadow(0 0 10px rgba(255, 100, 100, 0.6));
+  }
+  .version {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 4px;
+    font-family: monospace;
+    text-align: center;
   }
   .tab-wrap {
     position: relative;
