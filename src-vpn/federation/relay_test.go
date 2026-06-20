@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"context"
 	"testing"
 
 	"github.com/unkillable-messenger/vpn/nostr"
@@ -228,7 +229,7 @@ func TestSyncEvents(t *testing.T) {
 	fr := NewFederatedRelay(relay)
 	fr.AddPeer(server.URL)
 
-	err := fr.SyncEvents(1700000000)
+	err := fr.SyncEvents(context.Background(), 1700000000)
 	if err != nil {
 		t.Fatalf("SyncEvents failed: %v", err)
 	}
@@ -238,7 +239,7 @@ func TestSyncEventsNoPeers(t *testing.T) {
 	relay := nostr.NewRelay(1000, nil)
 	fr := NewFederatedRelay(relay)
 
-	err := fr.SyncEvents(0)
+	err := fr.SyncEvents(context.Background(), 0)
 	if err != nil {
 		t.Fatalf("expected no error with no peers, got: %v", err)
 	}

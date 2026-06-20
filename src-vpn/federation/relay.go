@@ -4,6 +4,7 @@
 package federation
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -172,7 +173,7 @@ func (f *FederatedRelay) FetchRemoteEvents(peerURL string, filter nostr.Filter) 
 // SyncEvents performs a full synchronization with all peer relays.
 // It fetches all events from each peer that were created after the given timestamp
 // and logs the results. Events are fetched via POST /nostr/query with a since filter.
-func (f *FederatedRelay) SyncEvents(since int64) error {
+func (f *FederatedRelay) SyncEvents(ctx context.Context, since int64) error {
 	f.mu.RLock()
 	peers := make([]string, len(f.peers))
 	copy(peers, f.peers)

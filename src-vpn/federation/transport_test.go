@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"context"
 	"testing"
 	"time"
 
@@ -126,7 +127,7 @@ func TestSyncAll(t *testing.T) {
 
 	relay := NewFederatedRelay(nostr.NewRelay(1000, nil))
 
-	err := transport.SyncAll(relay)
+	err := transport.SyncAll(context.Background(), relay)
 	if err != nil {
 		t.Fatalf("SyncAll returned error: %v", err)
 	}

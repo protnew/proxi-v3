@@ -224,11 +224,11 @@ func handleContactsSave(w http.ResponseWriter, r *http.Request) {
 	if req.GrantVPNAccess {
 		// Only add to WireGuard if they provided a PublicKey
 		if req.PublicKey != "" {
-			_ = vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint)
+				if err := vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint); err != nil { log.Printf("Error AddPeer: %v", err) }
 		}
 	} else {
 		if len(req.PublicKey) >= 16 {
-			_ = vpnMgr.RemovePeer(req.PublicKey[:16])
+				if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil { log.Printf("Error RemovePeer: %v", err) }
 		}
 	}
 
@@ -267,7 +267,7 @@ func handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 
 	// Clean up VPN peer if necessary
 	if len(req.PublicKey) >= 16 {
-		_ = vpnMgr.RemovePeer(req.PublicKey[:16])
+				if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil { log.Printf("Error RemovePeer: %v", err) }
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -281,7 +281,7 @@ func getDataDir() string {
 	if d := os.Getenv("DATA_DIR"); d != "" {
 		dir = d
 	}
-	_ = os.MkdirAll(dir, 0700)
+	if err := os.MkdirAll(dir, 0700); err != nil { log.Printf("Error MkdirAll: %v", err) }
 	return dir
 }
 

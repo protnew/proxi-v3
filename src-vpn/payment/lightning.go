@@ -1,6 +1,7 @@
 package payment
 
 import (
+	"log"
 	"bytes"
 	"crypto/rand"
 	"encoding/hex"
@@ -147,7 +148,10 @@ func (l *LightningClient) HealthCheck() LNDHealth {
 		return LNDHealth{Online: false, Latency: latency, Error: fmt.Sprintf("status %d", resp.StatusCode)}
 	}
 	var info GetInfoResponse
-	_ = json.NewDecoder(resp.Body).Decode(&info) // best-effort
+
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		log.Printf("Failed to decode lightning info: %v", err)
+	}
 	return LNDHealth{Online: true, Latency: latency, Version: info.Version, Alias: info.Alias}
 }
 

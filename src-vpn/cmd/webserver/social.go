@@ -50,6 +50,10 @@ func handleReactionAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 
 	if userNpub, ok := r.Context().Value("npub").(string); ok && userNpub != "" {
 		req.UserNpub = userNpub
@@ -100,6 +104,10 @@ func handleReactionRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -180,6 +188,11 @@ func handleMarkRead(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
+		return
+	}
+
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	
@@ -282,6 +295,10 @@ func handleProfileSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -427,6 +444,10 @@ func handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.ID == "" || req.Text == "" {
 		writeError(w, 400, "BAD_REQUEST", "id and text required")
 		return
@@ -470,6 +491,10 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.ID == "" {
 		writeError(w, 400, "BAD_REQUEST", "id required")
 		return
@@ -498,3 +523,4 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, 200, map[string]interface{}{"status": "deleted", "id": req.ID})
 }
+

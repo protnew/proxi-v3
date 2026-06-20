@@ -520,7 +520,7 @@ func TestEditMessage(t *testing.T) {
 
 	s.SaveMessage(Message{ID: "m1", From: "alice", To: "broadcast", Text: "original", Timestamp: 1000})
 
-	if err := s.EditMessage("m1", "edited text"); err != nil {
+	if err := s.EditMessage("m1", "edited text", "alice"); err != nil {
 		t.Fatalf("EditMessage: %v", err)
 	}
 
@@ -540,7 +540,7 @@ func TestEditMessage_NotFound(t *testing.T) {
 	}
 	defer s.Close()
 
-	err = s.EditMessage("nonexistent", "new text")
+	err = s.EditMessage("nonexistent", "new text", "user1")
 	if err == nil {
 		t.Error("expected error editing non-existent message")
 	}
@@ -553,7 +553,7 @@ func TestDeleteMessage_NotFound(t *testing.T) {
 	}
 	defer s.Close()
 
-	err = s.DeleteMessage("nonexistent")
+	err = s.DeleteMessage("nonexistent", "user1")
 	if err == nil {
 		t.Error("expected error deleting non-existent message")
 	}

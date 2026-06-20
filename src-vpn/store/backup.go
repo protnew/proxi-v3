@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"io"
@@ -97,14 +98,11 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 
 // AutoBackup starts a goroutine that periodically backs up the database
 // to the specified directory using VACUUM INTO.
-// It returns a stop function that should be called to terminate the loop.
-func (s *Store) AutoBackup(dir string, interval time.Duration) func() {
+// It uses a context to terminate the loop.
+func (s *Store) AutoBackup(ctx context.Context, dir string, interval time.Duration) {
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		_ = err
 	}
-
-	var stopOnce sync.Once
-	done := make(chan struct{})
 
 	go func() {
 		ticker := time.NewTicker(interval)
@@ -112,7 +110,7 @@ func (s *Store) AutoBackup(dir string, interval time.Duration) func() {
 
 		for {
 			select {
-			case <-done:
+			case <-ctx.Done():
 				return
 			case <-ticker.C:
 				backupName := fmt.Sprintf("messenger_backup_%s.db", time.Now().Format("20060102_150405"))
@@ -124,10 +122,4 @@ func (s *Store) AutoBackup(dir string, interval time.Duration) func() {
 			}
 		}
 	}()
-
-	return func() {
-		stopOnce.Do(func() {
-			close(done)
-		})
-	}
 }

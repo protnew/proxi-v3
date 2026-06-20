@@ -6,6 +6,7 @@
 package federation
 
 import (
+	"context"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -157,7 +158,7 @@ func (t *HTTPTransport) FetchEvents(peerID string, since int64) ([]nostr.Event, 
 //   - relay: the local FederatedRelay to sync into
 //
 // Returns the first error encountered (if any).
-func (t *HTTPTransport) SyncAll(relay *FederatedRelay) error {
+func (t *HTTPTransport) SyncAll(ctx context.Context, relay *FederatedRelay) error {
 	t.mu.RLock()
 	peers := make(map[string]string, len(t.peers))
 	for k, v := range t.peers {

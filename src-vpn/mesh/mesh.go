@@ -1,6 +1,7 @@
 package mesh
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"sync"
@@ -19,7 +20,8 @@ type PeerInfo struct {
 // MeshNet manages P2P mesh topology.
 type MeshNet struct {
 	mu       sync.RWMutex
-	peers    map[string]*PeerInfo
+	peersCache *PeerCache
+	msgCache   *LRUMessageCache
 	knownIDs map[string]bool // all known peer IDs in the network
 	maxHops  int
 }
@@ -29,11 +31,19 @@ func NewMeshNet(maxHops int) *MeshNet {
 	if maxHops <= 0 {
 		maxHops = 6
 	}
+	msgCache, _ := NewLRUMessageCache(10000)
 	return &MeshNet{
-		peers:    make(map[string]*PeerInfo),
+		peersCache: NewPeerCache(1000),
+		msgCache:   msgCache,
 		knownIDs: make(map[string]bool),
 		maxHops:  maxHops,
 	}
+}
+
+// HasSeenMessage checks if a message was already seen (and adds it if not).
+// Returns true if the message was already in the cache.
+func (m *MeshNet) HasSeenMessage(msgID string) bool {
+	return !m.msgCache.Add(msgID)
 }
 
 // AddPeer adds or updates a peer in the mesh.
@@ -42,7 +52,7 @@ func (m *MeshNet) AddPeer(info PeerInfo) {
 	defer m.mu.Unlock()
 
 	info.LastSeen = time.Now().Unix()
-	m.peers[info.ID] = &info
+	m.peersCache.Add(&info)
 	m.knownIDs[info.ID] = true
 
 	// Learn about peers this peer knows about (limit to 50 to prevent OOM/Sybil)
@@ -60,7 +70,7 @@ func (m *MeshNet) AddPeer(info PeerInfo) {
 func (m *MeshNet) RemovePeer(id string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.peers, id)
+	m.peersCache.Remove(id)
 	delete(m.knownIDs, id)
 }
 
@@ -68,7 +78,8 @@ func (m *MeshNet) RemovePeer(id string) {
 func (m *MeshNet) GetPeer(id string) *PeerInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return m.peers[id]
+	p, _ := m.peersCache.Get(id)
+	return p
 }
 
 // GetAllPeers returns all known peers.
@@ -76,9 +87,13 @@ func (m *MeshNet) GetAllPeers() []PeerInfo {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	result := make([]PeerInfo, 0, len(m.peers))
-	for _, p := range m.peers {
-		result = append(result, *p)
+	keys := m.peersCache.Keys()
+	result := make([]PeerInfo, 0, len(keys))
+	for _, k := range keys {
+		p, ok := m.peersCache.Get(k)
+		if ok {
+			result = append(result, *p)
+		}
 	}
 	return result
 }
@@ -94,7 +109,7 @@ func (m *MeshNet) KnownPeerCount() int {
 func (m *MeshNet) DirectPeerCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return len(m.peers)
+	return m.peersCache.Len()
 }
 
 // FindRoute finds a route to a target peer via the mesh.
@@ -120,7 +135,7 @@ func (m *MeshNet) FindRoute(fromID, toID string) []string {
 		}
 
 		current := path[len(path)-1]
-		peer, ok := m.peers[current]
+		peer, ok := m.peersCache.Get(current)
 		if !ok {
 			continue
 		}
@@ -150,7 +165,7 @@ func (m *MeshNet) GossipMessage(fromID string, msg []byte, ttl int) []string {
 	}
 
 	var targets []string
-	for id := range m.peers {
+	for _, id := range m.peersCache.Keys() {
 		if id != fromID {
 			targets = append(targets, id)
 		}
@@ -166,9 +181,10 @@ func (m *MeshNet) PruneStale(maxAge time.Duration) {
 	now := time.Now().Unix()
 	threshold := int64(maxAge.Seconds())
 
-	for id, peer := range m.peers {
+	for _, id := range m.peersCache.Keys() {
+		peer, _ := m.peersCache.Get(id)
 		if now-peer.LastSeen > threshold {
-			delete(m.peers, id)
+			m.peersCache.Remove(id)
 			delete(m.knownIDs, id)
 			log.Printf("[mesh] pruned stale peer %s", id[:8])
 		}
@@ -176,12 +192,17 @@ func (m *MeshNet) PruneStale(maxAge time.Duration) {
 }
 
 // StartPruner starts a background goroutine that prunes stale peers.
-func (m *MeshNet) StartPruner(interval, maxAge time.Duration) {
+func (m *MeshNet) StartPruner(ctx context.Context, interval, maxAge time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-		for range ticker.C {
-			m.PruneStale(maxAge)
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				m.PruneStale(maxAge)
+			}
 		}
 	}()
 }
@@ -193,16 +214,17 @@ func (m *MeshNet) GetStats() map[string]interface{} {
 
 	// Compute average connectivity
 	totalPeers := 0
-	for _, p := range m.peers {
+	for _, id := range m.peersCache.Keys() {
+		p, _ := m.peersCache.Get(id)
 		totalPeers += len(p.Peers)
 	}
 	avgPeers := 0.0
-	if len(m.peers) > 0 {
-		avgPeers = float64(totalPeers) / float64(len(m.peers))
+	if m.peersCache.Len() > 0 {
+		avgPeers = float64(totalPeers) / float64(m.peersCache.Len())
 	}
 
 	return map[string]interface{}{
-		"directPeers": len(m.peers),
+		"directPeers": m.peersCache.Len(),
 		"knownPeers":  len(m.knownIDs),
 		"maxHops":     m.maxHops,
 		"avgConnectivity": avgPeers,
@@ -214,10 +236,12 @@ func (m *MeshNet) MarshalPeers() []byte {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	ids := make([]string, 0, len(m.peers))
-	for id := range m.peers {
+	ids := make([]string, 0, m.peersCache.Len())
+	for _, id := range m.peersCache.Keys() {
 		ids = append(ids, id)
 	}
 	data, _ := json.Marshal(ids)
 	return data
 }
+
+

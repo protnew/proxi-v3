@@ -1,6 +1,7 @@
 package content
 
 import (
+	"log"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -49,7 +50,7 @@ func NewContentVault(pipeline *UploadPipeline, db *sql.DB) *ContentVault {
 		blobs:    make(map[string]*blobEntry),
 	}
 	if db != nil {
-		_ = EnsureContentTables(db)
+		if err := EnsureContentTables(db); err != nil { log.Printf("Error EnsureContentTables: %v", err) }
 	}
 	return v
 }
@@ -255,7 +256,7 @@ func (v *ContentVault) HandleContentUpload(w http.ResponseWriter, r *http.Reques
 		ManifestID: manifest.ID,
 		Access:     accessLevel,
 	}
-	_ = v.catalog.Add(entry)
+		if err := v.catalog.Add(entry); err != nil { log.Printf("Error catalog Add: %v", err) }
 
 	// Access policy.
 	v.access.SetPolicy(AccessPolicy{
@@ -267,9 +268,9 @@ func (v *ContentVault) HandleContentUpload(w http.ResponseWriter, r *http.Reques
 	// Persistence (best-effort).
 	if v.db != nil {
 		sm := manifestToStored(manifest, storedOriginal)
-		_ = SaveManifest(v.db, sm)
+			if err := SaveManifest(v.db, sm); err != nil { log.Printf("Error SaveManifest: %v", err) }
 		ne := entry
-		_ = SaveCatalogEntry(v.db, &ne)
+			if err := SaveCatalogEntry(v.db, &ne); err != nil { log.Printf("Error SaveCatalogEntry: %v", err) }
 	}
 
 	writeJSON(w, http.StatusCreated, uploadResponse{
@@ -524,15 +525,15 @@ func (v *ContentVault) HandleContentDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	_ = v.catalog.Delete(id)
+		if err := v.catalog.Delete(id); err != nil { log.Printf("Error catalog Delete: %v", err) }
 	v.access.SetPolicy(AccessPolicy{ContentID: id, Level: AccessPublic}) // clear by overwriting
 	// Remove policy properly by using a dedicated clear; AccessManager has no
 	// Delete so we rely on the catalog removal. Access check will return
 	// ErrNoPolicy for missing ids, which download treats as public.
 
 	if v.db != nil {
-		_ = DeleteManifest(v.db, id)
-		_ = DeleteCatalogEntry(v.db, id)
+			if err := DeleteManifest(v.db, id); err != nil { log.Printf("Error DeleteManifest: %v", err) }
+			if err := DeleteCatalogEntry(v.db, id); err != nil { log.Printf("Error DeleteCatalogEntry: %v", err) }
 	}
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})

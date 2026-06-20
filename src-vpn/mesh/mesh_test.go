@@ -20,7 +20,7 @@ func TestNewMeshNet(t *testing.T) {
 	if m.maxHops != 8 {
 		t.Fatalf("expected maxHops=8, got %d", m.maxHops)
 	}
-	if m.peers == nil || m.knownIDs == nil {
+	if m.peersCache == nil || m.knownIDs == nil {
 		t.Fatal("internal maps should be initialized")
 	}
 }
@@ -357,7 +357,7 @@ func TestPruneStale(t *testing.T) {
 
 	// Force the "old" peer's LastSeen to 2 hours ago.
 	m.mu.Lock()
-	p := m.peers["old_peer_1234"]
+	p, _ := m.peersCache.Get("old_peer_1234")
 	p.LastSeen = time.Now().Add(-2 * time.Hour).Unix()
 	m.mu.Unlock()
 

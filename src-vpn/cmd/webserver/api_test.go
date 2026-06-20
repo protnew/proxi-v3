@@ -17,6 +17,7 @@ import (
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/middleware"
 	"github.com/unkillable-messenger/vpn/store"
+	"github.com/unkillable-messenger/vpn/storage"
 )
 
 // setupTestServer creates a fully initialized test server with in-memory DB.
@@ -30,6 +31,9 @@ func setupTestServer(t *testing.T) *httptest.Server {
 
 	// Override getDataDir and uploadDir via env
 	t.Setenv("DATA_DIR", dataDir)
+
+	// Initialize storage provider for tests
+	storageProvider, _ = storage.NewLocalStore(dataDir)
 
 	// Override rate limiter to allow all requests during tests
 	perUserLimiter = middleware.NewRateLimiter(1000, 5000)
@@ -83,14 +87,14 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		}
 	}))
 	mux.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
-	mux.HandleFunc("/api/peers", apiChain(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handlePeersGet(w, r)
+			handleFederationPeerList(w, r)
 		case "POST":
-			handlePeersAdd(w, r)
+			handleFederationPeerAdd(w, r)
 		case "DELETE":
-			handlePeersRemove(w, r)
+			handleFederationPeerRemove(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "")
 		}
@@ -576,3 +580,4 @@ func TestSearchQueryTooLong(t *testing.T) {
 		t.Fatalf("expected 400 for long query, got %d", resp.StatusCode)
 	}
 }
+

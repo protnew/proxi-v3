@@ -32,6 +32,9 @@ import (
 	"github.com/unkillable-messenger/vpn/stream"
 	"github.com/unkillable-messenger/vpn/tor"
 	"github.com/unkillable-messenger/vpn/store"
+	"github.com/unkillable-messenger/vpn/storage"
+	"github.com/go-playground/validator/v10"
+	"github.com/joho/godotenv"
 
 	"nhooyr.io/websocket"
 )
@@ -39,6 +42,7 @@ import (
 // ========== SQLite-backed store ==========
 
 var db *store.Store
+var storageProvider storage.StorageProvider
 
 // ========== VPN Manager ==========
 
@@ -235,6 +239,10 @@ func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 
 	// Validation
 	if strings.TrimSpace(req.Text) == "" {
@@ -327,8 +335,14 @@ func secureJoin(baseDir, targetFile string) (string, error) {
 var startTime time.Time
 var distDir string
 var globalAuthService *auth.AuthService
+var validate = validator.New()
 
 func main() {
+	// Load environment variables from .env file if it exists
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found or error loading it, relying on system env vars")
+	}
+
 	// Initialize Sentry (no-op if SENTRY_DSN is empty)
 	sentryDSN := os.Getenv("SENTRY_DSN")
 	if sentryDSN != "" {
@@ -385,26 +399,42 @@ func run() error {
 		log.Printf("📁 Serving static files from %s", distDir)
 	}
 
-		// Initialize SQLite store
+	// Initialize SQLite store
+	dbPath := os.Getenv("DB_PATH")
 	dataDir := os.Getenv("DATA_DIR")
 	if dataDir == "" {
-		dataDir = "/tmp/um-prod"
+		dataDir = "."
 	}
-	os.MkdirAll(dataDir, 0755)
+	if dbPath == "" {
+		os.MkdirAll(dataDir, 0755)
+		dbPath = dataDir + "/messenger.db"
+	}
 	var dbErr error
-	db, dbErr = store.NewStore(dataDir + "/messenger.db")
+	db, dbErr = store.NewStore(dbPath)
 	if dbErr != nil {
 		return fmt.Errorf("failed to initialize SQLite store: %w", dbErr)
 	}
 	log.Println("💾 SQLite store initialized")
 
+	var spErr error
+	storageProvider, spErr = storage.NewLocalStore(filepath.Join(dataDir, "uploads"))
+	if spErr != nil {
+		return fmt.Errorf("failed to init storage: %w", spErr)
+	}
+
+	
+
 	// Initialize Chat Hub
 	initHub()
 
 	// Initialize P2P Mesh Network
-	meshNet = mesh.NewMeshNet(6)
-	meshNet.StartPruner(5*time.Minute, 30*time.Minute)
-	log.Println("🕸️  P2P Mesh Network initialized (maxHops=6, prune every 5m, stale after 30m)")
+	maxHops := 6
+	if envHops := os.Getenv("MESH_MAX_HOPS"); envHops != "" {
+		fmt.Sscanf(envHops, "%d", &maxHops)
+	}
+	meshNet = mesh.NewMeshNet(maxHops)
+	meshNet.StartPruner(context.Background(), 5*time.Minute, 30*time.Minute)
+	log.Printf("🕸️  P2P Mesh Network initialized (maxHops=%d, prune every 5m, stale after 30m)", maxHops)
 
 	// Initialize Nostr Relay
 	nostrRelay = nostr.NewRelay(50000, db)
@@ -463,7 +493,7 @@ func run() error {
 			// Migrate file-based identity to DB
 			npub = identity.PubKeyToNpub(privKey.PubKey())
 			nsec := identity.PrivKeyToNsec(privKey)
-			_ = db.SaveIdentity(npub, nsec, "")
+			if err := db.SaveIdentity(npub, nsec, ""); err != nil { log.Printf("Error saving identity: %v", err) }
 			log.Printf("🔑 Identity migrated from file to DB: %s", npub)
 		}
 	} else {
@@ -625,7 +655,7 @@ func run() error {
 		}
 		db.DB().Exec("INSERT OR IGNORE INTO users (id, npub, username, created_at) VALUES (?, ?, ?, ?)",
 			userID, body.Npub, username, time.Now().Unix())
-		accessToken, refreshToken, err := authService.GenerateTokenPair(userID, body.Npub)
+		accessToken, refreshToken, err := globalAuthService.GenerateTokenPair(userID, body.Npub)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "TOKEN_ERROR", err.Error())
 			return
@@ -648,7 +678,7 @@ func run() error {
 			writeError(w, http.StatusUnauthorized, "NOT_FOUND", "user not found")
 			return
 		}
-		accessToken, refreshToken, _ := authService.GenerateTokenPair(userID, npub)
+		accessToken, refreshToken, _ := globalAuthService.GenerateTokenPair(userID, npub)
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
 	}))
 	http.HandleFunc("/api/auth/refresh", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
@@ -661,13 +691,15 @@ func run() error {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
-		newAccess, newRefresh, err := authService.RefreshToken(body.RefreshToken)
+		newAccess, newRefresh, err := globalAuthService.RefreshToken(body.RefreshToken)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", err.Error())
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]string{"access_token": newAccess, "refresh_token": newRefresh})
 	}))
+
+	initExtraRoutes(db, apiChain)
 
 	// Static files + SPA fallback
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -857,6 +889,10 @@ func handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.Text == "" || req.SendAt == 0 {
 		writeError(w, 400, "BAD_REQUEST", "text and sendAt required")
 		return
@@ -912,6 +948,10 @@ func handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.UserNpub == "" || req.MessageText == "" {
 		writeError(w, 400, "BAD_REQUEST", "userNpub and messageText required")
 		return
@@ -956,6 +996,10 @@ func handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.UserNpub == "" {
@@ -1021,6 +1065,10 @@ func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.Name == "" || req.CreatorNpub == "" {
@@ -1115,6 +1163,10 @@ func handleGroupKick(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.GroupID == "" || req.AdminNpub == "" || req.TargetNpub == "" {
 		writeError(w, 400, "BAD_REQUEST", "groupId, adminNpub and targetNpub required")
 		return
@@ -1148,6 +1200,10 @@ func handleGroupPromote(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.GroupID == "" || req.AdminNpub == "" || req.TargetNpub == "" || req.NewRole == "" {
@@ -1187,6 +1243,10 @@ func handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.Mode != "all" && req.Mode != "split" && req.Mode != "exclude" {
 		writeError(w, 400, "BAD_REQUEST", "mode must be all, split or exclude")
 		return
@@ -1221,6 +1281,10 @@ func handleDNSProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 
@@ -1432,6 +1496,10 @@ func handleStreamCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.StreamerID == "" {
 		req.StreamerID = "anonymous"
 	}
@@ -1472,6 +1540,10 @@ func handleStreamEnd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.StreamID == "" {
 		writeError(w, 400, "BAD_REQUEST", "streamId required")
 		return
@@ -1496,6 +1568,10 @@ func handleStreamSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.StreamID == "" {
@@ -1524,6 +1600,10 @@ func handleBotRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.Name == "" {
@@ -1607,6 +1687,10 @@ func handleFederationPeerAdd(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 		return
 	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
 	if req.URL == "" {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "url is required")
 		return
@@ -1647,6 +1731,10 @@ func handleFederationPeerRemove(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.URL == "" {
@@ -1702,7 +1790,7 @@ func handleFederationSync(w http.ResponseWriter, r *http.Request) {
 		req.Since = 0
 	}
 
-	if err := fedRelay.SyncEvents(req.Since); err != nil {
+	if err := fedRelay.SyncEvents(context.Background(), req.Since); err != nil {
 		writeError(w, http.StatusInternalServerError, "SYNC_ERROR", err.Error())
 		return
 	}
@@ -1722,3 +1810,4 @@ func handleFederationSync(w http.ResponseWriter, r *http.Request) {
 		"syncedAt":  now,
 	})
 }
+

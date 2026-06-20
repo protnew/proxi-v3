@@ -84,14 +84,14 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 	}))
 	mux.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
 	mux.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
-	mux.HandleFunc("/api/peers", apiChain(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handlePeersGet(w, r)
+			handleFederationPeerList(w, r)
 		case "POST":
-			handlePeersAdd(w, r)
+			handleFederationPeerAdd(w, r)
 		case "DELETE":
-			handlePeersRemove(w, r)
+			handleFederationPeerRemove(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "")
 		}

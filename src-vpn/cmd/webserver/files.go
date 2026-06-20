@@ -18,7 +18,7 @@ const maxFileSize = 50 << 20 // 50 MB
 // uploadDir returns the uploads directory path.
 func uploadDir() string {
 	dir := getDataDir() + "/uploads"
-	_ = os.MkdirAll(dir, 0700)
+	if err := os.MkdirAll(dir, 0700); err != nil { log.Printf("Error creating dir: %v", err) }
 	return dir
 }
 
@@ -56,23 +56,16 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// Determine content type
 	contentType := detectContentType(header.Filename, file)
 
-	// Create destination file
-	destPath := filepath.Join(uploadDir(), fileID)
-	dst, err := os.Create(destPath)
+	// Save using storage provider
+	fileIDWithExt, written, err := storageProvider.SaveFile(fileID, file)
 	if err != nil {
-		log.Printf("ERROR: failed to create file %s: %v", destPath, err)
+		log.Printf("ERROR: failed to save file %s: %v", fileID, err)
 		writeError(w, http.StatusInternalServerError, "IO_ERROR", "Failed to save file")
 		return
 	}
-	defer dst.Close()
-
-	// Copy file content
-	written, err := io.Copy(dst, file)
-	if err != nil {
-		log.Printf("ERROR: failed to write file %s: %v", destPath, err)
-		os.Remove(destPath)
-		writeError(w, http.StatusInternalServerError, "IO_ERROR", "Failed to save file")
-		return
+	// Note: IPFS might change the fileID or add prefix
+	if fileIDWithExt != "" {
+		fileID = fileIDWithExt
 	}
 
 	// Get uploader npub
@@ -145,12 +138,13 @@ func handleFileGet(w http.ResponseWriter, r *http.Request) {
 
 // handleFileDownload serves a file by ID.
 func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
-	// Security check
-	filePath, err := secureJoin(uploadDir(), fileID)
+	// Get file stream
+	rc, err := storageProvider.GetFile(fileID)
 	if err != nil {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
+	defer rc.Close()
 
 	// Get metadata
 	fm, err := db.GetFileMeta(fileID)
@@ -170,7 +164,8 @@ func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, fm.Name))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", fm.Size))
-	http.ServeFile(w, r, filePath)
+	
+	io.Copy(w, rc)
 }
 
 // handleFileList returns metadata for all uploaded files.
@@ -192,15 +187,9 @@ func handleFileList(w http.ResponseWriter, r *http.Request) {
 
 // handleFileDelete removes a file by ID.
 func handleFileDelete(w http.ResponseWriter, r *http.Request, fileID string) {
-	filePath, err := secureJoin(uploadDir(), fileID)
-	if err != nil {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
-	}
-
-	// Delete from disk
-	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
-		log.Printf("WARNING: failed to delete file %s: %v", filePath, err)
+	// Delete from storage
+	if err := storageProvider.DeleteFile(fileID); err != nil && !os.IsNotExist(err) {
+		log.Printf("WARNING: failed to delete file %s: %v", fileID, err)
 	}
 
 	// Delete metadata

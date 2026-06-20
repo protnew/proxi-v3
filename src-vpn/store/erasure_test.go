@@ -112,9 +112,8 @@ func TestStore_DataErasure(t *testing.T) {
 
 	// --- Erase data ---
 
-	// Delete messages
 	for _, m := range msgs {
-		if err := s.DeleteMessage(m.ID); err != nil {
+		if err := s.DeleteMessage(m.ID, m.From); err != nil {
 			t.Fatalf("DeleteMessage %s: %v", m.ID, err)
 		}
 	}
