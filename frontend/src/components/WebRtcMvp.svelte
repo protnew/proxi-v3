@@ -12,8 +12,8 @@
   let localVideoRef: HTMLVideoElement;
   let remoteVideoRef: HTMLVideoElement;
 
-  onMount(() => {
-    myPk = initNostr();
+  onMount(async () => {
+    myPk = await initNostr();
     
     // Register Service Worker Message Listener for VPN
     if ('serviceWorker' in navigator) {

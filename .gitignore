@@ -5,3 +5,5 @@ dist-svelte/
 messenger-server
 src-vpn/webserver
 coverage.out
+
+nul

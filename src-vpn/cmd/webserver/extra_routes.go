@@ -5,17 +5,17 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/content"
 	"github.com/unkillable-messenger/vpn/store"
-	"github.com/unkillable-messenger/vpn"
 )
 
 var (
-	pinMgr      *chat.PinManager
-	slowModeMgr *chat.SlowModeManager
-	previewMgr  *chat.PreviewService
-	killSwitch  *vpn.KillSwitch
+	pinMgr       *chat.PinManager
+	slowModeMgr  *chat.SlowModeManager
+	previewMgr   *chat.PreviewService
+	killSwitch   *vpn.KillSwitch
 	reconnectMgr *vpn.ReconnectManager
 )
 

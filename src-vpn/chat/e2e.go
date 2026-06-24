@@ -36,7 +36,7 @@ type E2ESession struct {
 //   - senderKey: PreKeyBundle whose IdentityKey field holds the sender's
 //     X25519 private key (32 bytes).
 //   - recipientPubKey: hex-encoded X25519 public key of the recipient.
-func EncryptMessageForRecipient(plaintext string, senderKey *crypto.PreKeyBundle, recipientPubKey string) (encrypted string, err error) {
+func EncryptMessageForRecipient(plaintext string, senderPrivKey []byte, recipientPubKey string) (encrypted string, err error) {
 	recipientPub, err := hex.DecodeString(recipientPubKey)
 	if err != nil {
 		return "", fmt.Errorf("decode recipient public key: %w", err)
@@ -47,7 +47,7 @@ func EncryptMessageForRecipient(plaintext string, senderKey *crypto.PreKeyBundle
 	}
 
 	// Derive shared secret via X25519 ECDH.
-	sharedSecret, err := crypto.DeriveSharedSecret(senderKey.IdentityKey, recipientPub)
+	sharedSecret, err := crypto.DeriveSharedSecret(senderPrivKey, recipientPub)
 	if err != nil {
 		return "", fmt.Errorf("derive shared secret: %w", err)
 	}
@@ -74,7 +74,7 @@ func EncryptMessageForRecipient(plaintext string, senderKey *crypto.PreKeyBundle
 //   - recipientKey: PreKeyBundle whose IdentityKey field holds the recipient's
 //     X25519 private key (32 bytes).
 //   - senderPubKey: hex-encoded X25519 public key of the sender.
-func DecryptMessageFromSender(ciphertext string, recipientKey *crypto.PreKeyBundle, senderPubKey string) (plaintext string, err error) {
+func DecryptMessageFromSender(ciphertext string, recipientPrivKey []byte, senderPubKey string) (plaintext string, err error) {
 	senderPub, err := hex.DecodeString(senderPubKey)
 	if err != nil {
 		return "", fmt.Errorf("decode sender public key: %w", err)
@@ -85,7 +85,7 @@ func DecryptMessageFromSender(ciphertext string, recipientKey *crypto.PreKeyBund
 	}
 
 	// Derive shared secret via X25519 ECDH (symmetric — same result as sender).
-	sharedSecret, err := crypto.DeriveSharedSecret(recipientKey.IdentityKey, senderPub)
+	sharedSecret, err := crypto.DeriveSharedSecret(recipientPrivKey, senderPub)
 	if err != nil {
 		return "", fmt.Errorf("derive shared secret: %w", err)
 	}

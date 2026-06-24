@@ -38,7 +38,7 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 
 	message := "Hello, E2E encrypted world!"
 
-	encrypted, err := EncryptMessageForRecipient(message, senderBundle, recipientPubHex)
+	encrypted, err := EncryptMessageForRecipient(message, senderBundle.IdentityKey, recipientPubHex)
 	if err != nil {
 		t.Fatalf("EncryptMessageForRecipient: %v", err)
 	}
@@ -51,7 +51,7 @@ func TestEncryptDecryptRoundtrip(t *testing.T) {
 		t.Fatal("encrypted message should differ from plaintext")
 	}
 
-	plaintext, err := DecryptMessageFromSender(encrypted, recipientBundle, senderPubHex)
+	plaintext, err := DecryptMessageFromSender(encrypted, recipientBundle.IdentityKey, senderPubHex)
 	if err != nil {
 		t.Fatalf("DecryptMessageFromSender: %v", err)
 	}
@@ -72,13 +72,13 @@ func TestEncryptDecryptWrongKey(t *testing.T) {
 
 	message := "Secret message for the real recipient"
 
-	encrypted, err := EncryptMessageForRecipient(message, senderBundle, recipientPubHex)
+	encrypted, err := EncryptMessageForRecipient(message, senderBundle.IdentityKey, recipientPubHex)
 	if err != nil {
 		t.Fatalf("EncryptMessageForRecipient: %v", err)
 	}
 
 	// The eavesdropper tries to decrypt with their own key — must fail.
-	_, err = DecryptMessageFromSender(encrypted, eavesdropperBundle, senderPubHex)
+	_, err = DecryptMessageFromSender(encrypted, eavesdropperBundle.IdentityKey, senderPubHex)
 	if err == nil {
 		t.Fatal("decrypting with wrong key should have failed, but succeeded")
 	}
@@ -119,12 +119,12 @@ func TestEncryptEmptyMessage(t *testing.T) {
 	recipientBundle, recipientPubHex := helperGenerateKeyPair(t)
 	senderPubHex := hex.EncodeToString(senderBundle.SignedPreKey)
 
-	encrypted, err := EncryptMessageForRecipient("", senderBundle, recipientPubHex)
+	encrypted, err := EncryptMessageForRecipient("", senderBundle.IdentityKey, recipientPubHex)
 	if err != nil {
 		t.Fatalf("EncryptMessageForRecipient (empty): %v", err)
 	}
 
-	plaintext, err := DecryptMessageFromSender(encrypted, recipientBundle, senderPubHex)
+	plaintext, err := DecryptMessageFromSender(encrypted, recipientBundle.IdentityKey, senderPubHex)
 	if err != nil {
 		t.Fatalf("DecryptMessageFromSender (empty): %v", err)
 	}
@@ -144,12 +144,12 @@ func TestEncryptLargeMessage(t *testing.T) {
 	// Build a ~100 KB message.
 	largeMessage := strings.Repeat("A", 100*1024) // 102400 bytes
 
-	encrypted, err := EncryptMessageForRecipient(largeMessage, senderBundle, recipientPubHex)
+	encrypted, err := EncryptMessageForRecipient(largeMessage, senderBundle.IdentityKey, recipientPubHex)
 	if err != nil {
 		t.Fatalf("EncryptMessageForRecipient (100KB): %v", err)
 	}
 
-	plaintext, err := DecryptMessageFromSender(encrypted, recipientBundle, senderPubHex)
+	plaintext, err := DecryptMessageFromSender(encrypted, recipientBundle.IdentityKey, senderPubHex)
 	if err != nil {
 		t.Fatalf("DecryptMessageFromSender (100KB): %v", err)
 	}

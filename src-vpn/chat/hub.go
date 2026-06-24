@@ -187,8 +187,16 @@ func (c *Client) Serve(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	go c.WritePump(ctx)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		c.WritePump(ctx)
+	}()
+
 	c.ReadPump(ctx) // blocks until read-side closes
+	cancel()        // force WritePump to stop
+	wg.Wait()       // wait for graceful shutdown
 }
 
 // ReadPump reads messages from the WebSocket connection and dispatches them

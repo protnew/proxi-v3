@@ -1,7 +1,9 @@
 <script>
   import { onMount } from 'svelte';
-  import { connState, connText, myId, onlineUsers, groups, showToast, escHtml, theme, toggleTheme } from '../lib/stores.js';
+  import { connState, connText, myId, onlineUsers, groups, showToast, escHtml } from '../lib/stores.js';
+
   import { apiFetch } from '../lib/api.js';
+  import { CreateGroupSchema } from '../lib/schemas.js';
 
   let npub = $state('загрузка...');
   let seedCard = $state(false);
@@ -46,14 +48,21 @@
     const name = prompt('Название группы:');
     if (!name || !name.trim()) return;
     try {
+      // Валидация Zod
+      CreateGroupSchema.parse({ name: name.trim(), creatorNpub: npub || 'anonymous' });
+
       await apiFetch('/api/groups/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), creator: npub || 'anonymous' }),
+        body: JSON.stringify({ name: name.trim(), creatorNpub: npub || 'anonymous' }),
       });
       showToast('✅ Группа «' + name.trim() + '» создана!');
     } catch (e) {
-      showToast('❌ ' + (e.message || 'Ошибка создания группы'));
+      if (e.errors) {
+        showToast('❌ Ошибка валидации: ' + e.errors[0].message);
+      } else {
+        showToast('❌ ' + (e.message || 'Ошибка создания группы'));
+      }
     }
   }
 
@@ -65,9 +74,6 @@
 <div class="identity-panel">
   <div class="header-actions">
     <h3>Профиль и Настройки</h3>
-    <button class="theme-toggle" onclick={toggleTheme} title="Переключить тему">
-      {$theme === 'dark' ? '☀️' : '🌙'}
-    </button>
   </div>
 
   <div class="conn-status">

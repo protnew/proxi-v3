@@ -154,11 +154,16 @@ export function connectWS() {
 
   ws.onclose = () => {
     connState.set('off');
-    connText.set('Отключён. Переподключение...');
+    connText.set(`Отключён. Повтор через ${Math.round(reconnectDelay / 1000)}с...`);
+    
+    // Exponential backoff with jitter to prevent thundering herd
+    const jitter = Math.random() * 1000;
+    const nextDelay = reconnectDelay + jitter;
+    
     setTimeout(() => {
-      reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      reconnectDelay = Math.min(reconnectDelay * 1.5, 30000); // 1.5x backoff max 30s
       connectWS();
-    }, reconnectDelay);
+    }, nextDelay);
   };
 
   ws.onerror = () => {
@@ -225,42 +230,33 @@ function addSystemMessage(text) {
   ]);
 }
 
-export function sendMessage(text, replyToId = null, replyToFrom = '', replyToText = '', ttl = 0) {
-  const id = get(myId);
-  const msg = { type: 'chat', from: id, to: 'broadcast', text: text, ts: (Date.now() / 1000) | 0 };
+export async function sendMessage(text, replyToId = null, replyToFrom = '', replyToText = '', ttl = 0) {
+    const id = get(myId);
+    // Build msg object for local state (optimistic)
+    const msg = { type: 'chat', from: id, to: 'broadcast', text: text, ts: (Date.now() / 1000) | 0 };
+    if (replyToId) {
+      msg.replyTo = replyToId;
+      msg.replyToFrom = replyToFrom;
+      msg.replyToText = replyToText;
+    }
+    if (ttl > 0) msg.ttl = ttl;
 
-  if (replyToId) {
-    msg.replyTo = replyToId;
-    msg.replyToFrom = replyToFrom;
-    msg.replyToText = replyToText;
-  }
-  if (ttl > 0) {
-    msg.ttl = ttl;
-  }
-
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    OfflineStorage.savePending(msg);
-    OfflineStorage.saveMessage({ from: id, text: text, ts: msg.ts, replyTo: msg.replyTo, ttl: msg.ttl });
-    addChatMessage(id, text, true, { ttl });
-    showToast('💾 Сохранено (офлайн)');
-    return;
-  }
-
-  if (msg.to !== 'broadcast' && E2E.hasSharedKey(msg.to)) {
-    E2E.checkRotation(ws);
-    E2E.encrypt(msg.to, text).then((ct) => {
-      msg.text = ct;
-      ws.send(JSON.stringify(msg));
-    });
-  } else {
-    ws.send(JSON.stringify(msg));
-  }
-
-  const msgData = replyToId
-    ? { replyTo: replyToId, replyToFrom: replyToFrom, replyToText: replyToText, ttl: ttl }
-    : { ttl: ttl };
-  addChatMessage(id, text, true, msgData);
-  OfflineStorage.saveMessage({ from: id, text: text, ts: msg.ts, replyTo: msg.replyTo, ttl: msg.ttl });
+    // Send via REST API
+    try {
+      const { apiFetch } = await import('./api.js');
+      await apiFetch('/api/messages', {
+        method: 'POST',
+        body: JSON.stringify(msg)
+      });
+      // Add to local UI
+      addChatMessage(id, text, true, { ttl });
+    } catch (err) {
+      console.error('Failed to send via API, saving offline', err);
+      OfflineStorage.savePending(msg);
+      OfflineStorage.saveMessage({ from: id, text: text, ts: msg.ts, replyTo: msg.replyTo, ttl: msg.ttl });
+      addChatMessage(id, text, true, { ttl });
+      showToast('💾 Сохранено (офлайн)');
+    }
 }
 
 export async function refreshOnline() {

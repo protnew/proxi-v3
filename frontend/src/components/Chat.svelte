@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { messages, myId, showToast, escHtml } from '../lib/stores.js';
+  import { icons } from '../lib/icons.js';
   import { sendMessage, getWS } from '../lib/ws.js';
   import { createWebSocket, getMessages as apiGetMessages, apiFetch } from '../lib/api.js';
   import * as VoiceMessages from '../lib/voice.js';
@@ -9,7 +10,10 @@
   import Message from './Message.svelte';
   import VoiceRecorder from './VoiceRecorder.svelte';
   import WebRTC from './WebRTC.svelte';
+  import SkeletonMessage from './SkeletonMessage.svelte';
+  import AttachmentPicker from './AttachmentPicker.svelte';
 
+  let loading = $state(true);
   let inputText = $state('');
   let replyToId = $state(null);
   let replyToFrom = $state('');
@@ -150,54 +154,11 @@
     showToast('↗ Сообщение переслано');
   }
 
-  async function ipfsAttach() {
-    try {
-      const d = await apiFetch('/api/ipfs/status');
-      if (!d.available) {
-        showToast('IPFS недоступен');
-        return;
-      }
-    } catch (e) {
-      showToast('IPFS недоступен');
-      return;
-    }
-    document.getElementById('ipfs-file-input')?.click();
-  }
-
-  async function ipfsFileSelected(input) {
-    const file = input.files[0];
-    if (!file) return;
-    input.value = '';
-
-    try {
-      const fd = new FormData();
-      fd.append('file', file);
-      
-      const token = localStorage.getItem('proxi_jwt') || '';
-      const r = await fetch('/api/ipfs/upload', { 
-        method: 'POST', 
-        body: fd,
-        headers: { 'Authorization': 'Bearer ' + token }
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        showToast('❌ Ошибка загрузки: ' + (err.error || r.statusText));
-        return;
-      }
-      const d = await r.json();
-      const cid = d.cid || d.hash || d.ipfsHash || '';
-      if (!cid) {
-        showToast('❌ Сервер не вернул CID');
-        return;
-      }
-      const fileName = file.name || 'file';
-      const sizeKB = (file.size / 1024).toFixed(1);
-      const text = '📎 ' + fileName + ' (' + sizeKB + ' KB, CID: ' + cid + ')';
-      sendMessage(text);
-      showToast('📎 Файл загружен в IPFS!');
-    } catch (e) {
-      showToast('❌ Ошибка загрузки файла');
-    }
+  function handleAttachmentUpload(e) {
+    const { cid, name, size } = e.detail;
+    const sizeKB = (size / 1024).toFixed(1);
+    const text = `📎 ${name} (${sizeKB} KB, CID: ${cid})`;
+    sendMessage(text);
   }
 
   function startAudioCall() {
@@ -235,7 +196,12 @@
     connectRealtimeWS();
 
     // Load message history from API
-    apiGetMessages('broadcast', 50).catch(() => {});
+    apiGetMessages('broadcast', 50).then(() => {
+      loading = false;
+    }).catch(() => {
+      loading = false;
+      showToast('❌ Ошибка загрузки сообщений');
+    });
   });
 </script>
 
@@ -245,10 +211,15 @@
   {/if}
 
   <div class="messages" bind:this={msgListEl}>
-    {#if $messages.length === 0}
+    {#if loading}
+      <SkeletonMessage />
+      <SkeletonMessage />
+      <SkeletonMessage />
+    {:else if $messages.length === 0}
       <div class="welcome">
-        <h3>💬 Мессенджер</h3>
-        <p>Nostr-протокол · P2P · Без цензуры<br />Открой с другого устройства чтобы начать</p>
+        <div class="welcome-icon">{@html icons.chat}</div>
+        <h3>Мессенджер</h3>
+        <p>E2E-протокол · P2P · Без цензуры<br />Открой с другого устройства чтобы начать</p>
       </div>
     {:else}
       {#each $messages as msg (msg.id)}
@@ -285,11 +256,10 @@
     >
       {ttlLabels[ttlOptions.indexOf(currentTTL)]}
     </button>
-    <button class="tool-btn" onclick={startAudioCall} title="Аудиозвонок">📞</button>
-    <button class="tool-btn" onclick={startVideoCall} title="Видеозвонок">📹</button>
-    <button class="tool-btn" onclick={ipfsAttach} title="Прикрепить файл (IPFS)">📎</button>
-    <input type="file" id="ipfs-file-input" style="display:none" onchange={ipfsFileSelected(this)} />
-    <button onclick={send}>➤</button>
+    <button class="tool-btn" onclick={startAudioCall} title="Аудиозвонок">{@html icons.audio}</button>
+    <button class="tool-btn" onclick={startVideoCall} title="Видеозвонок">{@html icons.video}</button>
+    <AttachmentPicker on:upload={handleAttachmentUpload} />
+    <button class="send-btn" onclick={send} title="Отправить">{@html icons.send}</button>
   </div>
 </div>
 
@@ -396,23 +366,23 @@
   .input-bar input:focus {
     border-color: var(--accent);
     background: var(--bg-glass);
-    box-shadow: 0 0 12px rgba(2, 136, 209, 0.3);
+    box-shadow: 0 0 12px var(--selection-bg);
   }
   .input-bar button {
     padding: 12px 20px;
     background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-    color: #ffffff;
+    color: var(--text-primary);
     border: none;
     border-radius: 20px;
     cursor: pointer;
     font-size: 16px;
     font-weight: 600;
     transition: all 0.2s;
-    box-shadow: 0 4px 15px rgba(2, 136, 209, 0.3);
+    box-shadow: 0 4px 15px var(--selection-bg);
   }
   .input-bar button:hover {
     transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(2, 136, 209, 0.5);
+    box-shadow: 0 6px 20px var(--selection-bg);
   }
   .tool-btn {
     min-width: 44px;

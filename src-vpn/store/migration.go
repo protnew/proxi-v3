@@ -315,6 +315,63 @@ DROP TABLE IF EXISTS messages_fts_testfts5;
 -- If above succeeded, FTS5 is available. Otherwise the triggers below are no-ops.
 `,
 	},
+	{
+		Version: 10,
+		Name:    "groups_and_switch",
+		Up: `
+CREATE TABLE IF NOT EXISTS group_members (
+	group_id TEXT NOT NULL,
+	user_npub TEXT NOT NULL,
+	role TEXT NOT NULL DEFAULT 'member',
+	joined_at INTEGER NOT NULL DEFAULT 0,
+	PRIMARY KEY (group_id, user_npub)
+);
+
+CREATE TABLE IF NOT EXISTS dead_mans_switch (
+	id TEXT PRIMARY KEY,
+	user_npub TEXT NOT NULL,
+	message_text TEXT NOT NULL,
+	recipient TEXT NOT NULL DEFAULT 'broadcast',
+	interval_days INTEGER NOT NULL DEFAULT 7,
+	last_check_in INTEGER NOT NULL DEFAULT 0,
+	triggered INTEGER NOT NULL DEFAULT 0,
+	created_at INTEGER NOT NULL DEFAULT 0
+);
+`,
+	},
+	{
+		Version: 11,
+		Name:    "federation_peers",
+		Up: `
+CREATE TABLE IF NOT EXISTS federation_peers (
+	id TEXT PRIMARY KEY,
+	url TEXT UNIQUE NOT NULL,
+	last_sync INTEGER NOT NULL DEFAULT 0,
+	status TEXT NOT NULL DEFAULT 'active'
+);
+`,
+	},
+	{
+		Version: 12,
+		Name:    "content_vault",
+		Up: `
+CREATE TABLE IF NOT EXISTS content_manifests (
+	id TEXT PRIMARY KEY,
+	owner_npub TEXT NOT NULL,
+	content_type TEXT NOT NULL,
+	metadata TEXT NOT NULL DEFAULT '{}',
+	created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS content_catalog (
+	id TEXT PRIMARY KEY,
+	manifest_id TEXT NOT NULL,
+	chunk_hash TEXT NOT NULL,
+	size INTEGER NOT NULL,
+	availability TEXT DEFAULT 'local',
+	FOREIGN KEY (manifest_id) REFERENCES content_manifests(id)
+);
+`,
+	},
 }
 
 // runMigrations applies all pending migrations in order.

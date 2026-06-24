@@ -79,3 +79,48 @@ self.addEventListener('fetch', (event) => {
         }));
     }
 });
+
+// Push Notifications
+self.addEventListener('push', function(event) {
+    let payload = { title: 'Новое сообщение', body: 'У вас новое сообщение в мессенджере', icon: '/favicon.png' };
+    
+    if (event.data) {
+        try {
+            payload = event.data.json();
+        } catch (e) {
+            payload.body = event.data.text();
+        }
+    }
+
+    const options = {
+        body: payload.body,
+        icon: payload.icon || '/favicon.png',
+        badge: '/favicon.png',
+        vibrate: [100, 50, 100],
+        data: {
+            dateOfArrival: Date.now(),
+            primaryKey: '2'
+        }
+    };
+
+    event.waitUntil(
+        self.registration.showNotification(payload.title || 'Уведомление', options)
+    );
+});
+
+self.addEventListener('notificationclick', function(event) {
+    event.notification.close();
+    event.waitUntil(
+        clients.matchAll({ type: 'window' }).then(windowClients => {
+            for (let i = 0; i < windowClients.length; i++) {
+                const client = windowClients[i];
+                if (client.url.includes('/') && 'focus' in client) {
+                    return client.focus();
+                }
+            }
+            if (clients.openWindow) {
+                return clients.openWindow('/');
+            }
+        })
+    );
+});

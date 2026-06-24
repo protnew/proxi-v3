@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { contacts, showToast, escHtml } from '../lib/stores.js';
   import { apiFetch } from '../lib/api.js';
+  import { ContactSchema } from '../lib/schemas.js';
 
   let contactId = $state('');
   let contactName = $state('');
@@ -26,6 +27,9 @@
       return;
     }
     try {
+      // Zod validation
+      ContactSchema.parse({ id: contactId.trim() });
+
       const d = await apiFetch('/api/contacts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

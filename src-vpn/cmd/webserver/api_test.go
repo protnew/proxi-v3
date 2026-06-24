@@ -16,8 +16,8 @@ import (
 
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/middleware"
-	"github.com/unkillable-messenger/vpn/store"
 	"github.com/unkillable-messenger/vpn/storage"
+	"github.com/unkillable-messenger/vpn/store"
 )
 
 // setupTestServer creates a fully initialized test server with in-memory DB.
@@ -302,48 +302,63 @@ func TestPeersCRUD(t *testing.T) {
 
 	longKey := "abcdefghijklmnopqrstuvwxyz1234567890ABCDEF"
 
-	// Add peer
-	peer := map[string]string{
-		"name":      "TestPeer",
-		"publicKey": longKey,
-		"endpoint":  "1.2.3.4:51820",
+	// Add peer via RPC
+	addReq := map[string]interface{}{
+		"method": "add_peer",
+		"params": map[string]interface{}{
+			"name":      "TestPeer",
+			"publicKey": longKey,
+			"endpoint":  "1.2.3.4:51820",
+		},
 	}
-	resp := postJSON(t, srv.URL+"/api/peers", peer)
-	if resp.StatusCode != 201 {
-		t.Fatalf("POST peers status = %d", resp.StatusCode)
+	resp := postJSON(t, srv.URL+"/api/vpn/rpc", addReq)
+	if resp.StatusCode != 200 {
+		t.Fatalf("POST add_peer status = %d", resp.StatusCode)
 	}
-	decodeJSON(t, resp) // drain body
-
-	// GET peers
-	resp = get(t, srv.URL+"/api/peers")
 	body := decodeJSON(t, resp)
-	peers, ok := body["peers"].([]interface{})
+	if _, ok := body["result"]; !ok {
+		t.Fatalf("expected result in response")
+	}
+
+	// Wait for peer to be added
+	time.Sleep(10 * time.Millisecond)
+
+	// GET status to see peers
+	getReq := map[string]interface{}{
+		"method": "get_status",
+		"params": map[string]interface{}{},
+	}
+	resp = postJSON(t, srv.URL+"/api/vpn/rpc", getReq)
+	body = decodeJSON(t, resp)
+	result, _ := body["result"].(map[string]interface{})
+	peers, ok := result["peers"].([]interface{})
 	if !ok {
-		t.Fatal("peers should be an array")
+		t.Fatal("peers should be an array in get_status")
 	}
 	if len(peers) != 1 {
 		t.Fatalf("expected 1 peer, got %d", len(peers))
 	}
 
-	// DELETE peer
-	peerID := longKey[:16]
-	delReq := map[string]string{"peerId": peerID}
-	data, _ := json.Marshal(delReq)
-	req, _ := http.NewRequest("DELETE", srv.URL+"/api/peers", bytes.NewReader(data))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	// DELETE peer via RPC
+	delReq := map[string]interface{}{
+		"method": "remove_peer",
+		"params": map[string]interface{}{
+			"peerId": longKey[:16],
+		},
 	}
-	defer resp.Body.Close()
+	resp = postJSON(t, srv.URL+"/api/vpn/rpc", delReq)
 	if resp.StatusCode != 200 {
-		t.Fatalf("DELETE peers status = %d", resp.StatusCode)
+		t.Fatalf("POST remove_peer status = %d", resp.StatusCode)
 	}
 
-	// Verify peer removed
-	resp = get(t, srv.URL+"/api/peers")
+	// Wait for peer to be removed
+	time.Sleep(10 * time.Millisecond)
+
+	// GET status again
+	resp = postJSON(t, srv.URL+"/api/vpn/rpc", getReq)
 	body = decodeJSON(t, resp)
-	peers2, _ := body["peers"].([]interface{})
+	result, _ = body["result"].(map[string]interface{})
+	peers2, _ := result["peers"].([]interface{})
 	if len(peers2) != 0 {
 		t.Errorf("expected 0 peers after delete, got %d", len(peers2))
 	}
@@ -575,9 +590,8 @@ func TestSearchMessages(t *testing.T) {
 func TestSearchQueryTooLong(t *testing.T) {
 	srv := setupTestServer(t)
 	longQuery := strings.Repeat("a", 201)
-	resp := get(t, srv.URL+"/api/search?q=" + longQuery)
+	resp := get(t, srv.URL+"/api/search?q="+longQuery)
 	if resp.StatusCode != 400 {
 		t.Fatalf("expected 400 for long query, got %d", resp.StatusCode)
 	}
 }
-

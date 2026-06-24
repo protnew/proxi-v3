@@ -366,7 +366,7 @@ func TestDeadMansSwitch(t *testing.T) {
 		IntervalDays: 7,
 		LastCheckIn:  now - 8*86400, // 8 days ago
 		Triggered:    false,
-		CreatedAt:    now - 30 * 86400,
+		CreatedAt:    now - 30*86400,
 	}
 	if err := s.SaveDeadMansSwitch(dms); err != nil {
 		t.Fatalf("SaveDeadMansSwitch: %v", err)

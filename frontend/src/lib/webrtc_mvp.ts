@@ -1,5 +1,5 @@
-import { SimplePool, generateSecretKey, getPublicKey, nip04 } from 'nostr-tools';
 import { writable } from 'svelte/store';
+import { apiFetch, createWebSocket, getIdentity } from './api';
 
 export const webrtcState = writable('disconnected');
 export const chatMessages = writable<{sender: string, text: string}[]>([]);
@@ -8,44 +8,36 @@ export const localStream = writable<MediaStream | null>(null);
 
 let peerConnection: RTCPeerConnection;
 let dataChannel: RTCDataChannel;
-let pool: SimplePool;
-let sk: Uint8Array;
+let signalingWs: WebSocket;
 export let pk: string;
 
-const RELAYS = ['wss://relay.damus.io'];
-
-export function initNostr() {
-    sk = generateSecretKey();
-    pk = getPublicKey(sk);
-    pool = new SimplePool();
+export async function initNostr() {
+    // We keep the function name initNostr so we don't break WebRtcMvp.svelte
+    const idData = await getIdentity();
+    pk = idData.npub;
     
-    // Subscribe to incoming DMs
-    pool.subscribeMany(RELAYS, [{ kinds: [4], '#p': [pk] }], {
-        onevent: async (event) => {
-            try {
-                const decrypted = await nip04.decrypt(sk, event.pubkey, event.content);
-                const msg = JSON.parse(decrypted);
-                handleSignaling(msg, event.pubkey);
-            } catch (e) {
-                console.error("Failed to decrypt signaling message", e);
+    // Connect to local Go WebSocket
+    signalingWs = createWebSocket('/ws');
+    signalingWs.onmessage = async (event) => {
+        try {
+            const msg = JSON.parse(event.data);
+            if (msg.type === 'chat' && msg.text.startsWith('SIGNALING:')) {
+                const sigData = JSON.parse(msg.text.substring(10));
+                handleSignaling(sigData, msg.from);
             }
+        } catch (e) {
+            console.error("Failed to parse signaling message", e);
         }
-    });
+    };
     return pk;
 }
 
 async function sendSignaling(targetPk: string, data: any) {
-    const encrypted = await nip04.encrypt(sk, targetPk, JSON.stringify(data));
-    const eventTemplate = {
-        kind: 4,
-        created_at: Math.floor(Date.now() / 1000),
-        tags: [['p', targetPk]],
-        content: encrypted,
-    };
-    // Need to sign event, wait nostr-tools 2 API uses finalizeEvent
-    const { finalizeEvent } = await import('nostr-tools');
-    const event = finalizeEvent(eventTemplate, sk);
-    await Promise.any(pool.publish(RELAYS, event));
+    const text = 'SIGNALING:' + JSON.stringify(data);
+    await apiFetch('/api/messages', {
+        method: 'POST',
+        body: JSON.stringify({ to: targetPk, text })
+    });
 }
 
 function setupPeerConnection(targetPk: string) {

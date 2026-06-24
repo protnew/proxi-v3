@@ -1,6 +1,7 @@
 <script>
   import { login, signup } from '../lib/api.js';
   import { showToast } from '../lib/stores.js';
+  import { icons } from '../lib/icons.js';
 
   let { onSuccess } = $props();
 
@@ -13,39 +14,21 @@
   async function handleSubmit(e) {
     e.preventDefault();
     error = '';
-
-    const npubVal = npub.trim();
-    if (!npubVal) {
-      error = 'Введите npub';
-      return;
-    }
-    if (npubVal.length < 10) {
-      error = 'npub слишком короткий';
-      return;
-    }
-
     loading = true;
+
     try {
-      if (mode === 'signup') {
-        const user = username.trim();
-        if (!user) {
-          error = 'Введите имя пользователя';
-          loading = false;
-          return;
-        }
-        await signup(npubVal, user);
-        showToast('✅ Аккаунт создан!');
+      if (!npub.trim()) throw new Error('npub обязателен');
+      if (mode === 'login') {
+        await login(npub.trim());
+        showToast('✅ Вход выполнен');
       } else {
-        await login(npubVal);
-        showToast('✅ Вход выполнен!');
+        if (!username.trim()) throw new Error('Имя пользователя обязательно');
+        await signup(npub.trim(), username.trim());
+        showToast('✅ Аккаунт создан');
       }
       if (onSuccess) onSuccess();
     } catch (err) {
-      if (err.status === 401) {
-        error = 'Неверный npub или не зарегистрирован';
-      } else {
-        error = err.message || 'Ошибка подключения к серверу';
-      }
+      error = err.message || 'Ошибка сервера';
     } finally {
       loading = false;
     }
@@ -82,9 +65,9 @@
 
 <div class="login-screen">
   <div class="login-card">
-    <div class="login-logo">🔥</div>
+    <div class="login-logo">{@html icons.logo}</div>
     <h1 class="login-title">Proxi Messenger</h1>
-    <p class="login-subtitle">Nostr-протокол · P2P · Без цензуры</p>
+    <p class="login-subtitle">E2E-протокол · P2P · Без цензуры</p>
 
     <form onsubmit={handleSubmit} class="login-form">
       {#if error}
@@ -149,12 +132,12 @@
     align-items: center;
     justify-content: center;
     height: 100vh;
-    background: #0a0a0a;
+    background: transparent;
   }
   .login-card {
-    background: rgba(15, 15, 15, 0.75);
+    background: var(--bg-panel);
     backdrop-filter: blur(30px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--border-glass);
     border-radius: 24px;
     padding: 40px 32px;
     width: 100%;
@@ -165,17 +148,17 @@
   .login-logo {
     font-size: 52px;
     margin-bottom: 16px;
-    filter: drop-shadow(0 0 15px rgba(255, 82, 82, 0.5));
+    filter: drop-shadow(0 0 15px var(--accent));
   }
   .login-title {
     font-size: 24px;
     font-weight: 700;
-    color: #ffffff;
+    color: var(--text-primary);
     margin-bottom: 8px;
   }
   .login-subtitle {
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--text-secondary);
     margin-bottom: 30px;
     line-height: 1.5;
   }
@@ -201,7 +184,7 @@
   .form-group label {
     display: block;
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.8px;
     margin-bottom: 8px;
@@ -210,18 +193,18 @@
   .form-group input {
     width: 100%;
     padding: 14px 16px;
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--bg-glass);
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 14px;
-    color: #ffffff;
+    color: var(--text-primary);
     font-size: 15px;
     outline: none;
     transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .form-group input:focus {
-    border-color: #4fc3f7;
-    background: rgba(255, 255, 255, 0.05);
-    box-shadow: 0 0 0 4px rgba(79, 195, 247, 0.15);
+    border-color: var(--accent);
+    background: var(--bg-glass);
+    box-shadow: 0 0 0 4px var(--selection-bg);
   }
   .form-group input:disabled {
     opacity: 0.5;
@@ -229,8 +212,8 @@
   .login-btn {
     width: 100%;
     padding: 16px;
-    background: linear-gradient(135deg, #1e88e5, #1565c0);
-    color: #ffffff;
+    background: var(--accent);
+    color: var(--text-primary);
     border: none;
     border-radius: 14px;
     cursor: pointer;
@@ -255,7 +238,7 @@
     width: 18px;
     height: 18px;
     border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: #ffffff;
+    border-top-color: var(--text-primary);
     border-radius: 50%;
     animation: spin 0.6s cubic-bezier(0.5, 0, 0.5, 1) infinite;
   }
@@ -272,7 +255,7 @@
     transition: color 0.2s;
   }
   .toggle-mode:hover {
-    color: #ffffff;
+    color: var(--text-primary);
   }
   .link {
     color: #4fc3f7;
@@ -287,7 +270,7 @@
   .test-login-btn {
     width: 100%;
     padding: 14px;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--bg-glass);
     color: rgba(255, 255, 255, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 14px;
@@ -303,7 +286,7 @@
   }
   .test-login-btn:hover:not(:disabled) {
     background: rgba(255, 255, 255, 0.1);
-    color: #ffffff;
+    color: var(--text-primary);
     border-color: rgba(255, 255, 255, 0.2);
     transform: translateY(-1px);
   }

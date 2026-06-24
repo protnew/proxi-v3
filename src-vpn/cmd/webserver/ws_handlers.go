@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-
 	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
@@ -31,11 +30,11 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			userId = claims.UserID
 		}
 	}
-	
+
 	if userId == "" {
 		userId = r.URL.Query().Get("userId")
 	}
-	
+
 	if userId == "" {
 		userId = "anon-" + randomHex(4)
 	}
@@ -224,11 +223,15 @@ func handleContactsSave(w http.ResponseWriter, r *http.Request) {
 	if req.GrantVPNAccess {
 		// Only add to WireGuard if they provided a PublicKey
 		if req.PublicKey != "" {
-				if err := vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint); err != nil { log.Printf("Error AddPeer: %v", err) }
+			if err := vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint); err != nil {
+				log.Printf("Error AddPeer: %v", err)
+			}
 		}
 	} else {
 		if len(req.PublicKey) >= 16 {
-				if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil { log.Printf("Error RemovePeer: %v", err) }
+			if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil {
+				log.Printf("Error RemovePeer: %v", err)
+			}
 		}
 	}
 
@@ -267,7 +270,9 @@ func handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 
 	// Clean up VPN peer if necessary
 	if len(req.PublicKey) >= 16 {
-				if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil { log.Printf("Error RemovePeer: %v", err) }
+		if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil {
+			log.Printf("Error RemovePeer: %v", err)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -281,7 +286,9 @@ func getDataDir() string {
 	if d := os.Getenv("DATA_DIR"); d != "" {
 		dir = d
 	}
-	if err := os.MkdirAll(dir, 0700); err != nil { log.Printf("Error MkdirAll: %v", err) }
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Printf("Error MkdirAll: %v", err)
+	}
 	return dir
 }
 

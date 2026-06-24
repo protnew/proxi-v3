@@ -16,17 +16,7 @@ export const groups = writable([]);
 export const toastMessage = writable('');
 export const toastVisible = writable(false);
 
-const storedTheme = localStorage.getItem('proxi_theme') || 'dark';
-export const theme = writable(storedTheme);
-
-export function toggleTheme() {
-  theme.update(t => {
-    const newTheme = t === 'dark' ? 'light' : 'dark';
-    localStorage.setItem('proxi_theme', newTheme);
-    document.body.className = newTheme;
-    return newTheme;
-  });
-}
+  
 
 // Toast helper
 export function showToast(msg) {

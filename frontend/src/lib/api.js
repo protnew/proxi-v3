@@ -30,105 +30,145 @@ export function clearToken() {
 // ── Generic fetch wrapper ─────────────────────────────────────────
 
 export async function apiFetch(path, options = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+  options.signal = controller.signal;
   const token = getToken();
-  const headers = {
-    'Content-Type': 'application/json',
-    ...(options.headers || {}),
-  };
+  
+  const headers = new Headers(options.headers || {});
+  if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (token) {
-    headers['Authorization'] = 'Bearer ' + token;
+    headers.set('Authorization', `Bearer ${token}`);
   }
+  options.headers = headers;
 
-  const res = await fetch(API_BASE + path, {
-    ...options,
-    headers,
-  });
-
-  if (res.status === 401) {
-    clearToken();
-    const err = new Error('Unauthorized');
-    err.status = 401;
-    throw err;
+  try {
+    const res = await fetch(`${API_BASE}${path}`, options);
+    clearTimeout(timeoutId);
+    
+    if (!res.ok) {
+      let errMessage = res.statusText;
+      try {
+        const errData = await res.json();
+        errMessage = errData.error || errData.message || errMessage;
+      } catch (e) {}
+      throw new Error(errMessage);
+    }
+    
+    // Some endpoints (like DELETE) return 204 No Content
+    if (res.status === 204) return null;
+    return await res.json();
+  } catch (error) {
+    clearTimeout(timeoutId);
+    console.error(`API Error on ${path}:`, error);
+    throw error;
   }
-
-  if (!res.ok) {
-    let message = res.statusText;
-    try {
-      const body = await res.json();
-      message = body.error || body.message || message;
-    } catch {}
-    const err = new Error(message);
-    err.status = res.status;
-    throw err;
-  }
-
-  return res.json();
 }
 
-// ── Auth ──────────────────────────────────────────────────────────
+// ── Authentication ────────────────────────────────────────────────
 
-export async function login(npub) {
-  const data = await apiFetch('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ npub }),
-  });
-  if (data.access_token) setToken(data.access_token);
-  return data;
-}
-
-export async function signup(npub, username) {
+export async function signup(passphrase) {
   const data = await apiFetch('/api/auth/signup', {
     method: 'POST',
-    body: JSON.stringify({ npub, username }),
+    body: JSON.stringify({ passphrase }),
   });
-  if (data.access_token) setToken(data.access_token);
+  if (data.token) setToken(data.token);
   return data;
+}
+
+export async function login(npub, passphrase) {
+  const data = await apiFetch('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ npub, passphrase }),
+  });
+  if (data.token) setToken(data.token);
+  return data;
+}
+
+export async function getIdentity() {
+  return apiFetch('/api/identity');
 }
 
 // ── Messages ──────────────────────────────────────────────────────
 
-export async function getMessages(channel, limit = 50) {
-  const params = new URLSearchParams({ channel, limit: String(limit) });
-  return apiFetch('/api/messages?' + params.toString());
+export async function getMessages(limit = 50) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return apiFetch(`/api/messages?${params.toString()}`);
 }
 
 export async function sendMessage(to, text) {
-  return apiFetch('/api/message', {
+  if (!text || text.trim().length === 0) {
+    throw new Error('Message text cannot be empty');
+  }
+  return apiFetch('/api/messages', {
     method: 'POST',
     body: JSON.stringify({ to, text }),
   });
 }
 
-// ── Channels ──────────────────────────────────────────────────────
+// ── Contacts & Profiles ───────────────────────────────────────────
+
+export async function getContacts() {
+  return apiFetch('/api/contacts');
+}
+
+export async function addContact(npub, name) {
+  return apiFetch('/api/contacts', {
+    method: 'POST',
+    body: JSON.stringify({ npub, name }),
+  });
+}
+
+export async function getProfiles(npubs) {
+  const params = new URLSearchParams({ npubs: npubs.join(',') });
+  return apiFetch(`/api/profiles?${params.toString()}`);
+}
+
+// ── Channels & Groups ─────────────────────────────────────────────
 
 export async function getChannels() {
   return apiFetch('/api/channels');
 }
 
-// ── Peers ─────────────────────────────────────────────────────────
-
-export async function getPeers() {
-  return apiFetch('/api/peers');
+export async function createChannel(name, description = '') {
+  return apiFetch('/api/channels', {
+    method: 'POST',
+    body: JSON.stringify({ name, description }),
+  });
 }
 
-// ── Stories ───────────────────────────────────────────────────────
-
-export async function getStories() {
-  return apiFetch('/api/stories');
+export async function getGroups() {
+  return apiFetch('/api/groups/list');
 }
 
-// ── Identity / Profile ────────────────────────────────────────────
+export async function createGroup(name, members) {
+  return apiFetch('/api/groups/create', {
+    method: 'POST',
+    body: JSON.stringify({ name, members }),
+  });
+}
 
-export async function getProfile() {
-  return apiFetch('/api/identity');
+// ── Advanced ──────────────────────────────────────────────────────
+
+export async function setupSwitch(recipient, message_text, interval_days = 7) {
+  return apiFetch('/api/switch/setup', {
+    method: 'POST',
+    body: JSON.stringify({ recipient, message_text, interval_days }),
+  });
+}
+
+export async function checkInSwitch() {
+  return apiFetch('/api/switch/check-in', {
+    method: 'POST'
+  });
 }
 
 // ── WebSocket helper ──────────────────────────────────────────────
 
-export function createWebSocket(path) {
+export function createWebSocket(path = '/ws') {
   const wsBase = API_BASE.replace(/^http/, 'ws');
-  const token = getToken();
-  const separator = path.includes('?') ? '&' : '?';
-  const url = wsBase + path + separator + 'token=' + encodeURIComponent(token);
-  return new WebSocket(url);
+  // Pass auth token via query params or wait for connect to send auth packet
+  return new WebSocket(`${wsBase}${path}`);
 }

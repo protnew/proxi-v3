@@ -331,8 +331,8 @@ func TestGroupCreateAndList(t *testing.T) {
 
 	// Create group
 	req := map[string]string{
-		"name":         "test-group",
-		"creatorNpub":  "alice",
+		"name":        "test-group",
+		"creatorNpub": "alice",
 	}
 	resp := postJSON(t, srv.URL+"/api/groups/create", req)
 	if resp.StatusCode != 200 && resp.StatusCode != 201 {
@@ -341,7 +341,7 @@ func TestGroupCreateAndList(t *testing.T) {
 	}
 
 	// List groups
-	resp = get(t, srv.URL + "/api/groups/list")
+	resp = get(t, srv.URL+"/api/groups/list")
 	if resp.StatusCode != 200 {
 		t.Fatalf("list groups status = %d", resp.StatusCode)
 	}
@@ -353,10 +353,10 @@ func TestScheduleMessage(t *testing.T) {
 	srv := setupFullTestServer(t)
 
 	req := map[string]interface{}{
-		"from":     "alice",
-		"to":       "bob",
-		"text":     "Scheduled hello!",
-		"sendAt":   time.Now().Add(1 * time.Hour).Unix(),
+		"from":      "alice",
+		"to":        "bob",
+		"text":      "Scheduled hello!",
+		"sendAt":    time.Now().Add(1 * time.Hour).Unix(),
 		"channelId": "",
 	}
 	resp := postJSON(t, srv.URL+"/api/messages/schedule", req)
@@ -387,12 +387,12 @@ func TestSplitTunnel(t *testing.T) {
 func TestMeshPeersAndStats(t *testing.T) {
 	srv := setupFullTestServer(t)
 
-	resp := get(t, srv.URL + "/api/mesh/peers")
+	resp := get(t, srv.URL+"/api/mesh/peers")
 	if resp.StatusCode != 200 {
 		t.Fatalf("mesh peers status = %d", resp.StatusCode)
 	}
 
-	resp = get(t, srv.URL + "/api/mesh/stats")
+	resp = get(t, srv.URL+"/api/mesh/stats")
 	if resp.StatusCode != 200 {
 		t.Fatalf("mesh stats status = %d", resp.StatusCode)
 	}
@@ -403,7 +403,7 @@ func TestMeshPeersAndStats(t *testing.T) {
 func TestNostrStatsFull(t *testing.T) {
 	srv := setupFullTestServer(t)
 
-	resp := get(t, srv.URL + "/api/nostr/stats")
+	resp := get(t, srv.URL+"/api/nostr/stats")
 	// nostrRelay is nil, expect 503
 	if resp.StatusCode != 503 {
 		t.Fatalf("nostr stats status = %d, want 503", resp.StatusCode)
@@ -415,7 +415,7 @@ func TestNostrStatsFull(t *testing.T) {
 func TestIPFSStatusFull(t *testing.T) {
 	srv := setupFullTestServer(t)
 
-	resp := get(t, srv.URL + "/api/ipfs/status")
+	resp := get(t, srv.URL+"/api/ipfs/status")
 	if resp.StatusCode != 200 {
 		t.Fatalf("ipfs status = %d", resp.StatusCode)
 	}
@@ -426,7 +426,7 @@ func TestIPFSStatusFull(t *testing.T) {
 func TestNATDiscoverFull(t *testing.T) {
 	srv := setupFullTestServer(t)
 
-	resp := get(t, srv.URL + "/api/nat/discover")
+	resp := get(t, srv.URL+"/api/nat/discover")
 	// STUN may fail without network, just verify no crash
 	_ = resp
 }
@@ -436,7 +436,7 @@ func TestNATDiscoverFull(t *testing.T) {
 func TestTorStatusFull(t *testing.T) {
 	srv := setupFullTestServer(t)
 
-	resp := get(t, srv.URL + "/api/tor/status")
+	resp := get(t, srv.URL+"/api/tor/status")
 	// Tor may not be running, just verify no crash
 	_ = resp
 }
@@ -458,7 +458,7 @@ func TestStreamCreateAndList(t *testing.T) {
 	}
 
 	// List streams
-	resp = get(t, srv.URL + "/api/stream/list")
+	resp = get(t, srv.URL+"/api/stream/list")
 	if resp.StatusCode != 200 {
 		t.Fatalf("list streams status = %d", resp.StatusCode)
 	}
@@ -520,7 +520,7 @@ func TestStreamSubscribe(t *testing.T) {
 func TestMessagesEmptyGetFull(t *testing.T) {
 	srv := setupFullTestServer(t)
 
-	resp := get(t, srv.URL + "/api/messages?npub=nobody&limit=10")
+	resp := get(t, srv.URL+"/api/messages?npub=nobody&limit=10")
 	if resp.StatusCode != 200 {
 		t.Fatalf("status = %d", resp.StatusCode)
 	}

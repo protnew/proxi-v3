@@ -195,7 +195,7 @@ func handleMarkRead(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
-	
+
 	if userNpub, ok := r.Context().Value("npub").(string); ok && userNpub != "" {
 		req.UserNpub = userNpub
 	}
@@ -452,12 +452,12 @@ func handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "id and text required")
 		return
 	}
-	
+
 	senderNpub := ""
 	if npub, ok := r.Context().Value("npub").(string); ok {
 		senderNpub = npub
 	}
-	
+
 	if err := db.EditMessage(req.ID, req.Text, senderNpub); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
@@ -499,7 +499,7 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "id required")
 		return
 	}
-	
+
 	senderNpub := ""
 	if npub, ok := r.Context().Value("npub").(string); ok {
 		senderNpub = npub
@@ -523,4 +523,3 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, 200, map[string]interface{}{"status": "deleted", "id": req.ID})
 }
-

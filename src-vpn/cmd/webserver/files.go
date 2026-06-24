@@ -18,7 +18,9 @@ const maxFileSize = 50 << 20 // 50 MB
 // uploadDir returns the uploads directory path.
 func uploadDir() string {
 	dir := getDataDir() + "/uploads"
-	if err := os.MkdirAll(dir, 0700); err != nil { log.Printf("Error creating dir: %v", err) }
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		log.Printf("Error creating dir: %v", err)
+	}
 	return dir
 }
 
@@ -57,6 +59,11 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	contentType := detectContentType(header.Filename, file)
 
 	// Save using storage provider
+	if storageProvider == nil {
+		log.Printf("CRITICAL ERROR: storageProvider is nil!")
+		writeError(w, http.StatusInternalServerError, "IO_ERROR", "storageProvider is nil")
+		return
+	}
 	fileIDWithExt, written, err := storageProvider.SaveFile(fileID, file)
 	if err != nil {
 		log.Printf("ERROR: failed to save file %s: %v", fileID, err)
@@ -88,11 +95,11 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"id":        fileID,
-		"name":      header.Filename,
-		"size":      written,
-		"type":      contentType,
-		"url":       "/api/files/" + fileID,
+		"id":         fileID,
+		"name":       header.Filename,
+		"size":       written,
+		"type":       contentType,
+		"url":        "/api/files/" + fileID,
 		"uploadedBy": uploadedBy,
 	})
 
@@ -158,13 +165,13 @@ func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 	if strings.HasPrefix(fm.Type, "image/") || strings.HasPrefix(fm.Type, "video/") || strings.HasPrefix(fm.Type, "audio/") {
 		disposition = "inline"
 	}
-	
+
 	if fm.Type != "" {
 		w.Header().Set("Content-Type", fm.Type)
 	}
 	w.Header().Set("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, fm.Name))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", fm.Size))
-	
+
 	io.Copy(w, rc)
 }
 
@@ -199,8 +206,8 @@ func handleFileDelete(w http.ResponseWriter, r *http.Request, fileID string) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"status":  "deleted",
-		"fileId":  fileID,
+		"status": "deleted",
+		"fileId": fileID,
 	})
 
 	log.Printf("🗑️  File deleted: %s", fileID)

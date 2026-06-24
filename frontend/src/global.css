@@ -1,0 +1,267 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;700&display=swap');
+
+:root {
+  /* 1. Midnight (Default Dark) */
+  --bg-color: hsl(220, 39%, 8%);
+  --bg-panel: hsla(215, 39%, 14%, 0.85);
+  --bg-panel-hover: hsla(215, 39%, 18%, 0.95);
+  --bg-glass: hsla(215, 39%, 20%, 0.6);
+  --text-primary: hsl(210, 20%, 98%);
+  --text-secondary: hsl(215, 15%, 65%);
+  --text-muted: hsl(215, 15%, 50%);
+  --accent-color: hsl(220, 80%, 60%);
+  --accent-hover: hsl(220, 80%, 65%);
+  --bubble-me: hsl(220, 80%, 60%);
+  --bubble-me-text: hsl(0, 0%, 100%);
+  --bubble-them: hsla(215, 39%, 18%, 0.85);
+  --bubble-them-text: hsl(210, 20%, 98%);
+  --border-color: hsla(215, 39%, 25%, 0.5);
+  --border-glass: hsla(0, 0%, 100%, 0.08);
+  --shadow-sm: 0 4px 6px hsla(0, 0%, 0%, 0.3);
+  --shadow-md: 0 10px 15px hsla(0, 0%, 0%, 0.4);
+  --shadow-glass: 0 8px 32px hsla(0, 0%, 0%, 0.37);
+  
+  --border-radius-lg: 20px;
+  --border-radius-md: 12px;
+  --border-radius-sm: 8px;
+  --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --font-sans: 'Inter', system-ui, sans-serif;
+  --font-display: 'Outfit', system-ui, sans-serif;
+  --error: hsl(0, 84%, 60%);
+  --success: hsl(145, 63%, 42%);
+}
+
+[data-theme="telegram"] {
+  --bg-color: hsl(210, 20%, 95%);
+  --bg-panel: hsla(0, 0%, 100%, 0.9);
+  --bg-panel-hover: hsla(210, 20%, 98%, 0.95);
+  --bg-glass: hsla(0, 0%, 100%, 0.7);
+  --text-primary: hsl(0, 0%, 10%);
+  --text-secondary: hsl(210, 10%, 45%);
+  --text-muted: hsl(210, 10%, 60%);
+  --accent-color: hsl(211, 82%, 56%);
+  --accent-hover: hsl(211, 82%, 60%);
+  --bubble-me: hsl(89, 100%, 93%);
+  --bubble-me-text: hsl(0, 0%, 10%);
+  --bubble-them: hsla(0, 0%, 100%, 0.9);
+  --bubble-them-text: hsl(0, 0%, 10%);
+  --border-color: hsla(210, 20%, 85%, 0.8);
+  --border-glass: hsla(0, 0%, 0%, 0.05);
+  --shadow-sm: 0 1px 3px hsla(0, 0%, 0%, 0.05);
+  --shadow-md: 0 4px 6px hsla(0, 0%, 0%, 0.05);
+  --shadow-glass: 0 4px 16px hsla(0, 0%, 0%, 0.04);
+}
+
+[data-theme="discord"] {
+  --bg-color: hsl(223, 7%, 20%);
+  --bg-panel: hsla(220, 8%, 18%, 0.9);
+  --bg-panel-hover: hsla(220, 8%, 22%, 0.95);
+  --bg-glass: hsla(220, 8%, 25%, 0.6);
+  --text-primary: hsl(210, 9%, 87%);
+  --text-secondary: hsl(216, 7%, 59%);
+  --text-muted: hsl(216, 7%, 47%);
+  --accent-color: hsl(235, 86%, 65%);
+  --accent-hover: hsl(235, 86%, 70%);
+  --bubble-me: hsla(220, 8%, 18%, 0.9);
+  --bubble-me-text: hsl(210, 9%, 87%);
+  --bubble-them: hsla(220, 8%, 18%, 0.9);
+  --bubble-them-text: hsl(210, 9%, 87%);
+  --border-color: hsla(220, 8%, 14%, 0.5);
+  --border-glass: hsla(0, 0%, 100%, 0.05);
+  --shadow-sm: 0 2px 4px hsla(0, 0%, 0%, 0.15);
+  --shadow-md: 0 4px 8px hsla(0, 0%, 0%, 0.2);
+  --shadow-glass: 0 8px 24px hsla(0, 0%, 0%, 0.2);
+}
+
+[data-theme="dracula"] {
+  --bg-color: hsl(231, 15%, 18%);
+  --bg-panel: hsla(231, 14%, 31%, 0.85);
+  --bg-panel-hover: hsla(226, 23%, 45%, 0.95);
+  --bg-glass: hsla(226, 23%, 50%, 0.4);
+  --text-primary: hsl(60, 30%, 96%);
+  --text-secondary: hsl(226, 23%, 65%);
+  --text-muted: hsl(226, 23%, 55%);
+  --accent-color: hsl(265, 89%, 78%);
+  --accent-hover: hsl(326, 100%, 74%);
+  --bubble-me: hsl(265, 89%, 78%);
+  --bubble-me-text: hsl(231, 15%, 18%);
+  --bubble-them: hsla(231, 14%, 31%, 0.85);
+  --bubble-them-text: hsl(60, 30%, 96%);
+  --border-color: hsla(226, 23%, 45%, 0.5);
+  --border-glass: hsla(60, 30%, 96%, 0.1);
+  --shadow-sm: 0 4px 6px hsla(0, 0%, 0%, 0.3);
+  --shadow-md: 0 10px 15px hsla(0, 0%, 0%, 0.4);
+  --shadow-glass: 0 8px 32px hsla(0, 0%, 0%, 0.3);
+}
+
+[data-theme="nord"] {
+  --bg-color: hsl(220, 16%, 22%);
+  --bg-panel: hsla(222, 16%, 28%, 0.85);
+  --bg-panel-hover: hsla(220, 17%, 32%, 0.95);
+  --bg-glass: hsla(220, 17%, 35%, 0.5);
+  --text-primary: hsl(218, 27%, 92%);
+  --text-secondary: hsl(218, 27%, 75%);
+  --text-muted: hsl(218, 27%, 65%);
+  --accent-color: hsl(193, 43%, 67%);
+  --accent-hover: hsl(179, 25%, 65%);
+  --bubble-me: hsl(213, 32%, 52%);
+  --bubble-me-text: hsl(220, 16%, 22%);
+  --bubble-them: hsla(222, 16%, 28%, 0.85);
+  --bubble-them-text: hsl(218, 27%, 92%);
+  --border-color: hsla(220, 17%, 32%, 0.5);
+  --border-glass: hsla(218, 27%, 92%, 0.1);
+  --shadow-sm: 0 4px 6px hsla(0, 0%, 0%, 0.2);
+  --shadow-md: 0 10px 15px hsla(0, 0%, 0%, 0.3);
+  --shadow-glass: 0 8px 32px hsla(0, 0%, 0%, 0.25);
+}
+
+[data-theme="hacker"] {
+  --bg-color: hsl(0, 0%, 0%);
+  --bg-panel: hsla(0, 0%, 4%, 0.9);
+  --bg-panel-hover: hsla(0, 0%, 8%, 0.95);
+  --bg-glass: hsla(120, 100%, 10%, 0.3);
+  --text-primary: hsl(120, 100%, 50%);
+  --text-secondary: hsl(120, 100%, 30%);
+  --text-muted: hsl(120, 100%, 20%);
+  --accent-color: hsl(120, 100%, 50%);
+  --accent-hover: hsl(120, 100%, 60%);
+  --bubble-me: hsla(120, 100%, 10%, 0.8);
+  --bubble-me-text: hsl(120, 100%, 50%);
+  --bubble-them: hsla(0, 0%, 6%, 0.8);
+  --bubble-them-text: hsl(120, 100%, 50%);
+  --border-color: hsla(120, 100%, 50%, 0.3);
+  --border-glass: hsla(120, 100%, 50%, 0.15);
+  --shadow-sm: 0 0 5px hsla(120, 100%, 50%, 0.2);
+  --shadow-md: 0 0 10px hsla(120, 100%, 50%, 0.3);
+  --shadow-glass: 0 0 20px hsla(120, 100%, 50%, 0.15);
+}
+
+[data-theme="cyberpunk"] {
+  --bg-color: hsl(53, 98%, 57%);
+  --bg-panel: hsla(0, 0%, 7%, 0.95);
+  --bg-panel-hover: hsla(0, 0%, 13%, 0.98);
+  --bg-glass: hsla(0, 0%, 15%, 0.7);
+  --text-primary: hsl(180, 100%, 50%);
+  --text-secondary: hsl(346, 100%, 50%);
+  --text-muted: hsl(0, 0%, 60%);
+  --accent-color: hsl(346, 100%, 50%);
+  --accent-hover: hsl(340, 100%, 60%);
+  --bubble-me: hsl(346, 100%, 50%);
+  --bubble-me-text: hsl(53, 98%, 57%);
+  --bubble-them: hsla(0, 0%, 7%, 0.95);
+  --bubble-them-text: hsl(180, 100%, 50%);
+  --border-color: hsla(346, 100%, 50%, 0.5);
+  --border-glass: hsla(180, 100%, 50%, 0.2);
+  --shadow-sm: 0 0 5px hsla(346, 100%, 50%, 0.4);
+  --shadow-md: 0 0 15px hsla(180, 100%, 50%, 0.3);
+  --shadow-glass: 0 0 30px hsla(346, 100%, 50%, 0.3);
+}
+
+[data-theme="sunset"] {
+  --bg-color: hsl(295, 26%, 14%);
+  --bg-panel: hsla(320, 25%, 23%, 0.85);
+  --bg-panel-hover: hsla(322, 25%, 31%, 0.95);
+  --bg-glass: hsla(322, 25%, 35%, 0.5);
+  --text-primary: hsl(0, 100%, 95%);
+  --text-secondary: hsl(355, 100%, 86%);
+  --text-muted: hsl(355, 60%, 70%);
+  --accent-color: hsl(355, 100%, 71%);
+  --accent-hover: hsl(355, 100%, 77%);
+  --bubble-me: hsl(355, 100%, 71%);
+  --bubble-me-text: hsl(0, 0%, 100%);
+  --bubble-them: hsla(320, 25%, 23%, 0.85);
+  --bubble-them-text: hsl(0, 100%, 95%);
+  --border-color: hsla(355, 100%, 86%, 0.3);
+  --border-glass: hsla(0, 100%, 95%, 0.1);
+  --shadow-sm: 0 4px 6px hsla(0, 0%, 0%, 0.3);
+  --shadow-md: 0 10px 15px hsla(0, 0%, 0%, 0.4);
+  --shadow-glass: 0 8px 32px hsla(355, 100%, 71%, 0.15);
+}
+
+[data-theme="forest"] {
+  --bg-color: hsl(150, 15%, 10%);
+  --bg-panel: hsla(145, 15%, 16%, 0.85);
+  --bg-panel-hover: hsla(145, 15%, 22%, 0.95);
+  --bg-glass: hsla(145, 15%, 25%, 0.5);
+  --text-primary: hsl(140, 20%, 95%);
+  --text-secondary: hsl(140, 15%, 70%);
+  --text-muted: hsl(140, 15%, 55%);
+  --accent-color: hsl(145, 63%, 42%);
+  --accent-hover: hsl(145, 63%, 48%);
+  --bubble-me: hsl(145, 63%, 42%);
+  --bubble-me-text: hsl(0, 0%, 100%);
+  --bubble-them: hsla(145, 15%, 16%, 0.85);
+  --bubble-them-text: hsl(140, 20%, 95%);
+  --border-color: hsla(145, 63%, 42%, 0.3);
+  --border-glass: hsla(140, 20%, 95%, 0.1);
+  --shadow-sm: 0 4px 6px hsla(0, 0%, 0%, 0.3);
+  --shadow-md: 0 10px 15px hsla(0, 0%, 0%, 0.4);
+  --shadow-glass: 0 8px 32px hsla(145, 63%, 42%, 0.15);
+}
+
+[data-theme="ocean"] {
+  --bg-color: hsl(200, 30%, 10%);
+  --bg-panel: hsla(200, 35%, 16%, 0.85);
+  --bg-panel-hover: hsla(200, 35%, 22%, 0.95);
+  --bg-glass: hsla(200, 35%, 25%, 0.5);
+  --text-primary: hsl(195, 20%, 95%);
+  --text-secondary: hsl(195, 15%, 70%);
+  --text-muted: hsl(195, 15%, 55%);
+  --accent-color: hsl(195, 100%, 35%);
+  --accent-hover: hsl(195, 100%, 45%);
+  --bubble-me: hsl(195, 100%, 35%);
+  --bubble-me-text: hsl(0, 0%, 100%);
+  --bubble-them: hsla(200, 35%, 16%, 0.85);
+  --bubble-them-text: hsl(195, 20%, 95%);
+  --border-color: hsla(195, 100%, 35%, 0.3);
+  --border-glass: hsla(195, 20%, 95%, 0.1);
+  --shadow-sm: 0 4px 6px hsla(0, 0%, 0%, 0.3);
+  --shadow-md: 0 10px 15px hsla(0, 0%, 0%, 0.4);
+  --shadow-glass: 0 8px 32px hsla(195, 100%, 35%, 0.2);
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: var(--bg-color);
+  color: var(--text-primary);
+  transition: background-color var(--transition-normal), color var(--transition-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  margin-top: 0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Glassmorphism panel base */
+.glass-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-glass);
+  box-shadow: var(--shadow-glass);
+  border-radius: var(--border-radius-lg);
+}
+
+/* Scrollbar styling for premium look */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}

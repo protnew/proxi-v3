@@ -43,7 +43,7 @@ func TestHubStress_ConnectionLeak(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
 
-	const numClients = 100 // Simulate 100 clients connecting/disconnecting quickly
+	const numClients = 1000 // Simulate 1000 clients connecting/disconnecting quickly
 	var wgClients sync.WaitGroup
 
 	for i := 0; i < numClients; i++ {

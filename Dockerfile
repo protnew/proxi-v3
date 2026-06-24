@@ -1,14 +1,13 @@
 # ===== Stage 1: Build frontend =====
 FROM node:22-slim AS frontend
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
-COPY index.html vite.config.js ./
-COPY src/ ./src/
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm install
+COPY frontend/ ./
 RUN npm run build
 
 # ===== Stage 2: Build Go server (web + VPN) =====
-FROM golang:latest AS go-builder
+FROM golang:1.22-alpine AS go-builder
 WORKDIR /app
 
 # Cache deps
@@ -22,22 +21,20 @@ COPY src-vpn/ ./
 RUN CGO_ENABLED=0 go build -o /messenger-server ./cmd/webserver/
 
 # ===== Stage 3: Runtime =====
-FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates wireguard-tools iproute2 iptables \
-    && rm -rf /var/lib/apt/lists/*
+FROM alpine:latest
+RUN apk add --no-cache ca-certificates wireguard-tools iproute2 iptables tzdata sqlite
 
 # Copy frontend
-COPY --from=frontend /app/dist /app/dist
+COPY --from=frontend /app/dist /app/dist-svelte
 
 # Copy Go server
 COPY --from=go-builder /messenger-server /app/messenger-server
 
-# Ports: 8080 = web UI, 51820 = WireGuard
-EXPOSE 8080 51820/udp
+# Ports: 9999 = web UI, 51820 = WireGuard
+EXPOSE 9999 51820/udp
 
-ENV PORT=8080
-ENV DIST_DIR=/app/dist
+ENV PORT=9999
+ENV DIST_DIR=/app/dist-svelte
 
 WORKDIR /app
 CMD ["/app/messenger-server"]

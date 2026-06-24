@@ -14,7 +14,9 @@
   import IdentityPanel from './components/IdentityPanel.svelte';
   import ContactsPanel from './components/ContactsPanel.svelte';
   import WebRtcMvp from './components/WebRtcMvp.svelte';
-  import { theme } from './lib/stores.js';
+  import SwitchPanel from './components/SwitchPanel.svelte';
+  import ThemeSwitcher from './components/ThemeSwitcher.svelte';
+  
 
   let currentTab = $state('chat');
   let toastMsg = $state('');
@@ -80,8 +82,8 @@
 
   onMount(() => {
     // Initial theme set
-    theme.subscribe(t => {
-      document.body.className = t;
+    currentThemeId.subscribe(t => {
+      setTheme(t);
     });
 
     const token = getToken();
@@ -111,6 +113,7 @@
   </nav>
 
   <div class="content" id="main-content" role="main" tabindex="-1" aria-label="{currentTab} panel">
+    <ThemeSwitcher />
     {#if currentTab === 'chat'}
       <Chat />
     {:else if currentTab === 'vpn'}
@@ -121,6 +124,8 @@
       <IdentityPanel />
     {:else if currentTab === 'contacts'}
       <ContactsPanel />
+    {:else if currentTab === 'switch'}
+      <SwitchPanel />
     {:else if currentTab === 'mvp'}
       <WebRtcMvp />
     {/if}
@@ -140,46 +145,6 @@
   :global(:root) {
     /* Base configuration */
     --font-family: 'Outfit', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  }
-
-  /* Dark Theme Variables */
-  :global(body.dark) {
-    --text-primary: #ffffff;
-    --text-secondary: rgba(255, 255, 255, 0.7);
-    --text-muted: rgba(255, 255, 255, 0.4);
-    --bg-body: #050505;
-    --bg-app-grad: radial-gradient(circle at top left, #15151f, #050505);
-    --bg-panel: rgba(20, 20, 25, 0.6);
-    --bg-glass: rgba(255, 255, 255, 0.05);
-    --border-glass: rgba(255, 255, 255, 0.08);
-    --border-strong: rgba(255, 255, 255, 0.2);
-    --accent: #4fc3f7;
-    --accent-hover: #81d4fa;
-    --accent-active: #29b6f6;
-    --error: #ff5252;
-    --success: #81c784;
-    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
-    --selection-bg: rgba(30, 136, 229, 0.5);
-  }
-
-  /* Light Theme Variables */
-  :global(body.light) {
-    --text-primary: #000000;
-    --text-secondary: rgba(0, 0, 0, 0.65);
-    --text-muted: rgba(0, 0, 0, 0.4);
-    --bg-body: #f5f7fa;
-    --bg-app-grad: radial-gradient(circle at top left, #ffffff, #e4e7eb);
-    --bg-panel: rgba(255, 255, 255, 0.8);
-    --bg-glass: rgba(0, 0, 0, 0.03);
-    --border-glass: rgba(0, 0, 0, 0.06);
-    --border-strong: rgba(0, 0, 0, 0.15);
-    --accent: #0288d1;
-    --accent-hover: #039be5;
-    --accent-active: #0277bd;
-    --error: #d32f2f;
-    --success: #388e3c;
-    --shadow-glass: 0 8px 32px 0 rgba(0, 0, 0, 0.05);
-    --selection-bg: rgba(30, 136, 229, 0.2);
   }
 
   :global(body) {
