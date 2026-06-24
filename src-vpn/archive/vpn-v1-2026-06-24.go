@@ -468,6 +468,19 @@ func (m *Manager) IsWireGuardAvailable() bool {
     return err == nil
 }
 
+// runCmd executes a command and captures its output for better error reporting
+func runCmd(name string, args ...string) error {
+	cmd := exec.Command(name, args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		if len(out) > 0 {
+			return fmt.Errorf("%s: %w (output: %s)", name, err, string(out))
+		}
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	return nil
+}
+
 func (m *Manager) setupInterface() error {
     // Stub mode: skip real interface setup
     if m.stubMode {
@@ -480,25 +493,23 @@ func (m *Manager) setupInterface() error {
     ip := m.config.Address
 
     // ip link add um0 type wireguard
-    cmd := exec.Command("ip", "link", "add", "dev", iface, "type", "wireguard")
-    if err := cmd.Run(); err != nil {
-        // May already exist — check with a second attempt
+    if err := runCmd("ip", "link", "add", "dev", iface, "type", "wireguard"); err != nil {
         fmt.Printf("[VPN] Warning: ip link add: %v (may already exist)\n", err)
     }
 
     // wg set um0 private-key <key> listen-port 51820
     keyFile := filepath.Join(m.config.DataDir, "private.key")
-    if err := exec.Command("wg", "set", iface, "private-key", keyFile, "listen-port", fmt.Sprintf("%d", m.config.Port)).Run(); err != nil {
+    if err := runCmd("wg", "set", iface, "private-key", keyFile, "listen-port", fmt.Sprintf("%d", m.config.Port)); err != nil {
         return fmt.Errorf("wg set private-key: %w (is wireguard-tools installed?)", err)
     }
 
     // ip address add 10.77.0.1/24 dev um0
-    if err := exec.Command("ip", "address", "add", ip, "dev", iface).Run(); err != nil {
+    if err := runCmd("ip", "address", "add", ip, "dev", iface); err != nil {
         fmt.Printf("[VPN] Warning: ip address add: %v (may already be assigned)\n", err)
     }
 
     // ip link set um0 up
-    if err := exec.Command("ip", "link", "set", iface, "up").Run(); err != nil {
+    if err := runCmd("ip", "link", "set", iface, "up"); err != nil {
         return fmt.Errorf("ip link set up %s: %w", iface, err)
     }
 
@@ -511,7 +522,7 @@ func (m *Manager) teardownInterface() error {
         fmt.Printf("[VPN] stub mode: skipping teardownInterface\n")
         return nil
     }
-    return exec.Command("ip", "link", "del", m.config.InterfaceName).Run()
+    return runCmd("ip", "link", "del", m.config.InterfaceName)
 }
 
 func (m *Manager) addPeer(p *Peer) error {
@@ -525,7 +536,7 @@ func (m *Manager) addPeer(p *Peer) error {
     if p.Endpoint != "" {
         args = append(args, "endpoint", p.Endpoint)
     }
-    if err := exec.Command("wg", args...).Run(); err != nil {
+    if err := runCmd("wg", args...); err != nil {
         return fmt.Errorf("wg set peer %s: %w", p.PublicKey[:min(16, len(p.PublicKey))], err)
     }
     return nil
@@ -535,7 +546,7 @@ func (m *Manager) removePeerFromInterface(p *Peer) error {
     if m.stubMode {
         return nil
     }
-    return exec.Command("wg", "set", m.config.InterfaceName, "peer", p.PublicKey, "remove").Run()
+    return runCmd("wg", "set", m.config.InterfaceName, "peer", p.PublicKey, "remove")
 }
 
 func (m *Manager) enableIPForwarding() error {
@@ -544,12 +555,12 @@ func (m *Manager) enableIPForwarding() error {
 
 func (m *Manager) setupNAT() error {
     // iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-    return exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-j", "MASQUERADE").Run()
+    return runCmd("iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "eth0", "-j", "MASQUERADE")
 }
 
 func (m *Manager) routeAllTraffic(endpoint string) error {
     // ip route add 0.0.0.0/0 dev um0
-    exec.Command("ip", "route", "add", "0.0.0.0/0", "dev", m.config.InterfaceName).Run()
+    runCmd("ip", "route", "add", "0.0.0.0/0", "dev", m.config.InterfaceName)
     return nil
 }
 
@@ -658,7 +669,9 @@ func (m *Manager) SetSplitTunnel(cfg SplitTunnelConfig) error {
 	m.cleanupSplitTunnelLocked()
 
 	// Create a fresh PROXI_SPLIT chain
-	exec.Command("iptables", "-t", "mangle", "-N", "PROXI_SPLIT").Run()
+	if err := runCmd("iptables", "-t", "mangle", "-N", "PROXI_SPLIT"); err != nil {
+		fmt.Printf("[VPN] Warning: iptables PROXI_SPLIT creation failed: %v\n", err)
+	}
 
 	switch cfg.Mode {
 	case "all":
@@ -670,14 +683,12 @@ func (m *Manager) SetSplitTunnel(cfg SplitTunnelConfig) error {
 			// Only listed targets go through VPN
 			for _, target := range cfg.Targets {
 				if ip := net.ParseIP(target); ip != nil {
-					exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-						"-d", target, "-j", "MARK", "--set-mark", "1").Run()
+					runCmd("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-d", target, "-j", "MARK", "--set-mark", "1")
 				} else {
 					// Resolve domain and add rule
 					if addrs, err := net.LookupHost(target); err == nil {
 						for _, addr := range addrs {
-							exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-								"-d", addr, "-j", "MARK", "--set-mark", "1").Run()
+							runCmd("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-d", addr, "-j", "MARK", "--set-mark", "1")
 						}
 					}
 				}
@@ -686,21 +697,20 @@ func (m *Manager) SetSplitTunnel(cfg SplitTunnelConfig) error {
 			// All traffic through VPN except listed targets
 			for _, target := range cfg.Targets {
 				if ip := net.ParseIP(target); ip != nil {
-					exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-						"-d", target, "-j", "RETURN").Run()
+					runCmd("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-d", target, "-j", "RETURN")
 				}
 			}
 			// Mark everything else (rules above RETURN first, so excluded targets skip this)
-			exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT",
-				"-j", "MARK", "--set-mark", "1").Run()
+			runCmd("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-j", "MARK", "--set-mark", "1")
 		}
 	}
 
 	// Append unconditional RETURN at the end so unmatched traffic is not blocked
-	exec.Command("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-j", "RETURN").Run()
+	runCmd("iptables", "-t", "mangle", "-A", "PROXI_SPLIT", "-j", "RETURN")
 
-	// Connect the chain to PREROUTING so it actually gets evaluated
-	exec.Command("iptables", "-t", "mangle", "-A", "PREROUTING", "-j", "PROXI_SPLIT").Run()
+	// Connect the chain to PREROUTING (forwarded traffic) and OUTPUT (local traffic)
+	runCmd("iptables", "-t", "mangle", "-A", "PREROUTING", "-j", "PROXI_SPLIT")
+	runCmd("iptables", "-t", "mangle", "-A", "OUTPUT", "-j", "PROXI_SPLIT")
 
 	return nil
 }
@@ -717,17 +727,23 @@ func (m *Manager) cleanupSplitTunnelLocked() error {
 	var firstErr error
 
 	// Remove the jump rule from PREROUTING to PROXI_SPLIT
-	if err := exec.Command("iptables", "-t", "mangle", "-D", "PREROUTING", "-j", "PROXI_SPLIT").Run(); err != nil && firstErr == nil {
+	if err := runCmd("iptables", "-t", "mangle", "-D", "PREROUTING", "-j", "PROXI_SPLIT"); err != nil && firstErr == nil {
 		firstErr = fmt.Errorf("delete PREROUTING jump: %w", err)
 	}
 
+	// Remove the jump rule from OUTPUT to PROXI_SPLIT
+	if err := runCmd("iptables", "-t", "mangle", "-D", "OUTPUT", "-j", "PROXI_SPLIT"); err != nil && firstErr == nil {
+		// Just log, don't override firstErr if it exists, to not mask other errors
+		fmt.Printf("Warning: delete OUTPUT jump: %v\n", err)
+	}
+
 	// Flush all rules in the PROXI_SPLIT chain
-	if err := exec.Command("iptables", "-t", "mangle", "-F", "PROXI_SPLIT").Run(); err != nil && firstErr == nil {
+	if err := runCmd("iptables", "-t", "mangle", "-F", "PROXI_SPLIT"); err != nil && firstErr == nil {
 		firstErr = fmt.Errorf("flush PROXI_SPLIT: %w", err)
 	}
 
 	// Delete the PROXI_SPLIT chain itself
-	if err := exec.Command("iptables", "-t", "mangle", "-X", "PROXI_SPLIT").Run(); err != nil && firstErr == nil {
+	if err := runCmd("iptables", "-t", "mangle", "-X", "PROXI_SPLIT"); err != nil && firstErr == nil {
 		firstErr = fmt.Errorf("delete PROXI_SPLIT chain: %w", err)
 	}
 
