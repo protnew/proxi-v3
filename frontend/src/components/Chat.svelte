@@ -65,6 +65,7 @@
               replyToText: msg.replyToText || null,
               forwardedFrom: msg.forwardedFrom || null,
               ttl: msg.ttl || 0,
+              isE2E: msg.is_e2e || false,
             },
           ]);
         } else if (msg.type === 'typing') {

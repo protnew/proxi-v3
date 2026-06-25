@@ -144,3 +144,44 @@ func GenerateE2ESession(localNpub, remoteNpub string, db *store.Store) (*E2ESess
 		CreatedAt:    time.Now().Unix(),
 	}, nil
 }
+
+// E2ERatchetSession represents an advanced Double Ratchet session for E2E encryption.
+// It provides forward secrecy and post-compromise security.
+type E2ERatchetSession struct {
+	LocalNpub  string
+	RemoteNpub string
+	Ratchet    *crypto.RatchetState
+	CreatedAt  int64
+}
+
+// GenerateE2ERatchetSession establishes a Double Ratchet session initialized
+// with a shared secret (usually derived via X3DH) and an initiator flag.
+func GenerateE2ERatchetSession(localNpub, remoteNpub string, sharedSecret []byte, isInitiator bool) (*E2ERatchetSession, error) {
+	if localNpub == "" || remoteNpub == "" {
+		return nil, fmt.Errorf("local and remote npub must not be empty")
+	}
+	if len(sharedSecret) != 32 {
+		return nil, fmt.Errorf("shared secret must be 32 bytes")
+	}
+
+	ratchet := crypto.NewRatchetState(sharedSecret, isInitiator)
+
+	return &E2ERatchetSession{
+		LocalNpub:  localNpub,
+		RemoteNpub: remoteNpub,
+		Ratchet:    ratchet,
+		CreatedAt:  time.Now().Unix(),
+	}, nil
+}
+
+// EncryptMessage encrypts a plaintext message using the Double Ratchet session.
+// It advances the sending chain and returns the ratchet ciphertext.
+func (s *E2ERatchetSession) EncryptMessage(plaintext []byte) ([]byte, error) {
+	return s.Ratchet.RatchetEncrypt(plaintext)
+}
+
+// DecryptMessage decrypts a ciphertext message using the Double Ratchet session.
+// It handles out-of-order messages and advances the receiving chain.
+func (s *E2ERatchetSession) DecryptMessage(ciphertext []byte) ([]byte, error) {
+	return s.Ratchet.RatchetDecrypt(ciphertext)
+}

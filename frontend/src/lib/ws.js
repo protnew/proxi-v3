@@ -91,6 +91,7 @@ export function connectWS() {
             replyToText: msg.replyToText || null,
             forwardedFrom: msg.forwardedFrom || null,
             ttl: msg.ttl || 0,
+            isE2E: msg.is_e2e || false,
           });
         }
 
@@ -103,6 +104,7 @@ export function connectWS() {
           replyTo: msg.replyTo,
           forwardedFrom: msg.forwardedFrom,
           ttl: msg.ttl,
+          isE2E: msg.is_e2e || false,
         });
 
         if (document.hidden && msg.from !== id) {
@@ -191,6 +193,7 @@ function addChatMessage(from, text, isMe, msgData = {}) {
       replyToText: msgData.replyToText || null,
       forwardedFrom: msgData.forwardedFrom || null,
       ttl: msgData.ttl || 0,
+      isE2E: msgData.isE2E || false,
     },
   ]);
 }

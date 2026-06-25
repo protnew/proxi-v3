@@ -65,7 +65,12 @@
       </div>
     {/if}
 
-    <div class="msg-time">{msg.time}</div>
+    <div class="msg-time">
+      {#if msg.isE2E}
+        <span class="e2e-lock" title="Зашифровано (E2E)">🔒</span>
+      {/if}
+      {msg.time}
+    </div>
   </div>
 {/if}
 
@@ -188,5 +193,10 @@
     align-items: center;
     gap: 8px;
     padding: 4px 0;
+  }
+  .e2e-lock {
+    font-size: 10px;
+    margin-right: 4px;
+    opacity: 0.8;
   }
 </style>

@@ -8,11 +8,12 @@ import (
 
 // Message types (JSON wire format string values)
 const (
-	TypeChat   = "chat"
-	TypeJoin   = "join"
-	TypeLeave  = "leave"
-	TypeTyping = "typing"
-	TypeVoice  = "voice" // voice message (JSON text fallback)
+	TypeChat        = "chat"
+	TypeJoin        = "join"
+	TypeLeave       = "leave"
+	TypeTyping      = "typing"
+	TypeVoice       = "voice" // voice message (JSON text fallback)
+	TypeKeyExchange = "key_exchange" // E2E key exchange message
 )
 
 // Binary frame type byte — first byte of a binary WebSocket frame.
@@ -45,6 +46,7 @@ type Message struct {
 	ReplyToFrom   string `json:"replyToFrom,omitempty"`   // sender of replied message
 	ForwardedFrom string `json:"forwardedFrom,omitempty"` // original sender npub for forwarded messages
 	TTL           int    `json:"ttl,omitempty"`           // self-destruct in seconds (0 = never)
+	IsE2E         bool   `json:"is_e2e,omitempty"`        // flag indicating the message payload (Text) is E2E encrypted
 	VoiceData     string `json:"voiceData,omitempty"`     // base64-encoded audio (legacy fallback)
 	VoiceDuration int    `json:"voiceDuration,omitempty"` // voice duration in seconds
 }

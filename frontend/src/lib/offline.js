@@ -50,6 +50,7 @@ export async function saveMessage(msg) {
       replyTo: msg.replyTo || null,
       forwardedFrom: msg.forwardedFrom || null,
       ttl: msg.ttl || 0,
+      isE2E: msg.isE2E || msg.is_e2e || false,
       storedAt: Date.now(),
     });
     tx.oncomplete = () => resolve();
