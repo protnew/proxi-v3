@@ -12,7 +12,7 @@ import (
 	"github.com/unkillable-messenger/vpn/store"
 )
 
-func handleMediaUpload(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST to upload media")
 		return
@@ -75,7 +75,7 @@ func handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   time.Now().Unix(),
 	}
 	
-	if err := db.SaveContentManifest(manifest); err != nil {
+	if err := s.db.SaveContentManifest(manifest); err != nil {
 		log.Printf("WARNING: failed to save manifest: %v", err)
 	}
 
@@ -88,7 +88,7 @@ func handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 		Availability: "local",
 	}
 
-	if err := db.SaveContentCatalog(catalog); err != nil {
+	if err := s.db.SaveContentCatalog(catalog); err != nil {
 		log.Printf("WARNING: failed to save catalog: %v", err)
 	}
 
@@ -104,7 +104,7 @@ func handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	log.Printf("📎 Media uploaded: %s (%s, %d bytes) manifest %s", header.Filename, contentType, written, manifestID)
 }
 
-func handleMediaGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 	// Apply CORS + security headers manually since this route is not rate-limited
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -131,6 +131,14 @@ func handleMediaGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	manifestID := path
+	
+	// Check if this is a streaming request (.ts or .m3u8 or contains /stream)
+	if strings.HasSuffix(manifestID, "/stream") || strings.HasSuffix(manifestID, ".m3u8") || strings.HasSuffix(manifestID, ".ts") {
+		itemID := strings.TrimSuffix(manifestID, "/stream")
+		s.handleMediaStream(w, r, itemID)
+		return
+	}
+
 	manifest, err := s.db.GetContentManifest(manifestID)
 	if err != nil {
 		stream := streamMgr.GetStream(manifestID)
@@ -178,3 +186,64 @@ func handleMediaGet(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, rc)
 }
 
+func (s *Server) handleMediaStream(w http.ResponseWriter, r *http.Request, itemID string) {
+	if r.Method != "GET" && r.Method != "HEAD" {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or HEAD for streaming")
+		return
+	}
+
+	manifest, err := s.db.GetContentManifest(itemID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Manifest not found")
+		return
+	}
+
+	catalogs, err := s.db.GetContentCatalogByManifest(itemID)
+	if err != nil || len(catalogs) == 0 {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "Catalog not found for manifest")
+		return
+	}
+	
+	chunkHash := catalogs[0].ChunkHash
+	rc, err := storageProvider.GetFile(chunkHash)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found in storage")
+		return
+	}
+	defer rc.Close()
+
+	var metadata map[string]interface{}
+	json.Unmarshal([]byte(manifest.Metadata), &metadata)
+	filename := "stream"
+	if name, ok := metadata["filename"].(string); ok {
+		filename = name
+	}
+
+	contentType := manifest.ContentType
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	if strings.HasSuffix(itemID, ".m3u8") {
+		contentType = "application/vnd.apple.mpegurl"
+	} else if strings.HasSuffix(itemID, ".ts") {
+		contentType = "video/mp2t"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Accept-Ranges", "bytes")
+	
+	if strings.HasPrefix(contentType, "video/") || strings.HasPrefix(contentType, "audio/") {
+		rs, ok := rc.(io.ReadSeeker)
+		if ok {
+			http.ServeContent(w, r, filename, time.Time{}, rs)
+			return
+		}
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", catalogs[0].Size))
+		io.Copy(w, rc)
+		return
+	}
+
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", catalogs[0].Size))
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, filename))
+	io.Copy(w, rc)
+}
