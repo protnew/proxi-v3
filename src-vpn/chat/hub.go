@@ -21,7 +21,7 @@ const (
 	WriteTimeout = 10 * time.Second
 
 	// SendChannelSize is the buffer size for the per-client send channel.
-	SendChannelSize = 64
+	SendChannelSize = 1024
 )
 
 // Client represents a connected WebSocket user.
@@ -40,18 +40,49 @@ type ChatHub struct {
 	// OnMessage is called for every incoming chat message.
 	// If nil, messages are only routed internally.
 	OnMessage func(msg *Message)
+
+	workerPool chan *Message
 }
 
 // NewChatHub creates a new ChatHub.
 func NewChatHub() *ChatHub {
-	return &ChatHub{
-		clients: make(map[string]*Client),
+	h := &ChatHub{
+		clients:    make(map[string]*Client),
+		workerPool: make(chan *Message, 1024),
 	}
+
+	// Start workers for OnMessage processing
+	for i := 0; i < 10; i++ {
+		go func() {
+			for msg := range h.workerPool {
+				if h.OnMessage != nil {
+					h.OnMessage(msg)
+				}
+			}
+		}()
+	}
+	return h
 }
 
 // Register adds a client to the hub. If a client with the same userID already
 // exists the old connection is replaced (the old client's Send channel is closed).
 func (h *ChatHub) Register(c *Client) {
+	// Encode messages outside of the lock
+	welcome, _ := (&Message{
+		Type: TypeJoin,
+		From: "system",
+		To:   c.UserID,
+		Text: "connected",
+		Ts:   time.Now().Unix(),
+	}).Encode()
+
+	joinMsg, _ := (&Message{
+		Type: TypeJoin,
+		From: c.UserID,
+		To:   BroadcastTarget,
+		Ts:   time.Now().Unix(),
+	}).Encode()
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -64,30 +95,25 @@ func (h *ChatHub) Register(c *Client) {
 	h.clients[c.UserID] = c
 
 	// Send welcome to the new client directly.
-	welcome, _ := (&Message{
-		Type: TypeJoin,
-		From: "system",
-		To:   c.UserID,
-		Text: "connected",
-		Ts:   time.Now().Unix(),
-	}).Encode()
 	select {
 	case c.Send <- welcome:
 	default:
 	}
 
 	// Announce join to everyone else.
-	joinMsg, _ := (&Message{
-		Type: TypeJoin,
-		From: c.UserID,
-		To:   BroadcastTarget,
-		Ts:   time.Now().Unix(),
-	}).Encode()
 	h.broadcastLocked(joinMsg, "")
 }
 
 // Unregister removes a client from the hub and cleans up.
 func (h *ChatHub) Unregister(c *Client) {
+	// Encode message outside of the lock
+	leaveMsg, _ := (&Message{
+		Type: TypeLeave,
+		From: c.UserID,
+		To:   BroadcastTarget,
+		Ts:   time.Now().Unix(),
+	}).Encode()
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -96,12 +122,6 @@ func (h *ChatHub) Unregister(c *Client) {
 		close(c.Send)
 
 		// Announce leave.
-		leaveMsg, _ := (&Message{
-			Type: TypeLeave,
-			From: c.UserID,
-			To:   BroadcastTarget,
-			Ts:   time.Now().Unix(),
-		}).Encode()
 		h.broadcastLocked(leaveMsg, "")
 	}
 }
@@ -126,7 +146,7 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 		default:
 			// Client buffer full — drop message and disconnect to force offline sync.
 			log.Printf("[chat] send buffer full for user %s, dropping message and closing connection", uid)
-			c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+			go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
 		}
 	}
 }
@@ -146,7 +166,7 @@ func (h *ChatHub) SendTo(userID string, data []byte) bool {
 		return true
 	default:
 		log.Printf("[chat] send buffer full for user %s, dropping direct message and closing connection", userID)
-		c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+		go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
 		return false
 	}
 }
@@ -188,15 +208,37 @@ func (c *Client) Serve(ctx context.Context) {
 	defer cancel()
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	wg.Add(2)
 	go func() {
 		defer wg.Done()
 		c.WritePump(ctx)
 	}()
+	go func() {
+		defer wg.Done()
+		c.pingPump(ctx)
+	}()
 
 	c.ReadPump(ctx) // blocks until read-side closes
-	cancel()        // force WritePump to stop
+	cancel()        // force pumps to stop
 	wg.Wait()       // wait for graceful shutdown
+}
+
+func (c *Client) pingPump(ctx context.Context) {
+	ticker := time.NewTicker(PingInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			pingCtx, cancel := context.WithTimeout(ctx, WriteTimeout)
+			err := c.Conn.Ping(polyfillCtxReset(ctx, pingCtx))
+			cancel()
+			if err != nil {
+				return
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // ReadPump reads messages from the WebSocket connection and dispatches them
@@ -228,9 +270,13 @@ func (c *Client) ReadPump(ctx context.Context) {
 			// Build routing message for the OnMessage callback.
 			voiceMsg := BinaryVoiceToMessage(meta, c.UserID)
 
-			// Invoke callback if set.
+			// Push to worker pool.
 			if c.hub.OnMessage != nil {
-				c.hub.OnMessage(voiceMsg)
+				select {
+				case c.hub.workerPool <- voiceMsg:
+				default:
+					log.Printf("[chat] worker pool full, dropping OnMessage callback for voice from %s", c.UserID)
+				}
 			}
 
 			// Route binary frame as-is to other clients.
@@ -258,7 +304,10 @@ func (c *Client) ReadPump(ctx context.Context) {
 					To:   BroadcastTarget,
 					Ts:   time.Now().Unix(),
 				}
-				c.hub.OnMessage(streamMsg)
+				select {
+				case c.hub.workerPool <- streamMsg:
+				default:
+				}
 			}
 			continue
 		}
@@ -276,9 +325,13 @@ func (c *Client) ReadPump(ctx context.Context) {
 			msg.Ts = time.Now().Unix()
 		}
 
-		// Invoke callback if set.
+		// Push to worker pool.
 		if c.hub.OnMessage != nil {
-			c.hub.OnMessage(msg)
+			select {
+			case c.hub.workerPool <- msg:
+			default:
+				log.Printf("[chat] worker pool full, dropping OnMessage callback for msg from %s", c.UserID)
+			}
 		}
 
 		// Route message.
@@ -297,12 +350,9 @@ func (c *Client) ReadPump(ctx context.Context) {
 }
 
 // WritePump writes buffered messages to the WebSocket connection.
-// It also handles periodic ping/pong keepalive.
 // It supports both text JSON and binary voice frames.
 func (c *Client) WritePump(ctx context.Context) {
-	ticker := time.NewTicker(PingInterval)
 	defer func() {
-		ticker.Stop()
 		if err := c.Conn.Close(websocket.StatusNormalClosure, "write pump done"); err != nil { log.Printf("Close error: %v", err) }
 	}()
 
@@ -324,15 +374,6 @@ func (c *Client) WritePump(ctx context.Context) {
 				writeType = websocket.MessageText
 			}
 			err := c.Conn.Write(writeCtx, writeType, msg)
-			cancel()
-			if err != nil {
-				return
-			}
-
-		case <-ticker.C:
-			// Send ping.
-			pingCtx, cancel := context.WithTimeout(ctx, WriteTimeout)
-			err := c.Conn.Ping(polyfillCtxReset(ctx, pingCtx))
 			cancel()
 			if err != nil {
 				return
