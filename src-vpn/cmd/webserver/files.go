@@ -129,15 +129,15 @@ func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request) {
 
 	if path == "" || r.URL.Path == "/api/files" {
 		// List all files
-		handleFileList(w, r)
+		s.handleFileList(w, r)
 		return
 	}
 
 	switch r.Method {
 	case "GET":
-		handleFileDownload(w, r, path)
+		s.handleFileDownload(w, r, path)
 	case "DELETE":
-		handleFileDelete(w, r, path)
+		s.handleFileDelete(w, r, path)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or DELETE")
 	}

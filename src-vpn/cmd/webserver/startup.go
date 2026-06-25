@@ -126,6 +126,10 @@ func run() error {
 	}
 	log.Println("✅ Database initialized")
 
+	srv := &Server{
+		db: db,
+	}
+
 	// Start Dead Man's Switch worker
 	go startDeadMansSwitchWorker(context.Background(), db)
 
@@ -240,6 +244,7 @@ func run() error {
 		log.Printf("WARNING: JWT_SECRET not set, generated random secret")
 	}
 	authSvc := auth.NewAuthService(secret)
+	srv.authService = authSvc
 	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
 		return publicApiChain(authMiddleware(srv.authService, h))
 	}

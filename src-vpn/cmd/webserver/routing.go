@@ -398,10 +398,10 @@ func (s *Server) handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, 200, map[string]interface{}{
 		"status":       "created",
-		"id":           dmstreamObj.ID,
+		"id":           dms.ID,
 		"intervalDays": req.IntervalDays,
 	})
-	log.Printf("💀 Switch created: %s (user %s, %d days)", dmstreamObj.ID, truncate(req.UserNpub, 12), req.IntervalDays)
+	log.Printf("💀 Switch created: %s (user %s, %d days)", dms.ID, truncate(req.UserNpub, 12), req.IntervalDays)
 }
 
 // handleSwitchCheckIn — POST /api/switch/check-in
@@ -1260,7 +1260,7 @@ func startDeadMansSwitchWorker(ctx context.Context, s *store.Store) {
 			}
 
 			for _, dms := range switches {
-				zap.S().Infof("💀 Triggering Dead Man's Switch %s for user %s", dmstreamObj.ID, dms.UserNpub)
+				zap.S().Infof("💀 Triggering Dead Man's Switch %s for user %s", dms.ID, dms.UserNpub)
 				// Broadcast via hub if possible, or save as a system message to recipient
 				msg := store.Message{
 					ID:        fmt.Sprintf("dms-%d", time.Now().UnixNano()),
