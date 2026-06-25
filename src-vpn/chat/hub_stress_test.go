@@ -59,7 +59,7 @@ func TestHubStress_ConnectionLeak(t *testing.T) {
 			if err != nil {
 				return // might fail if server is overwhelmed, that's fine for stress test
 			}
-			
+
 			// Send a few messages
 			for j := 0; j < 5; j++ {
 				_ = conn.Write(ctx, websocket.MessageText, []byte(`{"type":"chat","text":"hello"}`))
@@ -84,7 +84,7 @@ func TestHubStress_ConnectionLeak(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 
 	finalGoroutines := runtime.NumGoroutine()
-	
+
 	// Allow a small margin (e.g., +5) for HTTP keep-alive connections that haven't fully closed yet
 	if finalGoroutines > baselineGoroutines+20 {
 		t.Fatalf("Goroutine leak detected: baseline=%d, final=%d", baselineGoroutines, finalGoroutines)

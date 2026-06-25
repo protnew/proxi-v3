@@ -1,12 +1,12 @@
 package federation
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"context"
 	"testing"
 
 	"github.com/unkillable-messenger/vpn/nostr"

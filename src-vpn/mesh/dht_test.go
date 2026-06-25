@@ -107,11 +107,11 @@ func TestRoutingTable_FindClosest_Nearest(t *testing.T) {
 
 	// Add peers with IDs that have varying distances from "target"
 	peers := []PeerInfo{
-		{ID: "target", Address: "10.0.0.1:3000"},       // distance 0 from itself
-		{ID: "target_a", Address: "10.0.0.2:3000"},     // close
-		{ID: "target_ab", Address: "10.0.0.3:3000"},    // also close
-		{ID: "zzzzzzz", Address: "10.0.0.4:3000"},      // far
-		{ID: "xxxxxxx", Address: "10.0.0.5:3000"},      // far
+		{ID: "target", Address: "10.0.0.1:3000"},    // distance 0 from itself
+		{ID: "target_a", Address: "10.0.0.2:3000"},  // close
+		{ID: "target_ab", Address: "10.0.0.3:3000"}, // also close
+		{ID: "zzzzzzz", Address: "10.0.0.4:3000"},   // far
+		{ID: "xxxxxxx", Address: "10.0.0.5:3000"},   // far
 	}
 
 	for _, p := range peers {

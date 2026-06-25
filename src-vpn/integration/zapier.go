@@ -12,10 +12,10 @@ import (
 type ZapierTrigger string
 
 const (
-	TriggerNewMessage  ZapierTrigger = "new_message"
-	TriggerNewUser     ZapierTrigger = "new_user"
-	TriggerPayment     ZapierTrigger = "payment"
-	TriggerNewChannel  ZapierTrigger = "new_channel"
+	TriggerNewMessage ZapierTrigger = "new_message"
+	TriggerNewUser    ZapierTrigger = "new_user"
+	TriggerPayment    ZapierTrigger = "payment"
+	TriggerNewChannel ZapierTrigger = "new_channel"
 )
 
 // HandleWebhook processes an incoming Zapier webhook.
@@ -49,9 +49,9 @@ func ListTriggers() []ZapierTrigger {
 // SendToZapier pushes an event to a Zapier webhook URL.
 func SendToZapier(webhookURL string, trigger ZapierTrigger, data map[string]interface{}) error {
 	payload, _ := json.Marshal(map[string]interface{}{
-		"trigger":    trigger,
-		"data":       data,
-		"timestamp":  time.Now().Unix(),
+		"trigger":   trigger,
+		"data":      data,
+		"timestamp": time.Now().Unix(),
 	})
 	client := &http.Client{Timeout: 5 * time.Second}
 	resp, err := client.Post(webhookURL, "application/json", bytes.NewReader(payload))

@@ -30,7 +30,6 @@ import (
 	"nhooyr.io/websocket"
 )
 
-var db *store.Store
 
 var storageProvider storage.StorageProvider
 
@@ -106,7 +105,7 @@ var mimeTypes = map[string]string{
 
 // ========== Response helpers ==========
 
-func handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":    "ok",
 		"timestamp": time.Now().Unix(),
@@ -115,7 +114,7 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	vpnStatus := vpnMgr.GetStatus()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"status":  "running",
@@ -125,7 +124,7 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleMessagesGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	var since int64 = 0
 	if v := r.URL.Query().Get("since"); v != "" {
 		fmt.Sscanf(v, "%d", &since)
@@ -136,9 +135,9 @@ func handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 		fmt.Sscanf(v, "%d", &limit)
 	}
 
-	msgs, err := db.GetMessages(limit, since, npub)
+	msgs, err := s.db.GetMessages(limit, since, npub)
 	if err != nil {
-		log.Printf("ERROR: db.GetMessages: %v", err)
+		log.Printf("ERROR: s.db.GetMessages: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to load messages")
 		return
 	}
@@ -149,7 +148,7 @@ func handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	// Auto-decrypt messages for the current user
 	currentUserNpub, _ := r.Context().Value("npub").(string)
 	if currentUserNpub != "" {
-		recipientBundle, err := db.GetPreKeyBundle(currentUserNpub)
+		recipientBundle, err := s.db.GetPreKeyBundle(currentUserNpub)
 		if err == nil && recipientBundle != nil {
 			privBundle := &crypto.PreKeyBundle{
 				IdentityKey: recipientBundle.IdentityKey,
@@ -174,7 +173,7 @@ func handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST to send messages")
 		return
@@ -226,7 +225,7 @@ func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	isEncrypted := false
 	if req.To != "broadcast" {
 		// Fetch sender's prekey bundle
-		bundleRow, err := db.GetPreKeyBundle(req.From)
+		bundleRow, err := s.db.GetPreKeyBundle(req.From)
 		if err == nil && bundleRow != nil {
 			senderBundle := &crypto.PreKeyBundle{
 				IdentityKey: bundleRow.IdentityKey,
@@ -251,7 +250,7 @@ func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Persist to SQLite
-	if err := db.SaveMessage(msg); err != nil {
+	if err := s.db.SaveMessage(msg); err != nil {
 		log.Printf("WARNING: failed to save message to db: %v", err)
 	}
 
@@ -261,7 +260,7 @@ func handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	log.Printf("💬 Message from %s to %s (%d bytes)", req.From, req.To, len(req.Text))
 }
 
-func handleVpnRPC(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleVpnRPC(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -290,11 +289,10 @@ var startTime time.Time
 
 var distDir string
 
-var globalAuthService *auth.AuthService
 
 var validate = validator.New()
 
-func handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -337,7 +335,7 @@ func handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
 		Status:    "pending",
 		CreatedAt: time.Now().Unix(),
 	}
-	if err := db.SaveScheduledMessage(sm); err != nil {
+	if err := s.db.SaveScheduledMessage(sm); err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
 	}
@@ -354,7 +352,7 @@ func handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
 
 // handleSwitchSetup — POST /api/switch/setup
 
-func handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -393,22 +391,22 @@ func handleSwitchSetup(w http.ResponseWriter, r *http.Request) {
 		LastCheckIn:  time.Now().Unix(),
 		CreatedAt:    time.Now().Unix(),
 	}
-	if err := db.SaveDeadMansSwitch(dms); err != nil {
+	if err := s.db.SaveDeadMansSwitch(dms); err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
 	}
 
 	writeJSON(w, 200, map[string]interface{}{
 		"status":       "created",
-		"id":           dms.ID,
+		"id":           dmstreamObj.ID,
 		"intervalDays": req.IntervalDays,
 	})
-	log.Printf("💀 Switch created: %s (user %s, %d days)", dms.ID, truncate(req.UserNpub, 12), req.IntervalDays)
+	log.Printf("💀 Switch created: %s (user %s, %d days)", dmstreamObj.ID, truncate(req.UserNpub, 12), req.IntervalDays)
 }
 
 // handleSwitchCheckIn — POST /api/switch/check-in
 
-func handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -428,7 +426,7 @@ func handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "userNpub required")
 		return
 	}
-	if err := db.CheckInDeadMansSwitch(req.UserNpub); err != nil {
+	if err := s.db.CheckInDeadMansSwitch(req.UserNpub); err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
 	}
@@ -437,7 +435,7 @@ func handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
 
 // handlePushSubscribe — POST /api/push/subscribe
 
-func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -451,12 +449,12 @@ func handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 
 // handleGroupList — GET /api/groups/list
 
-func handleGroupList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGroupList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
 		return
 	}
-	channels, err := db.GetChannels()
+	channels, err := s.db.GetChannels()
 	if err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
@@ -478,7 +476,7 @@ func handleGroupList(w http.ResponseWriter, r *http.Request) {
 
 // handleGroupCreate — POST /api/groups/create
 
-func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -504,7 +502,7 @@ func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 	groupID := fmt.Sprintf("grp-%d", time.Now().UnixNano())
 
 	// Add creator as admin
-	if err := db.SaveGroupMember(store.GroupMember{
+	if err := s.db.SaveGroupMember(store.GroupMember{
 		GroupID:  groupID,
 		UserNpub: req.CreatorNpub,
 		Role:     "admin",
@@ -519,7 +517,7 @@ func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 		if m == req.CreatorNpub {
 			continue
 		}
-		db.SaveGroupMember(store.GroupMember{
+		s.db.SaveGroupMember(store.GroupMember{
 			GroupID:  groupID,
 			UserNpub: m,
 			Role:     "member",
@@ -536,7 +534,7 @@ func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 		Subscribers: len(req.Members) + 1,
 		CreatedAt:   time.Now().Unix(),
 	}
-	db.SaveChannel(ch)
+	s.db.SaveChannel(ch)
 
 	writeJSON(w, 200, map[string]interface{}{
 		"status":  "created",
@@ -549,7 +547,7 @@ func handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 
 // handleGroupMembers — GET /api/groups/members?groupId=...
 
-func handleGroupMembers(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGroupMembers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -559,7 +557,7 @@ func handleGroupMembers(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "groupId required")
 		return
 	}
-	members, err := db.GetGroupMembers(groupID)
+	members, err := s.db.GetGroupMembers(groupID)
 	if err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
@@ -576,7 +574,7 @@ func handleGroupMembers(w http.ResponseWriter, r *http.Request) {
 
 // handleGroupKick — DELETE /api/groups/kick (admin only)
 
-func handleGroupKick(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGroupKick(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost && r.Method != http.MethodDelete {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST or DELETE")
 		return
@@ -599,13 +597,13 @@ func handleGroupKick(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAdmin, err := db.IsGroupAdmin(req.GroupID, req.AdminNpub)
+	isAdmin, err := s.db.IsGroupAdmin(req.GroupID, req.AdminNpub)
 	if err != nil || !isAdmin {
 		writeError(w, 403, "FORBIDDEN", "Only admin can kick members")
 		return
 	}
 
-	if err := db.RemoveGroupMember(req.GroupID, req.TargetNpub); err != nil {
+	if err := s.db.RemoveGroupMember(req.GroupID, req.TargetNpub); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
 	}
@@ -615,7 +613,7 @@ func handleGroupKick(w http.ResponseWriter, r *http.Request) {
 
 // handleGroupPromote — POST /api/groups/promote (admin only)
 
-func handleGroupPromote(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGroupPromote(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -643,13 +641,13 @@ func handleGroupPromote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	isAdmin, err := db.IsGroupAdmin(req.GroupID, req.AdminNpub)
+	isAdmin, err := s.db.IsGroupAdmin(req.GroupID, req.AdminNpub)
 	if err != nil || !isAdmin {
 		writeError(w, 403, "FORBIDDEN", "Only admin can promote members")
 		return
 	}
 
-	if err := db.UpdateGroupMemberRole(req.GroupID, req.TargetNpub, req.NewRole); err != nil {
+	if err := s.db.UpdateGroupMemberRole(req.GroupID, req.TargetNpub, req.NewRole); err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
 	}
@@ -659,7 +657,7 @@ func handleGroupPromote(w http.ResponseWriter, r *http.Request) {
 
 // handleSplitTunnel — POST /api/vpn/split-tunnel
 
-func handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -699,7 +697,7 @@ func handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
 
 // handleDNSProxy — POST /api/vpn/dns
 
-func handleDNSProxy(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDNSProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -767,7 +765,7 @@ func (g *nhooyrWSConn) Close() error {
 
 // handleNostrWS handles WebSocket connections for the Nostr relay.
 
-func handleNostrStats(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleNostrStats(w http.ResponseWriter, r *http.Request) {
 	if nostrRelay == nil {
 		writeError(w, 503, "NOT_READY", "Nostr relay not initialized")
 		return
@@ -779,7 +777,7 @@ func handleNostrStats(w http.ResponseWriter, r *http.Request) {
 
 // handleIPFSUpload handles file upload to IPFS.
 
-func handleIPFSUpload(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIPFSUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST with multipart form")
 		return
@@ -822,7 +820,7 @@ func handleIPFSUpload(w http.ResponseWriter, r *http.Request) {
 
 // handleIPFSStatus returns IPFS daemon status.
 
-func handleIPFSStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIPFSStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{
 		"available": ipfsClient.IsAvailable(),
 	})
@@ -830,7 +828,7 @@ func handleIPFSStatus(w http.ResponseWriter, r *http.Request) {
 
 // handleNATDiscover discovers public IP and NAT type via STUN.
 
-func handleNATDiscover(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleNATDiscover(w http.ResponseWriter, r *http.Request) {
 	result, err := nat.DiscoverPublicAddr("")
 	if err != nil {
 		writeError(w, 500, "STUN_ERROR", err.Error())
@@ -843,7 +841,7 @@ func handleNATDiscover(w http.ResponseWriter, r *http.Request) {
 
 // handleTorStatus returns Tor SOCKS5 proxy status.
 
-func handleTorStatus(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTorStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]interface{}{
 		"available": torDialer.IsTorRunning(),
 		"proxy":     "127.0.0.1:9050",
@@ -854,7 +852,7 @@ func handleTorStatus(w http.ResponseWriter, r *http.Request) {
 
 // handleMeshPeers — GET /api/mesh/peers
 
-func handleMeshPeers(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMeshPeers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -871,7 +869,7 @@ func handleMeshPeers(w http.ResponseWriter, r *http.Request) {
 
 // handleMeshStats — GET /api/mesh/stats
 
-func handleMeshStats(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMeshStats(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -881,7 +879,7 @@ func handleMeshStats(w http.ResponseWriter, r *http.Request) {
 
 // handleMeshAdd — POST /api/mesh/add
 
-func handleMeshAdd(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMeshAdd(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -907,7 +905,7 @@ func handleMeshAdd(w http.ResponseWriter, r *http.Request) {
 
 // handleStreamCreate — POST /api/stream/create
 
-func handleStreamCreate(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStreamCreate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -930,14 +928,14 @@ func handleStreamCreate(w http.ResponseWriter, r *http.Request) {
 	if req.ChannelName == "" {
 		req.ChannelName = "Live Stream"
 	}
-	s := streamMgr.CreateStream(req.ChannelName, req.StreamerID)
+	streamObj := streamMgr.CreateStream(req.ChannelName, req.StreamerID)
 	writeJSON(w, 201, s)
-	log.Printf("📺 Stream created: %s by %s (%s)", s.ID, req.StreamerID, req.ChannelName)
+	log.Printf("📺 Stream created: %s by %s (%s)", streamObj.ID, req.StreamerID, req.ChannelName)
 }
 
 // handleStreamList — GET /api/stream/list
 
-func handleStreamList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStreamList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -954,7 +952,7 @@ func handleStreamList(w http.ResponseWriter, r *http.Request) {
 
 // handleStreamEnd — POST /api/stream/end
 
-func handleStreamEnd(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStreamEnd(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -984,7 +982,7 @@ func handleStreamEnd(w http.ResponseWriter, r *http.Request) {
 
 // handleStreamSubscribe — POST /api/stream/subscribe
 
-func handleStreamSubscribe(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStreamSubscribe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -1016,7 +1014,7 @@ func handleStreamSubscribe(w http.ResponseWriter, r *http.Request) {
 
 // handleBotRegister — POST /api/bots/register
 
-func handleBotRegister(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleBotRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -1048,7 +1046,7 @@ func handleBotRegister(w http.ResponseWriter, r *http.Request) {
 
 // handleBotList — GET /api/bots/list
 
-func handleBotList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleBotList(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -1067,7 +1065,7 @@ func handleBotList(w http.ResponseWriter, r *http.Request) {
 
 // handleStickerPacks — GET /api/stickers/packs
 
-func handleStickerPacks(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStickerPacks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -1084,7 +1082,7 @@ func handleStickerPacks(w http.ResponseWriter, r *http.Request) {
 
 // handleStickerPackGet — GET /api/stickers/pack/:id
 
-func handleStickerPackGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleStickerPackGet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -1107,7 +1105,7 @@ func handleStickerPackGet(w http.ResponseWriter, r *http.Request) {
 
 // handleFederationPeerAdd — POST /api/federation/peer
 
-func handleFederationPeerAdd(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleFederationPeerAdd(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -1141,7 +1139,7 @@ func handleFederationPeerAdd(w http.ResponseWriter, r *http.Request) {
 		LastSync: 0,
 		Status:   "active",
 	}
-	if err := db.SaveFederationPeer(peer); err != nil {
+	if err := s.db.SaveFederationPeer(peer); err != nil {
 		log.Printf("⚠️  Failed to persist federation peer: %v", err)
 	}
 
@@ -1154,7 +1152,7 @@ func handleFederationPeerAdd(w http.ResponseWriter, r *http.Request) {
 
 // handleFederationPeerRemove — DELETE /api/federation/peer
 
-func handleFederationPeerRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleFederationPeerRemove(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use DELETE")
 		return
@@ -1182,7 +1180,7 @@ func handleFederationPeerRemove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Remove from DB
-	if err := db.DeleteFederationPeer(req.URL); err != nil {
+	if err := s.db.DeleteFederationPeer(req.URL); err != nil {
 		log.Printf("⚠️  Failed to delete federation peer from DB: %v", err)
 	}
 
@@ -1195,8 +1193,8 @@ func handleFederationPeerRemove(w http.ResponseWriter, r *http.Request) {
 
 // handleFederationPeerList — GET /api/federation/peer
 
-func handleFederationPeerList(w http.ResponseWriter, r *http.Request) {
-	peers, err := db.GetFederationPeers()
+func (s *Server) handleFederationPeerList(w http.ResponseWriter, r *http.Request) {
+	peers, err := s.db.GetFederationPeers()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -1212,7 +1210,7 @@ func handleFederationPeerList(w http.ResponseWriter, r *http.Request) {
 
 // handleFederationSync — POST /api/federation/sync
 
-func handleFederationSync(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleFederationSync(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -1234,7 +1232,7 @@ func handleFederationSync(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Unix()
 	peers := fedRelay.GetPeers()
 	for _, p := range peers {
-		if err := db.UpdateFederationPeerSync(p, now); err != nil {
+		if err := s.db.UpdateFederationPeerSync(p, now); err != nil {
 			log.Printf("⚠️  Failed to update sync time for %s: %v", p, err)
 		}
 	}
@@ -1262,7 +1260,7 @@ func startDeadMansSwitchWorker(ctx context.Context, s *store.Store) {
 			}
 
 			for _, dms := range switches {
-				zap.S().Infof("💀 Triggering Dead Man's Switch %s for user %s", dms.ID, dms.UserNpub)
+				zap.S().Infof("💀 Triggering Dead Man's Switch %s for user %s", dmstreamObj.ID, dms.UserNpub)
 				// Broadcast via hub if possible, or save as a system message to recipient
 				msg := store.Message{
 					ID:        fmt.Sprintf("dms-%d", time.Now().UnixNano()),
@@ -1273,8 +1271,8 @@ func startDeadMansSwitchWorker(ctx context.Context, s *store.Store) {
 				}
 				s.SaveMessage(msg)
 
-				if hub != nil {
-					hub.RawBroadcastJSON(msg, "")
+				if s.hub != nil {
+					s.hub.RawBroadcastJSON(msg, "")
 				}
 
 				dms.Triggered = true

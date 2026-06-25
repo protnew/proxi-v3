@@ -435,7 +435,7 @@ func TestEndpoint_HeadReturnsHeaders(t *testing.T) {
 	v := newTestVault(t)
 	data := bytes.Repeat([]byte("head"), 100)
 	resp := uploadViaHTTP(t, v, "head.bin", data, map[string]string{
-		"title":  "Head", "type": "document", "access": "public",
+		"title": "Head", "type": "document", "access": "public",
 	})
 
 	req := httptest.NewRequest(http.MethodHead, "/api/content/"+resp.ID, nil)

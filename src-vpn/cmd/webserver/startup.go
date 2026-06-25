@@ -120,7 +120,7 @@ func run() error {
 		os.MkdirAll(dataDir, 0755)
 		dbPath = path.Join(dataDir, "messenger.db")
 	}
-	db, err = store.NewStore(dbPath)
+	db, err := store.NewStore(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
@@ -136,7 +136,7 @@ func run() error {
 	}
 
 	// Initialize Chat Hub
-	initHub()
+	srv.initHub()
 
 	// Initialize P2P Mesh Network
 	maxHops := 6
@@ -214,7 +214,7 @@ func run() error {
 	}
 
 	// Initialize chat hub
-	initHub()
+	srv.initHub()
 
 	// Auto-connect VPN peers on startup
 	go autoConnectPeers()
@@ -239,19 +239,19 @@ func run() error {
 		secret = hex.EncodeToString(b)
 		log.Printf("WARNING: JWT_SECRET not set, generated random secret")
 	}
-	globalAuthService = auth.NewAuthService(secret)
+	authSvc := auth.NewAuthService(secret)
 	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
-		return publicApiChain(authMiddleware(globalAuthService, h))
+		return publicApiChain(authMiddleware(srv.authService, h))
 	}
 
-	http.HandleFunc("/api/health", publicApiChain(handleHealth))
-	http.HandleFunc("/api/status", publicApiChain(handleStatus))
+	http.HandleFunc("/api/health", publicApiChain(srv.handleHealth))
+	http.HandleFunc("/api/status", publicApiChain(srv.handleStatus))
 	http.HandleFunc("/api/messages", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleMessagesGet(w, r)
+			srv.handleMessagesGet(w, r)
 		case "POST":
-			handleMessagesPost(w, r)
+			srv.handleMessagesPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
@@ -259,100 +259,100 @@ func run() error {
 	http.HandleFunc("/api/channels", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleChannelsGet(w, r)
+			srv.handleChannelsGet(w, r)
 		case "POST":
-			handleChannelsPost(w, r)
+			srv.handleChannelsPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
 	}))
-	http.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
+	http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 	http.HandleFunc("/api/contacts", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleContactsGet(w, r)
+			srv.handleContactsGet(w, r)
 		case "POST":
-			handleContactsSave(w, r)
+			srv.handleContactsSave(w, r)
 		case "DELETE":
-			handleContactsRemove(w, r)
+			srv.handleContactsRemove(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
 		}
 	}))
 	// WebSocket + Identity
-	http.HandleFunc("/ws", handleWS)
-	http.HandleFunc("/api/identity", apiChain(handleIdentityGet))
-	http.HandleFunc("/api/online", apiChain(handleOnlineUsers))
+	http.HandleFunc("/ws", srv.handleWS)
+	http.HandleFunc("/api/identity", apiChain(srv.handleIdentityGet))
+	http.HandleFunc("/api/online", apiChain(srv.handleOnlineUsers))
 
 	// File upload/download
-	http.HandleFunc("/api/files/upload", apiChain(handleFileUpload))
-	http.HandleFunc("/api/files/", handleFileGet) // no rate limit for downloads
+	http.HandleFunc("/api/files/upload", apiChain(srv.handleFileUpload))
+	http.HandleFunc("/api/files/", srv.handleFileGet) // no rate limit for downloads
 	
 	// Media endpoints (v12 content_manifests)
-	http.HandleFunc("/api/media/upload", apiChain(handleMediaUpload))
-	http.HandleFunc("/api/media/", handleMediaGet)
+	http.HandleFunc("/api/media/upload", apiChain(srv.handleMediaUpload))
+	http.HandleFunc("/api/media/", srv.handleMediaGet)
 	// Reactions
-	http.HandleFunc("/api/reactions", apiChain(handleReactions))
+	http.HandleFunc("/api/reactions", apiChain(srv.handleReactions))
 	// Read receipts
-	http.HandleFunc("/api/read-receipts", apiChain(handleReadReceipts))
+	http.HandleFunc("/api/read-receipts", apiChain(srv.handleReadReceipts))
 	// Profiles
-	http.HandleFunc("/api/profiles", apiChain(handleProfiles))
+	http.HandleFunc("/api/profiles", apiChain(srv.handleProfiles))
 	// Search
-	http.HandleFunc("/api/search", apiChain(handleSearch))
-	http.HandleFunc("/api/messages/edit", apiChain(handleEditMessage))
-	http.HandleFunc("/api/messages/delete", apiChain(handleDeleteMessage))
-	http.HandleFunc("/api/messages/schedule", apiChain(handleScheduleMessage))
-	http.HandleFunc("/api/switch/setup", apiChain(handleSwitchSetup))
-	http.HandleFunc("/api/switch/check-in", apiChain(handleSwitchCheckIn))
-	http.HandleFunc("/api/push/subscribe", apiChain(handlePushSubscribe))
-	http.HandleFunc("/api/groups/create", apiChain(handleGroupCreate))
-	http.HandleFunc("/api/groups/list", apiChain(handleGroupList))
-	http.HandleFunc("/api/groups/members", apiChain(handleGroupMembers))
-	http.HandleFunc("/api/groups/kick", apiChain(handleGroupKick))
-	http.HandleFunc("/api/groups/promote", apiChain(handleGroupPromote))
-	http.HandleFunc("/api/vpn/split-tunnel", apiChain(handleSplitTunnel))
-	http.HandleFunc("/api/vpn/dns", apiChain(handleDNSProxy))
-	http.HandleFunc("/api/nostr/stats", apiChain(handleNostrStats))
-	http.HandleFunc("/nostr", handleNostrWS) // NIP-01 WebSocket endpoint
-	http.HandleFunc("/api/ipfs/upload", apiChain(handleIPFSUpload))
-	http.HandleFunc("/api/ipfs/status", apiChain(handleIPFSStatus))
-	http.HandleFunc("/api/nat/discover", apiChain(handleNATDiscover))
-	http.HandleFunc("/api/tor/status", apiChain(handleTorStatus))
-	http.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
+	http.HandleFunc("/api/search", apiChain(srv.handleSearch))
+	http.HandleFunc("/api/messages/edit", apiChain(srv.handleEditMessage))
+	http.HandleFunc("/api/messages/delete", apiChain(srv.handleDeleteMessage))
+	http.HandleFunc("/api/messages/schedule", apiChain(srv.handleScheduleMessage))
+	http.HandleFunc("/api/switch/setup", apiChain(srv.handleSwitchSetup))
+	http.HandleFunc("/api/switch/check-in", apiChain(srv.handleSwitchCheckIn))
+	http.HandleFunc("/api/push/subscribe", apiChain(srv.handlePushSubscribe))
+	http.HandleFunc("/api/groups/create", apiChain(srv.handleGroupCreate))
+	http.HandleFunc("/api/groups/list", apiChain(srv.handleGroupList))
+	http.HandleFunc("/api/groups/members", apiChain(srv.handleGroupMembers))
+	http.HandleFunc("/api/groups/kick", apiChain(srv.handleGroupKick))
+	http.HandleFunc("/api/groups/promote", apiChain(srv.handleGroupPromote))
+	http.HandleFunc("/api/vpn/split-tunnel", apiChain(srv.handleSplitTunnel))
+	http.HandleFunc("/api/vpn/dns", apiChain(srv.handleDNSProxy))
+	http.HandleFunc("/api/nostr/stats", apiChain(srv.handleNostrStats))
+	http.HandleFunc("/nostr", srv.handleNostrWS) // NIP-01 WebSocket endpoint
+	http.HandleFunc("/api/ipfs/upload", apiChain(srv.handleIPFSUpload))
+	http.HandleFunc("/api/ipfs/status", apiChain(srv.handleIPFSStatus))
+	http.HandleFunc("/api/nat/discover", apiChain(srv.handleNATDiscover))
+	http.HandleFunc("/api/tor/status", apiChain(srv.handleTorStatus))
+	http.HandleFunc("/api/channels/subscribe", apiChain(srv.handleChannelSubscribe))
 
 	// Stream endpoints (Sprint 3 — Task 1)
-	http.HandleFunc("/api/stream/create", apiChain(handleStreamCreate))
-	http.HandleFunc("/api/stream/list", apiChain(handleStreamList))
-	http.HandleFunc("/api/stream/end", apiChain(handleStreamEnd))
-	http.HandleFunc("/api/stream/subscribe", apiChain(handleStreamSubscribe))
+	http.HandleFunc("/api/stream/create", apiChain(srv.handleStreamCreate))
+	http.HandleFunc("/api/stream/list", apiChain(srv.handleStreamList))
+	http.HandleFunc("/api/stream/end", apiChain(srv.handleStreamEnd))
+	http.HandleFunc("/api/stream/subscribe", apiChain(srv.handleStreamSubscribe))
 
 	// Bot endpoints (Sprint 3 — Task 2)
-	http.HandleFunc("/api/bots/register", apiChain(handleBotRegister))
-	http.HandleFunc("/api/bots/list", apiChain(handleBotList))
+	http.HandleFunc("/api/bots/register", apiChain(srv.handleBotRegister))
+	http.HandleFunc("/api/bots/list", apiChain(srv.handleBotList))
 
 	// Sticker endpoints (Sprint 3 — Task 2)
-	http.HandleFunc("/api/stickers/packs", apiChain(handleStickerPacks))
-	http.HandleFunc("/api/stickers/pack/", apiChain(handleStickerPackGet))
+	http.HandleFunc("/api/stickers/packs", apiChain(srv.handleStickerPacks))
+	http.HandleFunc("/api/stickers/pack/", apiChain(srv.handleStickerPackGet))
 
 	// Mesh network endpoints
-	http.HandleFunc("/api/mesh/peers", apiChain(handleMeshPeers))
-	http.HandleFunc("/api/mesh/stats", apiChain(handleMeshStats))
-	http.HandleFunc("/api/mesh/add", apiChain(handleMeshAdd))
+	http.HandleFunc("/api/mesh/peers", apiChain(srv.handleMeshPeers))
+	http.HandleFunc("/api/mesh/stats", apiChain(srv.handleMeshStats))
+	http.HandleFunc("/api/mesh/add", apiChain(srv.handleMeshAdd))
 
 	// Federation endpoints (Sprint 6 — S6.1)
 	http.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "POST":
-			handleFederationPeerAdd(w, r)
+			srv.handleFederationPeerAdd(w, r)
 		case "DELETE":
-			handleFederationPeerRemove(w, r)
+			srv.handleFederationPeerRemove(w, r)
 		case "GET":
-			handleFederationPeerList(w, r)
+			srv.handleFederationPeerList(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
 		}
 	}))
-	http.HandleFunc("/api/federation/sync", apiChain(handleFederationSync))
+	http.HandleFunc("/api/federation/sync", apiChain(srv.handleFederationSync))
 
 	// Auth endpoints (D1 — JWT authentication)
 	http.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
@@ -379,7 +379,7 @@ func run() error {
 		}
 		db.DB().Exec("INSERT OR IGNORE INTO users (id, npub, username, created_at) VALUES (?, ?, ?, ?)",
 			userID, body.Npub, username, time.Now().Unix())
-		accessToken, refreshToken, err := globalAuthService.GenerateTokenPair(userID, body.Npub)
+		accessToken, refreshToken, err := srv.authService.GenerateTokenPair(userID, body.Npub)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "TOKEN_ERROR", err.Error())
 			return
@@ -404,7 +404,7 @@ func run() error {
 			writeError(w, http.StatusUnauthorized, "NOT_FOUND", "user not found")
 			return
 		}
-		accessToken, refreshToken, _ := globalAuthService.GenerateTokenPair(userID, npub)
+		accessToken, refreshToken, _ := srv.authService.GenerateTokenPair(userID, npub)
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
 	}))
 	http.HandleFunc("/api/auth/refresh", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
@@ -419,7 +419,7 @@ func run() error {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
-		newAccess, newRefresh, err := globalAuthService.RefreshToken(body.RefreshToken)
+		newAccess, newRefresh, err := srv.authService.RefreshToken(body.RefreshToken)
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", err.Error())
 			return
@@ -608,4 +608,4 @@ func deadMansSwitchLoop() {
 	}
 }
 
-// handleScheduleMessage — POST /api/messages/schedule
+// srv.handleScheduleMessage — POST /api/messages/schedule

@@ -36,8 +36,8 @@ func init() {
 		"contacts.title":    "Contacts",
 		"contacts.add":      "Add contact",
 		"contacts.block":    "Block",
-		"error.network":    "Network error",
-		"error.auth":       "Authentication failed",
+		"error.network":     "Network error",
+		"error.auth":        "Authentication failed",
 	})
 
 	// Russian
@@ -64,8 +64,8 @@ func init() {
 		"contacts.title":    "Контакты",
 		"contacts.add":      "Добавить контакт",
 		"contacts.block":    "Заблокировать",
-		"error.network":    "Ошибка сети",
-		"error.auth":       "Ошибка аутентификации",
+		"error.network":     "Ошибка сети",
+		"error.auth":        "Ошибка аутентификации",
 	})
 
 	// Chinese (Simplified)
@@ -92,8 +92,8 @@ func init() {
 		"contacts.title":    "联系人",
 		"contacts.add":      "添加联系人",
 		"contacts.block":    "拉黑",
-		"error.network":    "网络错误",
-		"error.auth":       "认证失败",
+		"error.network":     "网络错误",
+		"error.auth":        "认证失败",
 	})
 
 	// Spanish
@@ -120,8 +120,8 @@ func init() {
 		"contacts.title":    "Contactos",
 		"contacts.add":      "Agregar contacto",
 		"contacts.block":    "Bloquear",
-		"error.network":    "Error de red",
-		"error.auth":       "Error de autenticación",
+		"error.network":     "Error de red",
+		"error.auth":        "Error de autenticación",
 	})
 
 	// Arabic
@@ -148,8 +148,8 @@ func init() {
 		"contacts.title":    "جهات الاتصال",
 		"contacts.add":      "إضافة جهة اتصال",
 		"contacts.block":    "حظر",
-		"error.network":    "خطأ في الشبكة",
-		"error.auth":       "فشل المصادقة",
+		"error.network":     "خطأ في الشبكة",
+		"error.auth":        "فشل المصادقة",
 	})
 }
 

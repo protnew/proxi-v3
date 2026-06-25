@@ -131,13 +131,18 @@ func handleMediaGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	manifestID := path
-	manifest, err := db.GetContentManifest(manifestID)
+	manifest, err := s.db.GetContentManifest(manifestID)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "Manifest not found")
+		stream := streamMgr.GetStream(manifestID)
+		if stream != nil {
+			writeError(w, 404, "NOT_FOUND", "not found")
+			return
+		}
+		writeError(w, 404, "NOT_FOUND", "manifest not found")
 		return
 	}
 
-	catalogs, err := db.GetContentCatalogByManifest(manifestID)
+	catalogs, err := s.db.GetContentCatalogByManifest(manifestID)
 	if err != nil || len(catalogs) == 0 {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "Catalog not found for manifest")
 		return

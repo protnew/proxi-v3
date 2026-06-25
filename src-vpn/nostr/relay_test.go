@@ -87,11 +87,11 @@ func containsInt2(s []int, v int) bool {
 
 // mockConn is a mock WebSocketConn that records written messages.
 type mockConn struct {
-	mu        sync.Mutex
-	written   []interface{}
-	readCh    chan []json.RawMessage
-	closeErr  error
-	closed    bool
+	mu       sync.Mutex
+	written  []interface{}
+	readCh   chan []json.RawMessage
+	closeErr error
+	closed   bool
 }
 
 func newMockConn() *mockConn {

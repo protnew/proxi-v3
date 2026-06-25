@@ -66,8 +66,8 @@ func (p *Panel) ListUsers(ctx context.Context, offset, limit int) ([]map[string]
 			continue
 		}
 		entry := map[string]interface{}{
-			"user_id":    userID,
-			"msg_count":  msgCount,
+			"user_id":     userID,
+			"msg_count":   msgCount,
 			"last_active": lastActive.Int64,
 		}
 		// Check if banned

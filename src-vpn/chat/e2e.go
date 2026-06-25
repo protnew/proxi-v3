@@ -18,10 +18,10 @@ import (
 // derivation, then used for all subsequent AES-256-GCM encrypt/decrypt
 // operations within the session.
 type E2ESession struct {
-	LocalNpub   string
-	RemoteNpub  string
+	LocalNpub    string
+	RemoteNpub   string
 	SharedSecret []byte
-	CreatedAt   int64
+	CreatedAt    int64
 }
 
 // EncryptMessageForRecipient encrypts a plaintext message for a specific
@@ -138,8 +138,8 @@ func GenerateE2ESession(localNpub, remoteNpub string, db *store.Store) (*E2ESess
 	}
 
 	return &E2ESession{
-		LocalNpub:   localNpub,
-		RemoteNpub:  remoteNpub,
+		LocalNpub:    localNpub,
+		RemoteNpub:   remoteNpub,
 		SharedSecret: sharedSecret[:],
 		CreatedAt:    time.Now().Unix(),
 	}, nil

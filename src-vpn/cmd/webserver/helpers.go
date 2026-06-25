@@ -18,7 +18,6 @@ func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
-
 // ========== Security headers middleware ==========
 
 func securityHeadersMiddleware(next http.HandlerFunc) http.HandlerFunc {

@@ -39,7 +39,7 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("init vpn: %v", err)
 	}
 
-	initHub()
+	s.s.initHub()
 	startTime = time.Now()
 
 	// Init mesh net
@@ -130,7 +130,7 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 	server := httptest.NewServer(mux)
 	t.Cleanup(func() {
 		server.Close()
-		db.Close()
+		s.s.s.db.Close()
 	})
 
 	return server

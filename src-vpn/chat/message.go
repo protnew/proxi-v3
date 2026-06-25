@@ -33,20 +33,20 @@ const MaxBinaryVoiceSize = 5 * 1024 * 1024
 //
 //	{"type":"chat|join|leave|typing|voice","from":"userId","to":"userId|broadcast","text":"...","ts":unix}
 type Message struct {
-	Type           string `json:"type"`                    // "chat", "join", "leave", "typing", "key_exchange", "message_edited", "message_deleted", "voice"
-	From           string `json:"from"`                    // sender userId
-	To             string `json:"to"`                      // receiver userId or "broadcast"
-	Text           string `json:"text,omitempty"`          // message body (empty for join/leave/typing)
-	Ts             int64  `json:"ts"`                      // unix timestamp
-	PublicKey      string `json:"publicKey,omitempty"`     // ECDH public key for key_exchange
-	ID             string `json:"id,omitempty"`            // message ID (for edit/delete/reply)
-	ReplyTo        string `json:"replyTo,omitempty"`       // ID of message being replied to
-	ReplyToText    string `json:"replyToText,omitempty"`   // preview text of replied message
-	ReplyToFrom    string `json:"replyToFrom,omitempty"`   // sender of replied message
-	ForwardedFrom  string `json:"forwardedFrom,omitempty"` // original sender npub for forwarded messages
-	TTL            int    `json:"ttl,omitempty"`            // self-destruct in seconds (0 = never)
-	VoiceData      string `json:"voiceData,omitempty"`     // base64-encoded audio (legacy fallback)
-	VoiceDuration  int    `json:"voiceDuration,omitempty"`  // voice duration in seconds
+	Type          string `json:"type"`                    // "chat", "join", "leave", "typing", "key_exchange", "message_edited", "message_deleted", "voice"
+	From          string `json:"from"`                    // sender userId
+	To            string `json:"to"`                      // receiver userId or "broadcast"
+	Text          string `json:"text,omitempty"`          // message body (empty for join/leave/typing)
+	Ts            int64  `json:"ts"`                      // unix timestamp
+	PublicKey     string `json:"publicKey,omitempty"`     // ECDH public key for key_exchange
+	ID            string `json:"id,omitempty"`            // message ID (for edit/delete/reply)
+	ReplyTo       string `json:"replyTo,omitempty"`       // ID of message being replied to
+	ReplyToText   string `json:"replyToText,omitempty"`   // preview text of replied message
+	ReplyToFrom   string `json:"replyToFrom,omitempty"`   // sender of replied message
+	ForwardedFrom string `json:"forwardedFrom,omitempty"` // original sender npub for forwarded messages
+	TTL           int    `json:"ttl,omitempty"`           // self-destruct in seconds (0 = never)
+	VoiceData     string `json:"voiceData,omitempty"`     // base64-encoded audio (legacy fallback)
+	VoiceDuration int    `json:"voiceDuration,omitempty"` // voice duration in seconds
 }
 
 // Encode marshals the message to JSON bytes.
@@ -65,10 +65,10 @@ func DecodeMessage(data []byte) (*Message, error) {
 
 // VoiceMetadata is the JSON metadata embedded in a binary voice frame header.
 type VoiceMetadata struct {
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Duration  int    `json:"duration"`
-	Ts        int64  `json:"ts,omitempty"`
+	From     string `json:"from"`
+	To       string `json:"to"`
+	Duration int    `json:"duration"`
+	Ts       int64  `json:"ts,omitempty"`
 }
 
 // EncodeBinaryVoice builds a binary WebSocket frame for a voice message.

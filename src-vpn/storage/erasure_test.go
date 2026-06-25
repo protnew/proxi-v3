@@ -164,12 +164,12 @@ func TestNewEncoder_Validation(t *testing.T) {
 		parity int
 		err    bool
 	}{
-		{0, 2, true},   // data must be >= 1
-		{3, 0, true},   // parity must be >= 1
-		{-1, 2, true},  // negative data
-		{3, -1, true},  // negative parity
-		{1, 1, false},  // minimum valid
-		{3, 2, false},  // K=3 N=5
+		{0, 2, true},    // data must be >= 1
+		{3, 0, true},    // parity must be >= 1
+		{-1, 2, true},   // negative data
+		{3, -1, true},   // negative parity
+		{1, 1, false},   // minimum valid
+		{3, 2, false},   // K=3 N=5
 		{10, 10, false}, // larger
 	}
 

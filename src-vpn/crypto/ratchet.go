@@ -42,7 +42,7 @@ type RatchetState struct {
 // ratchetHeader is prepended to every ciphertext so the receiver can
 // identify which DH step and chain position the message belongs to.
 type ratchetHeader struct {
-	DHPub  [32]byte
+	DHPub   [32]byte
 	SendNum uint32
 	PrevNum uint32
 }

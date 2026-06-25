@@ -34,7 +34,7 @@ var ErrPreviewFetch = errors.New("failed to fetch url preview")
 
 // cacheEntry stores a preview with its expiration time.
 type cacheEntry struct {
-	preview  *URLPreview
+	preview   *URLPreview
 	expiresAt time.Time
 }
 
@@ -72,7 +72,7 @@ func (c *PreviewCache) Set(url string, p *URLPreview) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[url] = &cacheEntry{
-		preview:  p,
+		preview:   p,
 		expiresAt: time.Now().Add(c.ttl),
 	}
 }
@@ -98,9 +98,9 @@ type fetchFunc func(ctx context.Context, url string) (string, error)
 
 // PreviewService fetches and caches URL previews (OpenGraph metadata).
 type PreviewService struct {
-	cache   *PreviewCache
-	fetch   fetchFunc
-	client  *http.Client
+	cache  *PreviewCache
+	fetch  fetchFunc
+	client *http.Client
 }
 
 // NewPreviewService creates a PreviewService with the default HTTP client and

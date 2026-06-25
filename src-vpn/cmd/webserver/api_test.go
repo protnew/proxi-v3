@@ -54,7 +54,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}
 
 	// Initialize hub
-	initHub()
+	s.s.initHub()
 	startTime = time.Now()
 
 	// Build mux
@@ -110,7 +110,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	server := httptest.NewServer(mux)
 	t.Cleanup(func() {
 		server.Close()
-		db.Close()
+		s.s.s.db.Close()
 	})
 
 	return server

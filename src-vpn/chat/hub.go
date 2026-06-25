@@ -88,7 +88,9 @@ func (h *ChatHub) Register(c *Client) {
 
 	if old, ok := h.clients[c.UserID]; ok {
 		close(old.Send)
-		if err := old.Conn.Close(websocket.StatusNormalClosure, "replaced by new connection"); err != nil { log.Printf("Close error: %v", err) }
+		if err := old.Conn.Close(websocket.StatusNormalClosure, "replaced by new connection"); err != nil {
+			log.Printf("Close error: %v", err)
+		}
 	}
 
 	c.hub = h
@@ -247,7 +249,9 @@ func (c *Client) pingPump(ctx context.Context) {
 func (c *Client) ReadPump(ctx context.Context) {
 	defer func() {
 		c.hub.Unregister(c)
-		if err := c.Conn.Close(websocket.StatusNormalClosure, "read pump done"); err != nil { log.Printf("Close error: %v", err) }
+		if err := c.Conn.Close(websocket.StatusNormalClosure, "read pump done"); err != nil {
+			log.Printf("Close error: %v", err)
+		}
 	}()
 
 	c.Conn.SetReadLimit(MaxBinaryVoiceSize)
@@ -353,7 +357,9 @@ func (c *Client) ReadPump(ctx context.Context) {
 // It supports both text JSON and binary voice frames.
 func (c *Client) WritePump(ctx context.Context) {
 	defer func() {
-		if err := c.Conn.Close(websocket.StatusNormalClosure, "write pump done"); err != nil { log.Printf("Close error: %v", err) }
+		if err := c.Conn.Close(websocket.StatusNormalClosure, "write pump done"); err != nil {
+			log.Printf("Close error: %v", err)
+		}
 	}()
 
 	for {
@@ -361,7 +367,9 @@ func (c *Client) WritePump(ctx context.Context) {
 		case msg, ok := <-c.Send:
 			if !ok {
 				// Channel closed — hub unregistered us.
-				if err := c.Conn.Close(websocket.StatusNormalClosure, "hub unregistered"); err != nil { log.Printf("Close error: %v", err) }
+				if err := c.Conn.Close(websocket.StatusNormalClosure, "hub unregistered"); err != nil {
+					log.Printf("Close error: %v", err)
+				}
 				return
 			}
 			writeCtx, cancel := context.WithTimeout(ctx, WriteTimeout)

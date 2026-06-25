@@ -14,8 +14,8 @@ package vpn
 
 import (
 	"context"
-	crypto_sha256 "crypto/sha256"
 	"crypto/rand"
+	crypto_sha256 "crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -37,33 +37,33 @@ import (
 
 const (
 	// Packet types matching WireGuard protocol
-	packetTypeHandshakeInit    = 1
+	packetTypeHandshakeInit     = 1
 	packetTypeHandshakeResponse = 2
-	packetTypeData             = 4
+	packetTypeData              = 4
 
 	// Sizes
-	keySize         = 32    // Curve25519 key size
-	nonceSize       = 8     // Counter-based nonce
-	mac1Size        = 16    // MAC1 size
-	mac2Size        = 16    // MAC2 size
-	timestampSize   = 12    // Tai64n timestamp
-	headerSize      = 4     // Packet type (1) + reserved (3)
-	dataOverhead    = headerSize + nonceSize + 4 + chacha20poly1305.Overhead + mac1Size
-	maxPacketSize   = 1420  // MTU + overhead
-	sessionIDSize   = 4     // Session identifier
+	keySize       = 32 // Curve25519 key size
+	nonceSize     = 8  // Counter-based nonce
+	mac1Size      = 16 // MAC1 size
+	mac2Size      = 16 // MAC2 size
+	timestampSize = 12 // Tai64n timestamp
+	headerSize    = 4  // Packet type (1) + reserved (3)
+	dataOverhead  = headerSize + nonceSize + 4 + chacha20poly1305.Overhead + mac1Size
+	maxPacketSize = 1420 // MTU + overhead
+	sessionIDSize = 4    // Session identifier
 
 	// Session parameters
-	handshakeTimeout = 5 * time.Second
-	sessionDuration  = 2 * time.Minute // Re-key interval (like WireGuard)
+	handshakeTimeout  = 5 * time.Second
+	sessionDuration   = 2 * time.Minute // Re-key interval (like WireGuard)
 	keepaliveInterval = 10 * time.Second
 )
 
 // UserspaceVPN is a fully userspace WireGuard-compatible VPN transport.
 // It requires no kernel modules, TUN devices, or root privileges.
 type UserspaceVPN struct {
-	config    UserspaceConfig
-	state     atomic.Int32 // 0=stopped, 1=running
-	conn      *net.UDPConn
+	config UserspaceConfig
+	state  atomic.Int32 // 0=stopped, 1=running
+	conn   *net.UDPConn
 
 	localPort int
 
@@ -72,12 +72,12 @@ type UserspaceVPN struct {
 	staticPublic  [keySize]byte
 
 	// Peer sessions
-	mu         sync.RWMutex
-	peers      map[string]*peerSession // peerID -> session
+	mu    sync.RWMutex
+	peers map[string]*peerSession // peerID -> session
 
 	// Stats
-	bytesSent  atomic.Int64
-	bytesRecv  atomic.Int64
+	bytesSent   atomic.Int64
+	bytesRecv   atomic.Int64
 	packetsSent atomic.Int64
 	packetsRecv atomic.Int64
 
@@ -578,7 +578,7 @@ func (u *UserspaceVPN) handleHandshakeResponse(data []byte) {
 
 	u.mu.RLock()
 	defer u.mu.RUnlock()
-	
+
 	for _, session := range u.peers {
 		expectedMAC := computeMAC1(u.staticPublic[:], data[:12])
 		if constantTimeEqual(data[12:28], expectedMAC) {

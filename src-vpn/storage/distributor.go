@@ -174,5 +174,3 @@ func (d *Distributor) DataShards() int { return d.encoder.DataShards }
 
 // ParityShards returns the number of parity shards.
 func (d *Distributor) ParityShards() int { return d.encoder.ParityShards }
-
-

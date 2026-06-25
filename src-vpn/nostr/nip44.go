@@ -4,9 +4,10 @@
 // Spec: https://github.com/nostr-protocol/nips/blob/master/44.md
 //
 // NIP-44 replaces NIP-04's AES-256-CBC with a modern scheme:
-//   ECDH(secp256k1) → conversation_key = SHA256(shared_secret || "nip44-v2")
-//   encryption      = ChaCha20-Poly1305(conversation_key, nonce, padded_plaintext)
-//   wire format     = base64(version[1] + nonce[32] + ciphertext + tag[16])
+//
+//	ECDH(secp256k1) → conversation_key = SHA256(shared_secret || "nip44-v2")
+//	encryption      = ChaCha20-Poly1305(conversation_key, nonce, padded_plaintext)
+//	wire format     = base64(version[1] + nonce[32] + ciphertext + tag[16])
 package nostr
 
 import (

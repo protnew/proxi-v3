@@ -28,9 +28,9 @@ type ChannelCategory struct {
 
 // CategoryManager manages channel categories. It is safe for concurrent use.
 type CategoryManager struct {
-	mu            sync.RWMutex
-	categories    map[string]*ChannelCategory
-	channelToCat  map[string]string // channelID → categoryID (a channel belongs to at most one category)
+	mu           sync.RWMutex
+	categories   map[string]*ChannelCategory
+	channelToCat map[string]string // channelID → categoryID (a channel belongs to at most one category)
 }
 
 // NewCategoryManager creates a new empty CategoryManager.
@@ -202,7 +202,7 @@ func (cm *CategoryManager) CategoryOfChannel(channelID string) string {
 
 // subCountEntry is a cached subscriber count with metadata for lazy refresh.
 type subCountEntry struct {
-	count      int64
+	count       int64
 	lastUpdated time.Time
 }
 
@@ -263,7 +263,7 @@ func (c *SubscriberCountCache) GetCount(channelID string) int64 {
 
 	count := c.source(channelID)
 	c.entries[channelID] = &subCountEntry{
-		count:      count,
+		count:       count,
 		lastUpdated: time.Now(),
 	}
 	return count
@@ -280,7 +280,7 @@ func (c *SubscriberCountCache) SetCount(channelID string, count int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.entries[channelID] = &subCountEntry{
-		count:      count,
+		count:       count,
 		lastUpdated: time.Now(),
 	}
 }

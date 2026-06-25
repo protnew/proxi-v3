@@ -1,11 +1,11 @@
 package federation
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"sync"
-	"context"
 	"testing"
 	"time"
 

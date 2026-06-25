@@ -19,13 +19,13 @@ const (
 // parallel) while a separate goroutine polls the snapshot methods for UI
 // updates.
 type ProgressReporter struct {
-	direction ProgressDirection
-	total     int64 // total bytes expected (0 = unknown / streaming)
+	direction   ProgressDirection
+	total       int64 // total bytes expected (0 = unknown / streaming)
 	transferred int64 // bytes processed so far (atomic)
-	started   atomic.Bool
-	completed atomic.Bool
-	mu        sync.RWMutex
-	chunks    int // number of chunks processed
+	started     atomic.Bool
+	completed   atomic.Bool
+	mu          sync.RWMutex
+	chunks      int // number of chunks processed
 }
 
 // NewProgressReporter creates a reporter for the given direction. If total is

@@ -19,11 +19,11 @@ type PeerInfo struct {
 
 // MeshNet manages P2P mesh topology.
 type MeshNet struct {
-	mu       sync.RWMutex
+	mu         sync.RWMutex
 	peersCache *PeerCache
 	msgCache   *LRUMessageCache
-	knownIDs map[string]bool // all known peer IDs in the network
-	maxHops  int
+	knownIDs   map[string]bool // all known peer IDs in the network
+	maxHops    int
 }
 
 // NewMeshNet creates a new mesh network manager.
@@ -35,8 +35,8 @@ func NewMeshNet(maxHops int) *MeshNet {
 	return &MeshNet{
 		peersCache: NewPeerCache(1000),
 		msgCache:   msgCache,
-		knownIDs: make(map[string]bool),
-		maxHops:  maxHops,
+		knownIDs:   make(map[string]bool),
+		maxHops:    maxHops,
 	}
 }
 
@@ -224,9 +224,9 @@ func (m *MeshNet) GetStats() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"directPeers": m.peersCache.Len(),
-		"knownPeers":  len(m.knownIDs),
-		"maxHops":     m.maxHops,
+		"directPeers":     m.peersCache.Len(),
+		"knownPeers":      len(m.knownIDs),
+		"maxHops":         m.maxHops,
 		"avgConnectivity": avgPeers,
 	}
 }
@@ -243,5 +243,3 @@ func (m *MeshNet) MarshalPeers() []byte {
 	data, _ := json.Marshal(ids)
 	return data
 }
-
-

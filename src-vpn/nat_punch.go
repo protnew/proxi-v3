@@ -85,11 +85,11 @@ type UDPConn interface {
 // from the given local port.
 func NewHolePunchAttempt(localPort int, remoteAddr string) *HolePunchAttempt {
 	return &HolePunchAttempt{
-		localPort: localPort,
+		localPort:  localPort,
 		remoteAddr: remoteAddr,
-		probes:    DefaultHolePunchProbes,
-		timeout:   DefaultHolePunchTimeout,
-		state:     HolePunchIdle,
+		probes:     DefaultHolePunchProbes,
+		timeout:    DefaultHolePunchTimeout,
+		state:      HolePunchIdle,
 	}
 }
 

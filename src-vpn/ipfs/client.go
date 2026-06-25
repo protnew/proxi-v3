@@ -13,8 +13,8 @@ import (
 // Client is a minimal IPFS HTTP API client.
 // Uses local go-ipfs or public gateway for pinning.
 type Client struct {
-	gateway   string
-	apiURL    string
+	gateway    string
+	apiURL     string
 	httpClient *http.Client
 }
 
@@ -29,17 +29,17 @@ func NewClient(gateway, apiURL string) *Client {
 		apiURL = "http://127.0.0.1:5001"
 	}
 	return &Client{
-		gateway: gateway,
-		apiURL:  apiURL,
+		gateway:    gateway,
+		apiURL:     apiURL,
 		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 // UploadResult contains the CID and gateway URL.
 type UploadResult struct {
-	CID       string `json:"cid"`
+	CID        string `json:"cid"`
 	GatewayURL string `json:"gatewayUrl"`
-	Size      int64  `json:"size"`
+	Size       int64  `json:"size"`
 }
 
 // UploadFile uploads a file to IPFS via the local daemon.

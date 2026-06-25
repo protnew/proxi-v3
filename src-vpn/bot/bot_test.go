@@ -8,10 +8,10 @@ import (
 
 // testBot is a simple test bot that records messages.
 type testBot struct {
-	mu      sync.Mutex
-	name    string
-	msgs    []Message
-	err     error
+	mu   sync.Mutex
+	name string
+	msgs []Message
+	err  error
 }
 
 func (b *testBot) OnMessage(msg Message) error {

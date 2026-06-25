@@ -164,10 +164,10 @@ func (e *EchoBot) Name() string { return "EchoBot" }
 
 // Sticker represents a single sticker in a pack.
 type Sticker struct {
-	ID    string `json:"id"`
+	ID     string `json:"id"`
 	PackID string `json:"packId"`
-	URL   string `json:"url"`
-	Emoji string `json:"emoji"`
+	URL    string `json:"url"`
+	Emoji  string `json:"emoji"`
 }
 
 // StickerPack represents a collection of stickers.

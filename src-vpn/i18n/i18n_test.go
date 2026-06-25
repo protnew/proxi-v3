@@ -58,7 +58,7 @@ func TestMissingKey(t *testing.T) {
 
 func TestLoadBundle(t *testing.T) {
 	LoadBundle("fr", map[string]string{
-		"chat.send":     "Envoyer",
+		"chat.send":      "Envoyer",
 		"settings.title": "Paramètres",
 		"login.create":   "Créer un compte",
 	})

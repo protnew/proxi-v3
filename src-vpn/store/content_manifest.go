@@ -75,29 +75,33 @@ func (s *Store) GetContentCatalogByManifest(manifestID string) ([]ContentCatalog
 
 // SaveManifestAndCatalogs saves a manifest and its catalogs in a single transaction.
 func (s *Store) SaveManifestAndCatalogs(ctx context.Context, cm ContentManifest, catalogs []ContentCatalog) error {
-	return s.RunInTx(ctx, func(tx *sql.Tx) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO content_manifests (id, owner_npub, content_type, metadata, created_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			metadata=excluded.metadata
+	`, cm.ID, cm.OwnerNpub, cm.ContentType, cm.Metadata, cm.CreatedAt)
+	if err != nil {
+		return fmt.Errorf("save manifest error: %v", err)
+	}
+
+	for _, cc := range catalogs {
 		_, err := tx.ExecContext(ctx, `
-			INSERT INTO content_manifests (id, owner_npub, content_type, metadata, created_at)
+			INSERT INTO content_catalog (id, manifest_id, chunk_hash, size, availability)
 			VALUES (?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET
-				metadata=excluded.metadata
-		`, cm.ID, cm.OwnerNpub, cm.ContentType, cm.Metadata, cm.CreatedAt)
+				availability=excluded.availability
+		`, cc.ID, cc.ManifestID, cc.ChunkHash, cc.Size, cc.Availability)
 		if err != nil {
-			return fmt.Errorf("save manifest error: %v", err)
+			return fmt.Errorf("save catalog error: %v", err)
 		}
+	}
 
-		for _, cc := range catalogs {
-			_, err := tx.ExecContext(ctx, `
-				INSERT INTO content_catalog (id, manifest_id, chunk_hash, size, availability)
-				VALUES (?, ?, ?, ?, ?)
-				ON CONFLICT(id) DO UPDATE SET
-					availability=excluded.availability
-			`, cc.ID, cc.ManifestID, cc.ChunkHash, cc.Size, cc.Availability)
-			if err != nil {
-				return fmt.Errorf("save catalog error: %v", err)
-			}
-		}
-
-		return nil
-	})
+	return tx.Commit()
 }

@@ -10,12 +10,12 @@ import (
 
 // DisposableIdentity is a one-time-use identity without recovery mnemonic.
 type DisposableIdentity struct {
-	PrivKey  *btcec.PrivateKey
-	PubKey   *btcec.PublicKey
-	Npub     string
-	Nsec     string
-	Created  int64
-	Expires  int64
+	PrivKey *btcec.PrivateKey
+	PubKey  *btcec.PublicKey
+	Npub    string
+	Nsec    string
+	Created int64
+	Expires int64
 }
 
 // GenerateDisposableIdentity creates a one-time identity pair.

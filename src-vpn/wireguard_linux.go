@@ -10,7 +10,7 @@ import (
 // This is typically only available on Linux with root privileges.
 func CreateWireGuardInterface(name string) error {
 	log.Printf("[VPN] Creating WireGuard interface: %s", name)
-	
+
 	cmd := exec.Command("ip", "link", "add", name, "type", "wireguard")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		log.Printf("[VPN] Failed to create WireGuard interface %s: %s", name, string(output))

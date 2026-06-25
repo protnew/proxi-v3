@@ -26,7 +26,7 @@ type groupState struct {
 }
 
 var (
-	groupsMu   sync.RWMutex
+	groupsMu    sync.RWMutex
 	groupsStore = make(map[string]*groupState)
 
 	inviteMu   sync.RWMutex

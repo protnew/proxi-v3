@@ -17,9 +17,9 @@ import (
 
 // PreKeyBundle represents a Signal-style prekey bundle for E2E key exchange.
 type PreKeyBundle struct {
-	IdentityKey  []byte `json:"identity_key"`
-	SignedPreKey []byte `json:"signed_prekey"`
-	Signature    []byte `json:"signature"`
+	IdentityKey   []byte `json:"identity_key"`
+	SignedPreKey  []byte `json:"signed_prekey"`
+	Signature     []byte `json:"signature"`
 	OneTimePreKey []byte `json:"one_time_prekey"`
 }
 

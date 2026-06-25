@@ -15,7 +15,7 @@ type nhooyrWSConn struct {
 	c *websocket.Conn
 }
 
-func handleNostrWS(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleNostrWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: []string{"*"},
 	})

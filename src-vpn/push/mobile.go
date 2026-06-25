@@ -11,10 +11,10 @@ import (
 // MobilePushConfig holds APNs and FCM credentials.
 type MobilePushConfig struct {
 	// APNs (Apple)
-	APNSToken    string // p8 token key
-	APNSTeamID   string
-	APNSKeyID    string
-	APNSBundleID string
+	APNSToken      string // p8 token key
+	APNSTeamID     string
+	APNSKeyID      string
+	APNSBundleID   string
 	APNSProduction bool
 
 	// FCM (Firebase Cloud Messaging)
@@ -38,12 +38,12 @@ func NewMobilePusher(config MobilePushConfig) *MobilePusher {
 
 // PushPayload is a universal push notification payload.
 type PushPayload struct {
-	Title    string `json:"title"`
-	Body     string `json:"body"`
-	Sound    string `json:"sound,omitempty"`    // "default" or custom
-	Badge    int    `json:"badge,omitempty"`
-	CollapseID string `json:"collapse_id,omitempty"`
-	Data     map[string]string `json:"data,omitempty"`
+	Title      string            `json:"title"`
+	Body       string            `json:"body"`
+	Sound      string            `json:"sound,omitempty"` // "default" or custom
+	Badge      int               `json:"badge,omitempty"`
+	CollapseID string            `json:"collapse_id,omitempty"`
+	Data       map[string]string `json:"data,omitempty"`
 }
 
 // SendFCM sends a push notification via Firebase Cloud Messaging (Android/iOS).

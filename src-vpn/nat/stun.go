@@ -49,8 +49,8 @@ func DiscoverPublicAddr(server string) (*STUNResult, error) {
 	// Build STUN Binding Request (RFC 5389)
 	// Type: 0x0001 (Binding Request), Length: 0, Magic Cookie: 0x2112A442
 	req := make([]byte, 20)
-	binary.BigEndian.PutUint16(req[0:], 0x0001) // Type
-	binary.BigEndian.PutUint16(req[2:], 0x0000) // Length
+	binary.BigEndian.PutUint16(req[0:], 0x0001)     // Type
+	binary.BigEndian.PutUint16(req[2:], 0x0000)     // Length
 	binary.BigEndian.PutUint32(req[4:], 0x2112A442) // Magic Cookie
 	// Transaction ID (12 bytes random)
 	for i := 8; i < 20; i++ {

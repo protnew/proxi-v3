@@ -25,7 +25,7 @@ func uploadDir() string {
 }
 
 // handleFileUpload handles POST /api/files/upload — multipart form upload.
-func handleFileUpload(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "POST" {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use POST to upload files")
 		return
@@ -90,7 +90,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		UploadedBy: uploadedBy,
 		CreatedAt:  time.Now().Unix(),
 	}
-	if err := db.SaveFileMeta(fm); err != nil {
+	if err := s.db.SaveFileMeta(fm); err != nil {
 		log.Printf("WARNING: failed to save file metadata: %v", err)
 	}
 
@@ -107,7 +107,7 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleFileGet handles GET /api/files/{id} and GET /api/files (list).
-func handleFileGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request) {
 	// Apply CORS + security headers manually since this route isn't rate-limited
 	origin := r.Header.Get("Origin")
 	if origin == "" {
@@ -144,7 +144,7 @@ func handleFileGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleFileDownload serves a file by ID.
-func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
+func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 	// Get file stream
 	rc, err := storageProvider.GetFile(fileID)
 	if err != nil {
@@ -154,7 +154,7 @@ func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 	defer rc.Close()
 
 	// Get metadata
-	fm, err := db.GetFileMeta(fileID)
+	fm, err := s.db.GetFileMeta(fileID)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
@@ -176,10 +176,10 @@ func handleFileDownload(w http.ResponseWriter, r *http.Request, fileID string) {
 }
 
 // handleFileList returns metadata for all uploaded files.
-func handleFileList(w http.ResponseWriter, r *http.Request) {
-	files, err := db.ListFileMeta()
+func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
+	files, err := s.db.ListFileMeta()
 	if err != nil {
-		log.Printf("ERROR: db.ListFileMeta: %v", err)
+		log.Printf("ERROR: s.db.ListFileMeta: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to list files")
 		return
 	}
@@ -193,14 +193,14 @@ func handleFileList(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleFileDelete removes a file by ID.
-func handleFileDelete(w http.ResponseWriter, r *http.Request, fileID string) {
+func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request, fileID string) {
 	// Delete from storage
 	if err := storageProvider.DeleteFile(fileID); err != nil && !os.IsNotExist(err) {
 		log.Printf("WARNING: failed to delete file %s: %v", fileID, err)
 	}
 
 	// Delete metadata
-	if err := db.DeleteFileMeta(fileID); err != nil {
+	if err := s.db.DeleteFileMeta(fileID); err != nil {
 		writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
 		return
 	}

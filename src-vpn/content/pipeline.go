@@ -11,11 +11,11 @@ import (
 
 // UploadPipeline orchestrates: file → chunks → encrypt → erasure → distribute.
 type UploadPipeline struct {
-	ChunkSize   int
-	ErasureK    int // data shards
-	ErasureN    int // total shards (data + parity)
-	MasterKey   [32]byte
-	encoder     *storage.ErasureEncoder
+	ChunkSize int
+	ErasureK  int // data shards
+	ErasureN  int // total shards (data + parity)
+	MasterKey [32]byte
+	encoder   *storage.ErasureEncoder
 }
 
 // NewUploadPipeline creates a pipeline with the given chunk size and erasure coding parameters.
@@ -48,14 +48,14 @@ func (p *UploadPipeline) ProcessUpload(filename string, data io.Reader) (*Conten
 	// 2. Handle empty file
 	if len(allData) == 0 {
 		return &ContentManifest{
-			ID:        fmt.Sprintf("%x", sha256.Sum256(nil)),
-			FileName:  filename,
-			FileSize:  0,
-			ChunkSize: p.ChunkSize,
+			ID:          fmt.Sprintf("%x", sha256.Sum256(nil)),
+			FileName:    filename,
+			FileSize:    0,
+			ChunkSize:   p.ChunkSize,
 			TotalChunks: 0,
-			ErasureK:  p.ErasureK,
-			ErasureN:  p.ErasureN,
-			Chunks:    []ChunkRef{},
+			ErasureK:    p.ErasureK,
+			ErasureN:    p.ErasureN,
+			Chunks:      []ChunkRef{},
 		}, nil
 	}
 

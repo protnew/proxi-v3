@@ -8,8 +8,8 @@ import (
 // SearchFilter specifies optional criteria for narrowing a message search.
 // Zero-value fields mean "no constraint on this dimension".
 type SearchFilter struct {
-	DateFrom       int64 // inclusive lower bound on Ts (unix seconds, 0 = no bound)
-	DateTo         int64 // inclusive upper bound on Ts (unix seconds, 0 = no bound)
+	DateFrom       int64  // inclusive lower bound on Ts (unix seconds, 0 = no bound)
+	DateTo         int64  // inclusive upper bound on Ts (unix seconds, 0 = no bound)
 	UserID         string // restrict to messages From this user ("" = any sender)
 	ChannelID      string // restrict to messages To this channel/recipient ("" = any)
 	HasAttachments *bool  // nil = no filter; true = only messages with attachments; false = only without

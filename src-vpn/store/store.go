@@ -542,10 +542,10 @@ func (s *Store) GetPushSubscriptions(userIDs []string) ([]PushSubscription, erro
 // FederationPeer represents a persisted federation peer entry.
 
 type FederationPeer struct {
-	ID        string `json:"id"`
-	URL       string `json:"url"`
-	LastSync  int64  `json:"lastSync"`
-	Status    string `json:"status"`
+	ID       string `json:"id"`
+	URL      string `json:"url"`
+	LastSync int64  `json:"lastSync"`
+	Status   string `json:"status"`
 }
 
 // SaveFederationPeer inserts or updates a federation peer.

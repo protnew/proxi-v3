@@ -25,9 +25,9 @@ type Claims struct {
 
 // AuthService handles JWT token generation, validation and refresh.
 type AuthService struct {
-	secretKey         []byte
-	accessTokenTTL    time.Duration
-	refreshTokenTTL   time.Duration
+	secretKey       []byte
+	accessTokenTTL  time.Duration
+	refreshTokenTTL time.Duration
 }
 
 // NewAuthService creates a new AuthService with the given secret.

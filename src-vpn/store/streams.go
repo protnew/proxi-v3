@@ -155,3 +155,67 @@ func (s *Store) DeleteFileMeta(id string) error {
 // ---------------------------------------------------------------------------
 // time helper
 // ---------------------------------------------------------------------------
+
+type Stream struct {
+	ID        string `json:"id"`
+	Creator   string `json:"creator"`
+	Title     string `json:"title"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+func (s *Store) SaveStream(st Stream) error {
+	_, err := s.db.Exec(
+		`INSERT OR REPLACE INTO streams (id, creator, title, status, created_at)
+		 VALUES (?, ?, ?, ?, ?)`,
+		st.ID, st.Creator, st.Title, st.Status, st.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("save stream: %w", err)
+	}
+	return nil
+}
+
+func (s *Store) GetStream(id string) (*Stream, error) {
+	var st Stream
+	err := s.db.QueryRow(
+		`SELECT id, creator, title, status, created_at FROM streams WHERE id = ?`,
+		id,
+	).Scan(&st.ID, &st.Creator, &st.Title, &st.Status, &st.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get stream: %w", err)
+	}
+	return &st, nil
+}
+
+func (s *Store) UpdateStreamStatus(id, status string) error {
+	res, err := s.db.Exec(`UPDATE streams SET status = ? WHERE id = ?`, status, id)
+	if err != nil {
+		return fmt.Errorf("update stream status: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return fmt.Errorf("stream %s not found", id)
+	}
+	return nil
+}
+
+func (s *Store) ListActiveStreams() ([]Stream, error) {
+	rows, err := s.db.Query(
+		`SELECT id, creator, title, status, created_at FROM streams WHERE status = 'active' ORDER BY created_at DESC`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list active streams: %w", err)
+	}
+	defer rows.Close()
+
+	var streams []Stream
+	for rows.Next() {
+		var st Stream
+		if err := rows.Scan(&st.ID, &st.Creator, &st.Title, &st.Status, &st.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan stream: %w", err)
+		}
+		streams = append(streams, st)
+	}
+	return streams, rows.Err()
+}

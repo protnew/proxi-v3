@@ -5,9 +5,10 @@
 //
 // NIP-04 uses kind=4 events where the content field is encrypted with
 // AES-256-CBC using a shared secret derived from ECDH on secp256k1:
-//   shared_secret = privkey_sender * pubkey_recipient  (secp256k1 point multiplication)
-//   encryption    = AES-256-CBC(key=shared_secret, iv=random, plaintext=padded)
-//   wire format   = base64(iv + ciphertext)
+//
+//	shared_secret = privkey_sender * pubkey_recipient  (secp256k1 point multiplication)
+//	encryption    = AES-256-CBC(key=shared_secret, iv=random, plaintext=padded)
+//	wire format   = base64(iv + ciphertext)
 package nostr
 
 import (

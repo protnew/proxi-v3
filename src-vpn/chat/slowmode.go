@@ -8,8 +8,8 @@ import (
 // slowChannel tracks the slow-mode configuration and per-user send timestamps
 // for a single channel.
 type slowChannel struct {
-	interval    time.Duration                       // required gap between messages per user
-	lastSend    map[string]time.Time                // userID → last message time
+	interval time.Duration        // required gap between messages per user
+	lastSend map[string]time.Time // userID → last message time
 }
 
 // SlowModeManager enforces per-channel slow-mode rate limiting. Each channel

@@ -80,7 +80,7 @@ func buildSTUNBindingResponse(t *testing.T, xorIP net.IP, xorPort uint16) []byte
 	// STUN header: Type=0x0101, Length=len(attr), MagicCookie=0x2112A442
 	msgLen := uint16(len(attr))
 	resp := make([]byte, 20+msgLen)
-	binary.BigEndian.PutUint16(resp[0:], 0x0101)   // Binding Response
+	binary.BigEndian.PutUint16(resp[0:], 0x0101)     // Binding Response
 	binary.BigEndian.PutUint16(resp[2:], msgLen)     // Length
 	binary.BigEndian.PutUint32(resp[4:], 0x2112A442) // Magic Cookie
 	// Transaction ID (12 bytes)
@@ -326,8 +326,8 @@ func TestSTUNBindingRequestFormat(t *testing.T) {
 
 	// Build request exactly as DiscoverPublicAddr does
 	req := make([]byte, 20)
-	binary.BigEndian.PutUint16(req[0:], 0x0001)   // Type
-	binary.BigEndian.PutUint16(req[2:], 0x0000)   // Length
+	binary.BigEndian.PutUint16(req[0:], 0x0001)     // Type
+	binary.BigEndian.PutUint16(req[2:], 0x0000)     // Length
 	binary.BigEndian.PutUint32(req[4:], 0x2112A442) // Magic Cookie
 	for i := 8; i < 20; i++ {
 		req[i] = byte(i * 17)

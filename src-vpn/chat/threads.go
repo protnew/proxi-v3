@@ -28,9 +28,9 @@ type Thread struct {
 // multi-level reply chains (depth > 1). It is safe for concurrent use.
 type ThreadManager struct {
 	mu       sync.RWMutex
-	msgs     map[string]*Message          // msgID → message
-	children map[string]map[string]bool   // parentID → set of child msgIDs
-	parentOf map[string]string            // childID → parentID (ReplyTo cache)
+	msgs     map[string]*Message        // msgID → message
+	children map[string]map[string]bool // parentID → set of child msgIDs
+	parentOf map[string]string          // childID → parentID (ReplyTo cache)
 }
 
 // NewThreadManager creates a new empty ThreadManager.

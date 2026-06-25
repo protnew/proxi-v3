@@ -18,7 +18,7 @@ import (
 
 // nip05Response is the JSON response from a NIP-05 lookup.
 type nip05Response struct {
-	Names  map[string]string `json:"names"`
+	Names  map[string]string   `json:"names"`
 	Relays map[string][]string `json:"relays,omitempty"`
 }
 

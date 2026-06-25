@@ -222,8 +222,8 @@ func TestNip44Padding(t *testing.T) {
 		input    []byte
 		expected int // expected padded length
 	}{
-		{"empty", []byte{}, 64},     // plen=32, boundary loops to 64
-		{"1 byte", []byte{1}, 64},   // plen=32, boundary loops to 64
+		{"empty", []byte{}, 64},            // plen=32, boundary loops to 64
+		{"1 byte", []byte{1}, 64},          // plen=32, boundary loops to 64
 		{"31 bytes", make([]byte, 31), 64}, // plen=32, boundary loops to 64
 		{"32 bytes", make([]byte, 32), 64}, // boundary 32 <= 32, goes to 64
 		{"33 bytes", make([]byte, 33), 64},

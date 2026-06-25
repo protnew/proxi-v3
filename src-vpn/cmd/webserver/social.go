@@ -20,7 +20,7 @@ import (
 // POST:   {messageId, userNpub, emoji} — add reaction
 // DELETE: {messageId, userNpub} — remove reaction
 // GET:    ?messageId=... — get reactions for a message
-func handleReactions(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReactions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		handleReactionAdd(w, r)
@@ -33,7 +33,7 @@ func handleReactions(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleReactionAdd(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReactionAdd(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 16*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -76,7 +76,7 @@ func handleReactionAdd(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.AddReaction(req.MessageID, req.UserNpub, req.Emoji); err != nil {
+	if err := s.db.AddReaction(req.MessageID, req.UserNpub, req.Emoji); err != nil {
 		log.Printf("ERROR: AddReaction: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to add reaction")
 		return
@@ -90,7 +90,7 @@ func handleReactionAdd(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReactionRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReactionRemove(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 16*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -120,7 +120,7 @@ func handleReactionRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.RemoveReaction(req.MessageID, req.UserNpub); err != nil {
+	if err := s.db.RemoveReaction(req.MessageID, req.UserNpub); err != nil {
 		log.Printf("ERROR: RemoveReaction: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to remove reaction")
 		return
@@ -132,14 +132,14 @@ func handleReactionRemove(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleReactionGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReactionGet(w http.ResponseWriter, r *http.Request) {
 	messageID := r.URL.Query().Get("messageId")
 	if strings.TrimSpace(messageID) == "" {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "messageId query param is required")
 		return
 	}
 
-	reactions, err := db.GetReactions(messageID)
+	reactions, err := s.db.GetReactions(messageID)
 	if err != nil {
 		log.Printf("ERROR: GetReactions: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to get reactions")
@@ -161,7 +161,7 @@ func handleReactionGet(w http.ResponseWriter, r *http.Request) {
 // POST:  {messageId, userNpub} — mark message as read
 // GET:   ?messageId=... — get read receipts for a message
 // POST /mark-all: {userNpub, beforeTimestamp} — mark all as read
-func handleReadReceipts(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleReadReceipts(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		handleMarkRead(w, r)
@@ -172,7 +172,7 @@ func handleReadReceipts(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleMarkRead(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 16*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -207,7 +207,7 @@ func handleMarkRead(w http.ResponseWriter, r *http.Request) {
 
 	// If beforeTimestamp is set, mark all messages as read
 	if req.BeforeTimestamp > 0 {
-		if err := db.MarkAllRead(req.UserNpub, req.BeforeTimestamp); err != nil {
+		if err := s.db.MarkAllRead(req.UserNpub, req.BeforeTimestamp); err != nil {
 			log.Printf("ERROR: MarkAllRead: %v", err)
 			writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to mark all as read")
 			return
@@ -225,7 +225,7 @@ func handleMarkRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.MarkRead(req.MessageID, req.UserNpub); err != nil {
+	if err := s.db.MarkRead(req.MessageID, req.UserNpub); err != nil {
 		log.Printf("ERROR: MarkRead: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to mark as read")
 		return
@@ -238,14 +238,14 @@ func handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func handleGetReadReceipts(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetReadReceipts(w http.ResponseWriter, r *http.Request) {
 	messageID := r.URL.Query().Get("messageId")
 	if strings.TrimSpace(messageID) == "" {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "messageId query param is required")
 		return
 	}
 
-	npubs, err := db.GetReadReceipts(messageID)
+	npubs, err := s.db.GetReadReceipts(messageID)
 	if err != nil {
 		log.Printf("ERROR: GetReadReceipts: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to get read receipts")
@@ -268,7 +268,7 @@ func handleGetReadReceipts(w http.ResponseWriter, r *http.Request) {
 // POST: {npub, displayName, avatarUrl, bio} — save profile
 // GET:  ?npub=... — get single profile
 // GET:  ?search=... — search profiles
-func handleProfiles(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
 		handleProfileSave(w, r)
@@ -279,7 +279,7 @@ func handleProfiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleProfileSave(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleProfileSave(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -319,7 +319,7 @@ func handleProfileSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.SaveProfile(req.Npub, req.DisplayName, req.AvatarURL, req.Bio); err != nil {
+	if err := s.db.SaveProfile(req.Npub, req.DisplayName, req.AvatarURL, req.Bio); err != nil {
 		log.Printf("ERROR: SaveProfile: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to save profile")
 		return
@@ -336,10 +336,10 @@ func handleProfileSave(w http.ResponseWriter, r *http.Request) {
 	log.Printf("👤 Profile saved: %s (%s)", req.DisplayName, truncate(req.Npub, 16)+"...")
 }
 
-func handleProfileGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleProfileGet(w http.ResponseWriter, r *http.Request) {
 	// Search mode
 	if search := r.URL.Query().Get("search"); search != "" {
-		profiles, err := db.SearchProfiles(search)
+		profiles, err := s.db.SearchProfiles(search)
 		if err != nil {
 			log.Printf("ERROR: SearchProfiles: %v", err)
 			writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to search profiles")
@@ -362,7 +362,7 @@ func handleProfileGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	profile, err := db.GetProfile(npub)
+	profile, err := s.db.GetProfile(npub)
 	if err != nil {
 		// Return empty profile if not found
 		writeJSON(w, http.StatusOK, map[string]interface{}{
@@ -382,7 +382,7 @@ func handleProfileGet(w http.ResponseWriter, r *http.Request) {
 
 // handleSearch handles GET /api/search — search messages.
 // Query params: q (search term), npub (user npub), limit (max results)
-func handleSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET")
 		return
@@ -410,7 +410,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	msgs, err := db.SearchMessages(query, npub, limit)
+	msgs, err := s.db.SearchMessages(query, npub, limit)
 	if err != nil {
 		log.Printf("ERROR: SearchMessages: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to search messages")
@@ -431,7 +431,7 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 // ==================== Edit/Delete Messages ====================
 
 // handleEditMessage — PUT /api/messages/edit {id, text}
-func handleEditMessage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use PUT or POST")
 		return
@@ -458,13 +458,13 @@ func handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		senderNpub = npub
 	}
 
-	if err := db.EditMessage(req.ID, req.Text, senderNpub); err != nil {
+	if err := s.db.EditMessage(req.ID, req.Text, senderNpub); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
 	}
 
 	// Broadcast edit event to WS clients
-	if hub != nil {
+	if s.hub != nil {
 		msg := &chat.Message{
 			Type: "message_edited",
 			Text: req.Text,
@@ -472,14 +472,14 @@ func handleEditMessage(w http.ResponseWriter, r *http.Request) {
 		}
 		msg.From = ""
 		encoded, _ := msg.Encode()
-		hub.Broadcast(encoded, "")
+		s.hub.Broadcast(encoded, "")
 	}
 
 	writeJSON(w, 200, map[string]interface{}{"status": "edited", "id": req.ID})
 }
 
 // handleDeleteMessage — DELETE /api/messages/delete {id}
-func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use DELETE or POST")
 		return
@@ -505,20 +505,20 @@ func handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 		senderNpub = npub
 	}
 
-	if err := db.DeleteMessage(req.ID, senderNpub); err != nil {
+	if err := s.db.DeleteMessage(req.ID, senderNpub); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
 	}
 
 	// Broadcast delete event to WS clients
-	if hub != nil {
+	if s.hub != nil {
 		msg := &chat.Message{
 			Type: "message_deleted",
 			Ts:   time.Now().Unix(),
 		}
 		msg.Text = req.ID
 		encoded, _ := msg.Encode()
-		hub.Broadcast(encoded, "")
+		s.hub.Broadcast(encoded, "")
 	}
 
 	writeJSON(w, 200, map[string]interface{}{"status": "deleted", "id": req.ID})

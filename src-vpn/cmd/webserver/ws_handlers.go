@@ -19,14 +19,13 @@ import (
 	"nhooyr.io/websocket"
 )
 
-var hub *chat.ChatHub
 
 // handleWS upgrades HTTP to WebSocket and registers client
-func handleWS(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	userId := ""
 	tokenStr := r.URL.Query().Get("token")
-	if tokenStr != "" && globalAuthService != nil {
-		if claims, err := globalAuthService.ValidateToken(tokenStr); err == nil {
+	if tokenStr != "" && s.authService != nil {
+		if claims, err := s.authService.ValidateToken(tokenStr); err == nil {
 			userId = claims.UserID
 		}
 	}
@@ -52,9 +51,9 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleIdentityGet returns current user's identity (generates if needed)
-func handleIdentityGet(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 	// Try loading from DB first
-	npub, nsec, seedPhrase, err := db.LoadIdentity()
+	npub, nsec, seedPhrase, err := s.db.LoadIdentity()
 	if err == nil && npub != "" {
 		writeJSON(w, 200, map[string]interface{}{
 			"npub":     npub,
@@ -77,7 +76,7 @@ func handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 	npub = identity.PubKeyToNpub(privKey.PubKey())
 
 	// Save to SQLite
-	if saveErr := db.SaveIdentity(npub, nsec, mnemonic); saveErr != nil {
+	if saveErr := s.db.SaveIdentity(npub, nsec, mnemonic); saveErr != nil {
 		log.Printf("WARNING: failed to save identity to db: %v", saveErr)
 	}
 
@@ -96,8 +95,8 @@ func handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleOnlineUsers returns list of connected users
-func handleOnlineUsers(w http.ResponseWriter, r *http.Request) {
-	users := hub.OnlineUsers()
+func (s *Server) handleOnlineUsers(w http.ResponseWriter, r *http.Request) {
+	users := s.hub.OnlineUsers()
 	if users == nil {
 		users = []string{}
 	}
@@ -108,9 +107,9 @@ func handleOnlineUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 // initHub creates the chat hub
-func initHub() {
-	hub = chat.NewChatHub()
-	hub.OnMessage = func(msg *chat.Message) {
+func (s *Server) initHub() {
+	s.hub = chat.NewChatHub()
+	s.hub.OnMessage = func(msg *chat.Message) {
 		log.Printf("💬 [%s→%s]: %s", msg.From, msg.To, truncate(msg.Text, 50))
 
 		// Process bot commands
@@ -144,7 +143,7 @@ func initHub() {
 			}
 			// Enrich reply with preview text
 			if msg.ReplyTo != "" {
-				if orig, err := db.GetMessageByID(msg.ReplyTo); err == nil {
+				if orig, err := s.db.GetMessageByID(msg.ReplyTo); err == nil {
 					msg.ReplyToText = orig.Text
 					msg.ReplyToFrom = orig.From
 					if len(orig.Text) > 80 {
@@ -154,7 +153,7 @@ func initHub() {
 			}
 			// Assign server-generated ID back to message for WS broadcast
 			msg.ID = msgID
-			if err := db.SaveMessage(storeMsg); err != nil {
+			if err := s.db.SaveMessage(storeMsg); err != nil {
 				log.Printf("ERROR: save message: %v", err)
 			}
 		}
@@ -166,10 +165,10 @@ func initHub() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for range ticker.C {
-			if db == nil {
+			if s.db == nil {
 				continue
 			}
-			if n, err := db.CleanExpiredMessages(); err == nil && n > 0 {
+			if n, err := s.db.CleanExpiredMessages(); err == nil && n > 0 {
 				log.Printf("💣 Self-destruct: cleaned %d expired messages", n)
 			}
 		}
@@ -179,8 +178,8 @@ func initHub() {
 // ========== Peer Management Handlers ==========
 
 // handleContactsGet — GET /api/contacts — список контактов
-func handleContactsGet(w http.ResponseWriter, r *http.Request) {
-	contacts, err := db.GetContacts()
+func (s *Server) handleContactsGet(w http.ResponseWriter, r *http.Request) {
+	contacts, err := s.db.GetContacts()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -195,7 +194,7 @@ func handleContactsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleContactsSave — POST /api/contacts — добавить/обновить контакт
-func handleContactsSave(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleContactsSave(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -214,7 +213,7 @@ func handleContactsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.SaveContact(req); err != nil {
+	if err := s.db.SaveContact(req); err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
@@ -241,7 +240,7 @@ func handleContactsSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleContactsRemove — DELETE /api/contacts — удалить контакт
-func handleContactsRemove(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -263,7 +262,7 @@ func handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := db.DeleteContact(req.ID); err != nil {
+	if err := s.db.DeleteContact(req.ID); err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
@@ -302,10 +301,10 @@ func randomHex(n int) string {
 // ========== Channel Handlers ==========
 
 // handleChannelsGet — GET /api/channels — список каналов
-func handleChannelsGet(w http.ResponseWriter, r *http.Request) {
-	channels, err := db.GetChannels()
+func (s *Server) handleChannelsGet(w http.ResponseWriter, r *http.Request) {
+	channels, err := s.db.GetChannels()
 	if err != nil {
-		log.Printf("ERROR: db.GetChannels: %v", err)
+		log.Printf("ERROR: s.db.GetChannels: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to load channels")
 		return
 	}
@@ -319,7 +318,7 @@ func handleChannelsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChannelsPost — POST /api/channels — создать канал
-func handleChannelsPost(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleChannelsPost(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read request body")
@@ -358,8 +357,8 @@ func handleChannelsPost(w http.ResponseWriter, r *http.Request) {
 		CreatedAt:   time.Now().Unix(),
 	}
 
-	if err := db.SaveChannel(ch); err != nil {
-		log.Printf("ERROR: db.SaveChannel: %v", err)
+	if err := s.db.SaveChannel(ch); err != nil {
+		log.Printf("ERROR: s.db.SaveChannel: %v", err)
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to save channel")
 		return
 	}
@@ -369,7 +368,7 @@ func handleChannelsPost(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleChannelSubscribe — POST /api/channels/subscribe {channelId}
-func handleChannelSubscribe(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleChannelSubscribe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
 		return
@@ -385,7 +384,7 @@ func handleChannelSubscribe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "BAD_REQUEST", "channelId required")
 		return
 	}
-	if err := db.SubscribeChannel(req.ChannelID); err != nil {
+	if err := s.db.SubscribeChannel(req.ChannelID); err != nil {
 		writeError(w, 404, "NOT_FOUND", err.Error())
 		return
 	}
