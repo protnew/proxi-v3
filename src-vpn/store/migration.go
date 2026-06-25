@@ -372,6 +372,30 @@ CREATE TABLE IF NOT EXISTS content_catalog (
 );
 `,
 	},
+	{
+		Version: 13,
+		Name:    "hls_streaming",
+		Up: `
+CREATE TABLE IF NOT EXISTS streams (
+    id TEXT PRIMARY KEY,
+    creator TEXT NOT NULL,
+    title TEXT DEFAULT '',
+    status TEXT DEFAULT 'active',
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS stream_chunks (
+	id TEXT PRIMARY KEY,
+	stream_id TEXT NOT NULL,
+	sequence_number INTEGER NOT NULL,
+	duration REAL NOT NULL,
+	data BLOB,
+	created_at INTEGER NOT NULL,
+	FOREIGN KEY (stream_id) REFERENCES streams(id)
+);
+CREATE INDEX IF NOT EXISTS idx_stream_chunks_stream_id ON stream_chunks(stream_id);
+CREATE INDEX IF NOT EXISTS idx_stream_chunks_sequence ON stream_chunks(stream_id, sequence_number);
+`,
+	},
 }
 
 // runMigrations applies all pending migrations in order.
