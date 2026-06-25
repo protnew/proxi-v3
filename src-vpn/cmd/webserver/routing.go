@@ -12,7 +12,6 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/unkillable-messenger/vpn"
-	"github.com/unkillable-messenger/vpn/auth"
 	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/crypto"
@@ -1244,7 +1243,7 @@ func (s *Server) handleFederationSync(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func startDeadMansSwitchWorker(ctx context.Context, s *store.Store) {
+func startDeadMansSwitchWorker(ctx context.Context, s *Server) {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
@@ -1253,7 +1252,7 @@ func startDeadMansSwitchWorker(ctx context.Context, s *store.Store) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			switches, err := s.GetExpiredSwitches()
+			switches, err := s.db.GetExpiredSwitches()
 			if err != nil {
 				zap.S().Errorf("Failed to check expired switches: %v", err)
 				continue
@@ -1269,14 +1268,14 @@ func startDeadMansSwitchWorker(ctx context.Context, s *store.Store) {
 					Text:      dms.MessageText,
 					Timestamp: time.Now().Unix(),
 				}
-				s.SaveMessage(msg)
+				s.db.SaveMessage(msg)
 
 				if s.hub != nil {
 					s.hub.RawBroadcastJSON(msg, "")
 				}
 
 				dms.Triggered = true
-				s.SaveDeadMansSwitch(dms)
+				s.db.SaveDeadMansSwitch(dms)
 			}
 		}
 	}

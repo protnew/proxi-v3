@@ -47,7 +47,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("🔌 WS connected: %s", userId)
-	chat.ServeWS(hub, userId, conn, r.Context())
+	chat.ServeWS(s.hub, userId, conn, r.Context())
 }
 
 // handleIdentityGet returns current user's identity (generates if needed)

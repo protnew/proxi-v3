@@ -23,11 +23,11 @@ import (
 func (s *Server) handleReactions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
-		handleReactionAdd(w, r)
+		s.handleReactionAdd(w, r)
 	case "DELETE":
-		handleReactionRemove(w, r)
+		s.handleReactionRemove(w, r)
 	case "GET":
-		handleReactionGet(w, r)
+		s.handleReactionGet(w, r)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
 	}
@@ -164,9 +164,9 @@ func (s *Server) handleReactionGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReadReceipts(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
-		handleMarkRead(w, r)
+		s.handleMarkRead(w, r)
 	case "GET":
-		handleGetReadReceipts(w, r)
+		s.handleGetReadReceipts(w, r)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 	}
@@ -271,9 +271,9 @@ func (s *Server) handleGetReadReceipts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProfiles(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "POST":
-		handleProfileSave(w, r)
+		s.handleProfileSave(w, r)
 	case "GET":
-		handleProfileGet(w, r)
+		s.handleProfileGet(w, r)
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 	}

@@ -131,7 +131,7 @@ func run() error {
 	}
 
 	// Start Dead Man's Switch worker
-	go startDeadMansSwitchWorker(context.Background(), db)
+	go startDeadMansSwitchWorker(context.Background(), srv)
 
 	var spErr error
 	storageProvider, spErr = storage.NewLocalStore(filepath.Join(dataDir, "uploads"))
@@ -221,13 +221,13 @@ func run() error {
 	srv.initHub()
 
 	// Auto-connect VPN peers on startup
-	go autoConnectPeers()
+	go srv.autoConnectPeers()
 
 	// Start scheduled messages sender (every 60 seconds)
-	go scheduledMessagesLoop()
+	go srv.scheduledMessagesLoop()
 
 	// Start dead man's switch checker (every hour)
-	go deadMansSwitchLoop()
+	go srv.deadMansSwitchLoop()
 
 	fs := http.FileServer(http.Dir(distDir))
 
@@ -469,7 +469,7 @@ func run() error {
 	log.Printf("   API:  http://0.0.0.0:%s/api/status", port)
 	log.Printf("   Chat: http://0.0.0.0:%s/api/messages", port)
 
-	srv := &http.Server{Addr: ":" + port}
+	httpSrv := &http.Server{Addr: ":" + port}
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	idleConnsClosed := make(chan struct{})
@@ -478,12 +478,12 @@ func run() error {
 		signal.Notify(sigCh, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		sig := <-sigCh
 		log.Printf("📴 Received %s, shutting down gracefully...", sig)
-		if hub != nil {
-			hub.RawBroadcastJSON(map[string]string{"type": "system", "text": "server shutting down"}, "")
+		if srv != nil && srv.hub != nil {
+			srv.hub.RawBroadcastJSON(map[string]string{"type": "system", "text": "server shutting down"}, "")
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := srv.Shutdown(ctx); err != nil {
+		if err := httpSrv.Shutdown(ctx); err != nil {
 			log.Printf("Shutdown error: %v", err)
 		}
 		close(idleConnsClosed)
@@ -494,11 +494,11 @@ func run() error {
 	tlsKey := os.Getenv("TLS_KEY")
 	if tlsCert != "" && tlsKey != "" {
 		log.Printf("   TLS:  https (certs: %s)", tlsCert)
-		if err := srv.ListenAndServeTLS(tlsCert, tlsKey); err != http.ErrServerClosed {
+		if err := httpSrv.ListenAndServeTLS(tlsCert, tlsKey); err != http.ErrServerClosed {
 			return fmt.Errorf("HTTPS server error: %w", err)
 		}
 	} else {
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
+		if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
 			return fmt.Errorf("HTTP server error: %w", err)
 		}
 	}
@@ -511,11 +511,11 @@ func run() error {
 // autoConnectPeers loads saved VPN peers from DB and attempts to reconnect.
 // Runs in background goroutine on startup.
 
-func autoConnectPeers() {
+func (s *Server) autoConnectPeers() {
 	// Wait a moment for server to be ready
 	time.Sleep(2 * time.Second)
 
-	peers, err := db.GetPeers()
+	peers, err := s.db.GetPeers()
 	if err != nil {
 		log.Printf("🔌 Auto-connect: failed to load peers: %v", err)
 		return
@@ -550,14 +550,14 @@ func autoConnectPeers() {
 
 // scheduledMessagesLoop checks every 60 seconds for pending scheduled messages.
 
-func scheduledMessagesLoop() {
+func (s *Server) scheduledMessagesLoop() {
 	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		if db == nil || hub == nil {
+		if s.db == nil || s.hub == nil {
 			continue
 		}
-		msgs, err := db.GetPendingScheduled()
+		msgs, err := s.db.GetPendingScheduled()
 		if err != nil {
 			log.Printf("📅 Scheduled: error: %v", err)
 			continue
@@ -573,11 +573,11 @@ func scheduledMessagesLoop() {
 			}
 			encoded, _ := chatMsg.Encode()
 			if sm.Recipient == "broadcast" || sm.Recipient == "" {
-				hub.Broadcast(encoded, "")
+				s.hub.Broadcast(encoded, "")
 			} else {
-				hub.SendTo(sm.Recipient, encoded)
+				s.hub.SendTo(sm.Recipient, encoded)
 			}
-			db.MarkScheduledSent(sm.ID)
+			s.db.MarkScheduledSent(sm.ID)
 			log.Printf("📅 Scheduled sent: %s → %s", sm.ID, sm.Recipient)
 		}
 	}
@@ -585,14 +585,14 @@ func scheduledMessagesLoop() {
 
 // deadMansSwitchLoop checks every hour for expired switches.
 
-func deadMansSwitchLoop() {
+func (s *Server) deadMansSwitchLoop() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 	for range ticker.C {
-		if db == nil || hub == nil {
+		if s.db == nil || s.hub == nil {
 			continue
 		}
-		switches, err := db.GetExpiredSwitches()
+		switches, err := s.db.GetExpiredSwitches()
 		if err != nil {
 			log.Printf("💀 Switch: error: %v", err)
 			continue
@@ -606,8 +606,8 @@ func deadMansSwitchLoop() {
 				Ts:   time.Now().Unix(),
 			}
 			encoded, _ := chatMsg.Encode()
-			hub.Broadcast(encoded, "")
-			db.MarkSwitchTriggered(dms.ID)
+			s.hub.Broadcast(encoded, "")
+			s.db.MarkSwitchTriggered(dms.ID)
 			log.Printf("💀 Switch triggered: %s (user %s, %d days inactive)", dms.ID, truncate(dms.UserNpub, 12), dms.IntervalDays)
 		}
 	}
