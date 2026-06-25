@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/time/rate"
 	"nhooyr.io/websocket"
 )
 
@@ -256,10 +257,19 @@ func (c *Client) ReadPump(ctx context.Context) {
 
 	c.Conn.SetReadLimit(MaxBinaryVoiceSize)
 
+	// Rate limit: 10 messages per second, burst of 20
+	limiter := rate.NewLimiter(rate.Limit(10), 20)
+
 	for {
 		msgType, data, err := c.Conn.Read(ctx)
 		if err != nil {
 			// Normal closure or context cancel — just exit.
+			return
+		}
+
+		if !limiter.Allow() {
+			log.Printf("[chat] rate limit exceeded for user %s, disconnecting", c.UserID)
+			c.Conn.Close(websocket.StatusPolicyViolation, "rate limit exceeded")
 			return
 		}
 
