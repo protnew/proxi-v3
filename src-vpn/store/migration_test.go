@@ -7,6 +7,7 @@ func TestRunMigrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db.Close()
 	version := db.GetSchemaVersion()
 	if version < 1 {
 		t.Errorf("expected version >= 1 after init, got %d", version)
@@ -19,12 +20,14 @@ func TestMigrationsIdempotent(t *testing.T) {
 	if db1 == nil {
 		t.Fatal("first store failed")
 	}
+	defer db1.Close()
 	v1 := db1.GetSchemaVersion()
 
 	db2, err := NewStore(":memory:")
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer db2.Close()
 	v2 := db2.GetSchemaVersion()
 	if v1 != v2 {
 		t.Errorf("versions should match: %d vs %d", v1, v2)

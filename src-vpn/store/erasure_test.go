@@ -190,12 +190,13 @@ func TestStore_DataPersistence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewStore s1: %v", err)
 	}
+	defer s1.Close()
 
 	msg := Message{ID: "persist-1", From: "alice", To: "broadcast", Text: "Persistent", Timestamp: 1000}
 	if err := s1.SaveMessage(msg); err != nil {
 		t.Fatalf("SaveMessage: %v", err)
 	}
-	s1.Close()
+
 
 	// Reopen and verify
 	s2, err := NewStore(dbPath)
@@ -219,6 +220,9 @@ func TestStore_DataPersistence(t *testing.T) {
 // TestStore_LargeDataSet tests store operations with many records.
 func TestStore_LargeDataSet(t *testing.T) {
 	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping long test in short mode")
+	}
 
 	dbPath := t.TempDir() + "/large_test.db"
 	s, err := NewStore(dbPath)
