@@ -89,8 +89,10 @@ func (h *ChatHub) Register(c *Client) {
 
 	if old, ok := h.clients[c.UserID]; ok {
 		close(old.Send)
-		if err := old.Conn.Close(websocket.StatusNormalClosure, "replaced by new connection"); err != nil {
-			log.Printf("Close error: %v", err)
+		if old.Conn != nil {
+			if err := old.Conn.Close(websocket.StatusNormalClosure, "replaced by new connection"); err != nil {
+				log.Printf("Close error: %v", err)
+			}
 		}
 	}
 
@@ -149,7 +151,9 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 		default:
 			// Client buffer full — drop message and disconnect to force offline sync.
 			log.Printf("[chat] send buffer full for user %s, dropping message and closing connection", uid)
-			go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+			if c.Conn != nil {
+				go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+			}
 		}
 	}
 }
@@ -169,7 +173,9 @@ func (h *ChatHub) SendTo(userID string, data []byte) bool {
 		return true
 	default:
 		log.Printf("[chat] send buffer full for user %s, dropping direct message and closing connection", userID)
-		go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+		if c.Conn != nil {
+			go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+		}
 		return false
 	}
 }
@@ -207,6 +213,11 @@ func (h *ChatHub) Count() int {
 // It blocks until both pumps have finished, which means the client has
 // disconnected.
 func (c *Client) Serve(ctx context.Context) {
+	if c.Conn == nil {
+		c.hub.Unregister(c)
+		return
+	}
+
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -227,6 +238,9 @@ func (c *Client) Serve(ctx context.Context) {
 }
 
 func (c *Client) pingPump(ctx context.Context) {
+	if c.Conn == nil {
+		return
+	}
 	ticker := time.NewTicker(PingInterval)
 	defer ticker.Stop()
 	for {
@@ -248,6 +262,11 @@ func (c *Client) pingPump(ctx context.Context) {
 // to the hub. It runs in a goroutine per client.
 // It handles both text JSON frames (legacy) and binary voice frames (0x02).
 func (c *Client) ReadPump(ctx context.Context) {
+	if c.Conn == nil {
+		c.hub.Unregister(c)
+		return
+	}
+	
 	defer func() {
 		c.hub.Unregister(c)
 		if err := c.Conn.Close(websocket.StatusNormalClosure, "read pump done"); err != nil {
@@ -366,6 +385,10 @@ func (c *Client) ReadPump(ctx context.Context) {
 // WritePump writes buffered messages to the WebSocket connection.
 // It supports both text JSON and binary voice frames.
 func (c *Client) WritePump(ctx context.Context) {
+	if c.Conn == nil {
+		return
+	}
+	
 	defer func() {
 		if err := c.Conn.Close(websocket.StatusNormalClosure, "write pump done"); err != nil {
 			log.Printf("Close error: %v", err)
@@ -420,6 +443,9 @@ func polyfillCtxReset(_ context.Context, timeoutCtx context.Context) context.Con
 //	hub.Register(client)
 //	client.Serve(r.Context())
 func ServeWS(hub *ChatHub, userID string, conn *websocket.Conn, ctx context.Context) {
+	if conn == nil {
+		return
+	}
 	client := &Client{
 		UserID: userID,
 		Conn:   conn,
