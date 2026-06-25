@@ -26,8 +26,7 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 	t.Setenv("DATA_DIR", dataDir)
 	perUserLimiter = middleware.NewRateLimiter(1000, 5000)
 
-	var err error
-	db, err = store.NewStore(":memory:")
+	db, err := store.NewStore(":memory:")
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -39,7 +38,8 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("init vpn: %v", err)
 	}
 
-	s.s.initHub()
+	s := &Server{db: db}
+
 	startTime = time.Now()
 
 	// Init mesh net
@@ -60,14 +60,14 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
 
-	mux.HandleFunc("/api/health", apiChain(handleHealth))
-	mux.HandleFunc("/api/status", apiChain(handleStatus))
+	mux.HandleFunc("/api/health", apiChain(s.handleHealth))
+	mux.HandleFunc("/api/status", apiChain(s.handleStatus))
 	mux.HandleFunc("/api/messages", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleMessagesGet(w, r)
+			s.handleMessagesGet(w, r)
 		case "POST":
-			handleMessagesPost(w, r)
+			s.handleMessagesPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
@@ -75,62 +75,62 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/channels", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleChannelsGet(w, r)
+			s.handleChannelsGet(w, r)
 		case "POST":
-			handleChannelsPost(w, r)
+			s.handleChannelsPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "")
 		}
 	}))
-	mux.HandleFunc("/api/channels/subscribe", apiChain(handleChannelSubscribe))
-	mux.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
+	mux.HandleFunc("/api/channels/subscribe", apiChain(s.handleChannelSubscribe))
+	mux.HandleFunc("/api/vpn/rpc", apiChain(s.handleVpnRPC))
 	mux.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleFederationPeerList(w, r)
+			s.handleFederationPeerList(w, r)
 		case "POST":
-			handleFederationPeerAdd(w, r)
+			s.handleFederationPeerAdd(w, r)
 		case "DELETE":
-			handleFederationPeerRemove(w, r)
+			s.handleFederationPeerRemove(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "")
 		}
 	}))
-	mux.HandleFunc("/api/identity", apiChain(handleIdentityGet))
-	mux.HandleFunc("/api/files/upload", apiChain(handleFileUpload))
-	mux.HandleFunc("/api/files/", handleFileGet)
-	mux.HandleFunc("/api/reactions", apiChain(handleReactions))
-	mux.HandleFunc("/api/read-receipts", apiChain(handleReadReceipts))
-	mux.HandleFunc("/api/profiles", apiChain(handleProfiles))
-	mux.HandleFunc("/api/search", apiChain(handleSearch))
-	mux.HandleFunc("/api/messages/edit", apiChain(handleEditMessage))
-	mux.HandleFunc("/api/messages/delete", apiChain(handleDeleteMessage))
-	mux.HandleFunc("/api/messages/schedule", apiChain(handleScheduleMessage))
-	mux.HandleFunc("/api/switch/setup", apiChain(handleSwitchSetup))
-	mux.HandleFunc("/api/switch/check-in", apiChain(handleSwitchCheckIn))
-	mux.HandleFunc("/api/push/subscribe", apiChain(handlePushSubscribe))
-	mux.HandleFunc("/api/groups/create", apiChain(handleGroupCreate))
-	mux.HandleFunc("/api/groups/list", apiChain(handleGroupList))
-	mux.HandleFunc("/api/groups/members", apiChain(handleGroupMembers))
-	mux.HandleFunc("/api/groups/kick", apiChain(handleGroupKick))
-	mux.HandleFunc("/api/groups/promote", apiChain(handleGroupPromote))
-	mux.HandleFunc("/api/vpn/split-tunnel", apiChain(handleSplitTunnel))
-	mux.HandleFunc("/api/vpn/dns", apiChain(handleDNSProxy))
-	mux.HandleFunc("/api/nostr/stats", apiChain(handleNostrStats))
-	mux.HandleFunc("/api/ipfs/status", apiChain(handleIPFSStatus))
-	mux.HandleFunc("/api/nat/discover", apiChain(handleNATDiscover))
-	mux.HandleFunc("/api/tor/status", apiChain(handleTorStatus))
-	mux.HandleFunc("/api/mesh/peers", apiChain(handleMeshPeers))
-	mux.HandleFunc("/api/mesh/stats", apiChain(handleMeshStats))
-	mux.HandleFunc("/api/stream/create", apiChain(handleStreamCreate))
-	mux.HandleFunc("/api/stream/list", apiChain(handleStreamList))
-	mux.HandleFunc("/api/stream/end", apiChain(handleStreamEnd))
-	mux.HandleFunc("/api/stream/subscribe", apiChain(handleStreamSubscribe))
+	mux.HandleFunc("/api/identity", apiChain(s.handleIdentityGet))
+	mux.HandleFunc("/api/files/upload", apiChain(s.handleFileUpload))
+	mux.HandleFunc("/api/files/", s.handleFileGet)
+	mux.HandleFunc("/api/reactions", apiChain(s.handleReactions))
+	mux.HandleFunc("/api/read-receipts", apiChain(s.handleReadReceipts))
+	mux.HandleFunc("/api/profiles", apiChain(s.handleProfiles))
+	mux.HandleFunc("/api/search", apiChain(s.handleSearch))
+	mux.HandleFunc("/api/messages/edit", apiChain(s.handleEditMessage))
+	mux.HandleFunc("/api/messages/delete", apiChain(s.handleDeleteMessage))
+	mux.HandleFunc("/api/messages/schedule", apiChain(s.handleScheduleMessage))
+	mux.HandleFunc("/api/switch/setup", apiChain(s.handleSwitchSetup))
+	mux.HandleFunc("/api/switch/check-in", apiChain(s.handleSwitchCheckIn))
+	mux.HandleFunc("/api/push/subscribe", apiChain(s.handlePushSubscribe))
+	mux.HandleFunc("/api/groups/create", apiChain(s.handleGroupCreate))
+	mux.HandleFunc("/api/groups/list", apiChain(s.handleGroupList))
+	mux.HandleFunc("/api/groups/members", apiChain(s.handleGroupMembers))
+	mux.HandleFunc("/api/groups/kick", apiChain(s.handleGroupKick))
+	mux.HandleFunc("/api/groups/promote", apiChain(s.handleGroupPromote))
+	mux.HandleFunc("/api/vpn/split-tunnel", apiChain(s.handleSplitTunnel))
+	mux.HandleFunc("/api/vpn/dns", apiChain(s.handleDNSProxy))
+	mux.HandleFunc("/api/nostr/stats", apiChain(s.handleNostrStats))
+	mux.HandleFunc("/api/ipfs/status", apiChain(s.handleIPFSStatus))
+	mux.HandleFunc("/api/nat/discover", apiChain(s.handleNATDiscover))
+	mux.HandleFunc("/api/tor/status", apiChain(s.handleTorStatus))
+	mux.HandleFunc("/api/mesh/peers", apiChain(s.handleMeshPeers))
+	mux.HandleFunc("/api/mesh/stats", apiChain(s.handleMeshStats))
+	mux.HandleFunc("/api/stream/create", apiChain(s.handleStreamCreate))
+	mux.HandleFunc("/api/stream/list", apiChain(s.handleStreamList))
+	mux.HandleFunc("/api/stream/end", apiChain(s.handleStreamEnd))
+	mux.HandleFunc("/api/stream/subscribe", apiChain(s.handleStreamSubscribe))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(func() {
 		server.Close()
-		s.s.s.db.Close()
+		s.db.Close()
 	})
 
 	return server

@@ -39,8 +39,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	perUserLimiter = middleware.NewRateLimiter(1000, 5000)
 
 	// Initialize store
-	var err error
-	db, err = store.NewStore(":memory:")
+	db, err := store.NewStore(":memory:")
 	if err != nil {
 		t.Fatalf("init store: %v", err)
 	}
@@ -53,8 +52,8 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		t.Fatalf("init vpn: %v", err)
 	}
 
-	// Initialize hub
-	s.s.initHub()
+	s := &Server{db: db}
+
 	startTime = time.Now()
 
 	// Build mux
@@ -64,14 +63,14 @@ func setupTestServer(t *testing.T) *httptest.Server {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
 
-	mux.HandleFunc("/api/health", apiChain(handleHealth))
-	mux.HandleFunc("/api/status", apiChain(handleStatus))
+	mux.HandleFunc("/api/health", apiChain(s.handleHealth))
+	mux.HandleFunc("/api/status", apiChain(s.handleStatus))
 	mux.HandleFunc("/api/messages", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleMessagesGet(w, r)
+			s.handleMessagesGet(w, r)
 		case "POST":
-			handleMessagesPost(w, r)
+			s.handleMessagesPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
@@ -79,38 +78,38 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/api/channels", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleChannelsGet(w, r)
+			s.handleChannelsGet(w, r)
 		case "POST":
-			handleChannelsPost(w, r)
+			s.handleChannelsPost(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
 	}))
-	mux.HandleFunc("/api/vpn/rpc", apiChain(handleVpnRPC))
+	mux.HandleFunc("/api/vpn/rpc", apiChain(s.handleVpnRPC))
 	mux.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
-			handleFederationPeerList(w, r)
+			s.handleFederationPeerList(w, r)
 		case "POST":
-			handleFederationPeerAdd(w, r)
+			s.handleFederationPeerAdd(w, r)
 		case "DELETE":
-			handleFederationPeerRemove(w, r)
+			s.handleFederationPeerRemove(w, r)
 		default:
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "")
 		}
 	}))
-	mux.HandleFunc("/api/identity", apiChain(handleIdentityGet))
-	mux.HandleFunc("/api/files/upload", apiChain(handleFileUpload))
-	mux.HandleFunc("/api/files/", handleFileGet)
-	mux.HandleFunc("/api/reactions", apiChain(handleReactions))
-	mux.HandleFunc("/api/read-receipts", apiChain(handleReadReceipts))
-	mux.HandleFunc("/api/profiles", apiChain(handleProfiles))
-	mux.HandleFunc("/api/search", apiChain(handleSearch))
+	mux.HandleFunc("/api/identity", apiChain(s.handleIdentityGet))
+	mux.HandleFunc("/api/files/upload", apiChain(s.handleFileUpload))
+	mux.HandleFunc("/api/files/", s.handleFileGet)
+	mux.HandleFunc("/api/reactions", apiChain(s.handleReactions))
+	mux.HandleFunc("/api/read-receipts", apiChain(s.handleReadReceipts))
+	mux.HandleFunc("/api/profiles", apiChain(s.handleProfiles))
+	mux.HandleFunc("/api/search", apiChain(s.handleSearch))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(func() {
 		server.Close()
-		s.s.s.db.Close()
+		s.db.Close()
 	})
 
 	return server

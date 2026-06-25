@@ -928,7 +928,7 @@ func (s *Server) handleStreamCreate(w http.ResponseWriter, r *http.Request) {
 		req.ChannelName = "Live Stream"
 	}
 	streamObj := streamMgr.CreateStream(req.ChannelName, req.StreamerID)
-	writeJSON(w, 201, s)
+	writeJSON(w, 201, streamObj)
 	log.Printf("📺 Stream created: %s by %s (%s)", streamObj.ID, req.StreamerID, req.ChannelName)
 }
 
