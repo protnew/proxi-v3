@@ -27,10 +27,24 @@ const (
 
 // Client represents a connected WebSocket user.
 type Client struct {
-	UserID string
-	Conn   *websocket.Conn
-	Send   chan []byte // outbound messages buffered channel
-	hub    *ChatHub
+	UserID      string
+	Conn        *websocket.Conn
+	Send        chan []byte // outbound messages buffered channel
+	hub         *ChatHub
+	cancel      context.CancelFunc
+	closeOnce   sync.Once
+	closeCode   websocket.StatusCode
+	closeReason string
+}
+
+func (c *Client) forceClose(code websocket.StatusCode, reason string) {
+	c.closeOnce.Do(func() {
+		c.closeCode = code
+		c.closeReason = reason
+		// Write the close frame asynchronously. ReadPump will continue to read
+		// until the peer echoes the close frame, at which point Read will return an error.
+		go c.Conn.Close(code, reason)
+	})
 }
 
 // ChatHub maintains the set of active clients and broadcasts messages.
@@ -90,9 +104,7 @@ func (h *ChatHub) Register(c *Client) {
 	if old, ok := h.clients[c.UserID]; ok {
 		close(old.Send)
 		if old.Conn != nil {
-			if err := old.Conn.Close(websocket.StatusNormalClosure, "replaced by new connection"); err != nil {
-				log.Printf("Close error: %v", err)
-			}
+			old.forceClose(websocket.StatusNormalClosure, "replaced by new connection")
 		}
 	}
 
@@ -152,7 +164,7 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 			// Client buffer full — drop message and disconnect to force offline sync.
 			log.Printf("[chat] send buffer full for user %s, dropping message and closing connection", uid)
 			if c.Conn != nil {
-				go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+				c.forceClose(websocket.StatusPolicyViolation, "buffer full")
 			}
 		}
 	}
@@ -174,7 +186,7 @@ func (h *ChatHub) SendTo(userID string, data []byte) bool {
 	default:
 		log.Printf("[chat] send buffer full for user %s, dropping direct message and closing connection", userID)
 		if c.Conn != nil {
-			go c.Conn.Close(websocket.StatusPolicyViolation, "buffer full")
+			c.forceClose(websocket.StatusPolicyViolation, "buffer full")
 		}
 		return false
 	}
@@ -218,8 +230,9 @@ func (c *Client) Serve(ctx context.Context) {
 		return
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	if c.cancel != nil {
+		defer c.cancel()
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -232,9 +245,23 @@ func (c *Client) Serve(ctx context.Context) {
 		c.pingPump(ctx)
 	}()
 
-	c.ReadPump(ctx) // blocks until read-side closes
-	cancel()        // force pumps to stop
-	wg.Wait()       // wait for graceful shutdown
+	c.ReadPump(ctx) // blocks until read-side closes (peer sends close frame or drops)
+	
+	// Once ReadPump exits, the connection is dead. Cancel the context to stop other pumps.
+	if c.cancel != nil {
+		c.cancel()
+	}
+	wg.Wait() // wait for graceful shutdown of WritePump and pingPump
+
+	// If forceClose wasn't called, close with NormalClosure.
+	// If forceClose WAS called, go c.Conn.Close already handled it, and calling it again is safe (returns error).
+	code := websocket.StatusNormalClosure
+	reason := "client disconnected"
+	if c.closeCode != 0 {
+		code = c.closeCode
+		reason = c.closeReason
+	}
+	c.Conn.Close(code, reason)
 }
 
 func (c *Client) pingPump(ctx context.Context) {
@@ -250,6 +277,7 @@ func (c *Client) pingPump(ctx context.Context) {
 			err := c.Conn.Ping(polyfillCtxReset(ctx, pingCtx))
 			cancel()
 			if err != nil {
+				c.forceClose(websocket.StatusNormalClosure, "ping failed")
 				return
 			}
 		case <-ctx.Done():
@@ -269,9 +297,6 @@ func (c *Client) ReadPump(ctx context.Context) {
 	
 	defer func() {
 		c.hub.Unregister(c)
-		if err := c.Conn.Close(websocket.StatusNormalClosure, "read pump done"); err != nil {
-			log.Printf("Close error: %v", err)
-		}
 	}()
 
 	c.Conn.SetReadLimit(MaxBinaryVoiceSize)
@@ -288,8 +313,10 @@ func (c *Client) ReadPump(ctx context.Context) {
 
 		if !limiter.Allow() {
 			log.Printf("[chat] rate limit exceeded for user %s, disconnecting", c.UserID)
-			c.Conn.Close(websocket.StatusPolicyViolation, "rate limit exceeded")
-			return
+			c.forceClose(websocket.StatusPolicyViolation, "rate limit exceeded")
+			// nhooyr requires us to keep reading until the client echoes the close frame.
+			// Read will return a CloseError once the close frame is received.
+			continue
 		}
 
 		// Handle binary voice frames.
@@ -389,20 +416,13 @@ func (c *Client) WritePump(ctx context.Context) {
 		return
 	}
 	
-	defer func() {
-		if err := c.Conn.Close(websocket.StatusNormalClosure, "write pump done"); err != nil {
-			log.Printf("Close error: %v", err)
-		}
-	}()
+	// Removed synchronous c.Conn.Close from WritePump to avoid blocking
 
 	for {
 		select {
 		case msg, ok := <-c.Send:
 			if !ok {
 				// Channel closed — hub unregistered us.
-				if err := c.Conn.Close(websocket.StatusNormalClosure, "hub unregistered"); err != nil {
-					log.Printf("Close error: %v", err)
-				}
 				return
 			}
 			writeCtx, cancel := context.WithTimeout(ctx, WriteTimeout)
@@ -446,11 +466,13 @@ func ServeWS(hub *ChatHub, userID string, conn *websocket.Conn, ctx context.Cont
 	if conn == nil {
 		return
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	client := &Client{
 		UserID: userID,
 		Conn:   conn,
 		Send:   make(chan []byte, SendChannelSize),
 		hub:    hub,
+		cancel: cancel,
 	}
 	hub.Register(client)
 	client.Serve(ctx)
