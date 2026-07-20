@@ -50,7 +50,7 @@ func (c *Client) forceClose(code websocket.StatusCode, reason string) {
 // ChatHub maintains the set of active clients and broadcasts messages.
 type ChatHub struct {
 	mu      sync.RWMutex
-	clients map[string]*Client // userId → *Client
+	clients map[string]map[*Client]bool // P6 FIXED: userId → set of *Client (multi-device support)
 
 	// OnMessage is called for every incoming chat message.
 	// If nil, messages are only routed internally.
@@ -62,7 +62,7 @@ type ChatHub struct {
 // NewChatHub creates a new ChatHub.
 func NewChatHub() *ChatHub {
 	h := &ChatHub{
-		clients:    make(map[string]*Client),
+		clients:    make(map[string]map[*Client]bool),
 		workerPool: make(chan *Message, 1024),
 	}
 
@@ -101,15 +101,12 @@ func (h *ChatHub) Register(c *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if old, ok := h.clients[c.UserID]; ok {
-		close(old.Send)
-		if old.Conn != nil {
-			old.forceClose(websocket.StatusNormalClosure, "replaced by new connection")
-		}
+	// P6 FIXED: Multi-device — add client to existing set, don't replace
+	if h.clients[c.UserID] == nil {
+		h.clients[c.UserID] = make(map[*Client]bool)
 	}
-
+	h.clients[c.UserID][c] = true
 	c.hub = h
-	h.clients[c.UserID] = c
 
 	// Send welcome to the new client directly.
 	select {
@@ -134,12 +131,16 @@ func (h *ChatHub) Unregister(c *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	if existing, ok := h.clients[c.UserID]; ok && existing == c {
-		delete(h.clients, c.UserID)
-		close(c.Send)
-
-		// Announce leave.
-		h.broadcastLocked(leaveMsg, "")
+	// P6 FIXED: Multi-device — remove just this client from the set
+	if clients, ok := h.clients[c.UserID]; ok {
+		if _, exists := clients[c]; exists {
+			delete(clients, c)
+			close(c.Send)
+			if len(clients) == 0 {
+				delete(h.clients, c.UserID)
+			}
+			h.broadcastLocked(leaveMsg, "")
+		}
 	}
 }
 
@@ -154,18 +155,27 @@ func (h *ChatHub) Broadcast(data []byte, excludeUserID string) {
 // broadcastLocked is the internal broadcast helper. Caller must hold at least
 // a read-lock on h.mu.
 func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
-	for uid, c := range h.clients {
+	// P1 FIX: Collect dead clients, close outside lock (no I/O under RLock)
+	// P6 FIXED: Multi-device — iterate all clients across all devices
+	var dead []*Client
+	for uid, clients := range h.clients {
 		if uid == excludeUserID {
 			continue
 		}
-		select {
-		case c.Send <- data:
-		default:
-			// Client buffer full — drop message and disconnect to force offline sync.
-			log.Printf("[chat] send buffer full for user %s, dropping message and closing connection", uid)
-			if c.Conn != nil {
-				c.forceClose(websocket.StatusPolicyViolation, "buffer full")
+		for c := range clients {
+			select {
+			case c.Send <- data:
+			default:
+				log.Printf("[chat] send buffer full for user %s, marking for disconnect", uid)
+				dead = append(dead, c)
+				delete(clients, c)
 			}
+		}
+	}
+	for _, c := range dead {
+		close(c.Send)
+		if c.Conn != nil {
+			c.forceClose(websocket.StatusPolicyViolation, "buffer full")
 		}
 	}
 }
@@ -173,23 +183,46 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 // SendTo sends a message to a specific user. Returns false if the user is not
 // connected.
 func (h *ChatHub) SendTo(userID string, data []byte) bool {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	c, ok := h.clients[userID]
-	if !ok {
-		return false
-	}
-	select {
-	case c.Send <- data:
-		return true
-	default:
-		log.Printf("[chat] send buffer full for user %s, dropping direct message and closing connection", userID)
-		if c.Conn != nil {
-			c.forceClose(websocket.StatusPolicyViolation, "buffer full")
+	var deadClients []*Client
+	var delivered bool
+	
+	func() {
+		h.mu.RLock()
+		defer h.mu.RUnlock()
+		
+		// P6 FIXED: Multi-device — deliver to all sessions of the user
+	clients, ok := h.clients[userID]
+		if !ok {
+			return
 		}
-		return false
+		for c := range clients {
+			select {
+			case c.Send <- data:
+				delivered = true
+			default:
+				log.Printf("[chat] send buffer full for user %s, marking dead", userID)
+				deadClients = append(deadClients, c)
+				delete(clients, c)
+			}
+		}
+	}()
+	
+	// P3 FIX: Close connection outside the lock
+	if len(deadClients) > 0 {
+		h.mu.Lock()
+		if clients, ok := h.clients[userID]; ok && len(clients) == 0 {
+			delete(h.clients, userID)
+		}
+		h.mu.Unlock()
+		for _, dc := range deadClients {
+			close(dc.Send)
+			if dc.Conn != nil {
+				dc.forceClose(websocket.StatusPolicyViolation, "buffer full")
+			}
+		}
 	}
+	
+	return delivered
 }
 
 // OnlineUsers returns the list of currently connected user IDs.

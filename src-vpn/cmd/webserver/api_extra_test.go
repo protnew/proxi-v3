@@ -24,7 +24,12 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 
 	dataDir := t.TempDir()
 	t.Setenv("DATA_DIR", dataDir)
-	perUserLimiter = middleware.NewRateLimiter(1000, 5000)
+	t.Setenv("PATH", "") // Prevent slow exec.LookPath("wg") on Windows
+	rl := middleware.NewRateLimiter(1000, 5000)
+	perUserLimiter = rl
+	t.Cleanup(func() {
+		rl.Stop()
+	})
 
 	db, err := store.NewStore(":memory:")
 	if err != nil {
@@ -129,6 +134,7 @@ func setupFullTestServer(t *testing.T) *httptest.Server {
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(func() {
+		server.CloseClientConnections()
 		server.Close()
 		s.db.Close()
 	})

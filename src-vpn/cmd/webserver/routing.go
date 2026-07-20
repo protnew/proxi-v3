@@ -1,3 +1,11 @@
+// AUDIT-C5: This file is 1282 lines — exceeds 500 line limit.
+// TODO: Split into:
+//   routing_core.go     — router setup, middleware, helpers
+//   routing_chat.go     — message/dm/typing handlers  
+//   routing_groups.go   — group management handlers
+//   routing_vpn.go      — VPN/WireGuard/split-tunnel/DNS handlers
+//   routing_mesh.go     — mesh/stream/IPFS/NAT/Tor handlers
+
 package main
 
 import (

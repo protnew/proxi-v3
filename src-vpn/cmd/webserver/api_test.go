@@ -31,12 +31,16 @@ func setupTestServer(t *testing.T) *httptest.Server {
 
 	// Override getDataDir and uploadDir via env
 	t.Setenv("DATA_DIR", dataDir)
+	t.Setenv("PATH", "") // Prevent slow exec.LookPath("wg") on Windows
 
 	// Initialize storage provider for tests
 	storageProvider, _ = storage.NewLocalStore(dataDir)
 
-	// Override rate limiter to allow all requests during tests
-	perUserLimiter = middleware.NewRateLimiter(1000, 5000)
+	rl := middleware.NewRateLimiter(1000, 5000)
+	perUserLimiter = rl
+	t.Cleanup(func() {
+		rl.Stop()
+	})
 
 	// Initialize store
 	db, err := store.NewStore(":memory:")
@@ -108,6 +112,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(func() {
+		server.CloseClientConnections()
 		server.Close()
 		s.db.Close()
 	})
