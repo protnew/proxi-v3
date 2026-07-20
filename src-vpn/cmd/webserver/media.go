@@ -106,13 +106,8 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 	// Apply CORS + security headers manually since this route is not rate-limited
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		origin = "*"
-	}
-	w.Header().Set("Access-Control-Allow-Origin", origin)
-	w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// P0-3 RESCUE 20260720: whitelist-based CORS.
+	applyCORSHeaders(w, r, false)
 
 	if r.Method == "OPTIONS" {
 		w.WriteHeader(http.StatusNoContent)

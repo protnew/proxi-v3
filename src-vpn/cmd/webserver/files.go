@@ -109,13 +109,8 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 // handleFileGet handles GET /api/files/{id} and GET /api/files (list).
 func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request) {
 	// Apply CORS + security headers manually since this route isn't rate-limited
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		origin = "*"
-	}
-	w.Header().Set("Access-Control-Allow-Origin", origin)
-	w.Header().Set("Access-Control-Allow-Methods", "GET, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+	// P0-3 RESCUE 20260720: whitelist-based CORS.
+	applyCORSHeaders(w, r, false)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("X-Frame-Options", "DENY")
 
