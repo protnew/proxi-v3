@@ -149,20 +149,32 @@ func TestCORSMiddleware(t *testing.T) {
 		w.WriteHeader(200)
 	})
 
+	// P0-3 RESCUE 20260720: whitelist-based CORS.
+	// Non-whitelisted origin (https://example.com) must NOT get an ACAO header.
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Origin", "https://example.com")
 	w := httptest.NewRecorder()
 	handler(w, req)
-
-	if w.Header().Get("Access-Control-Allow-Origin") != "https://example.com" {
-		t.Errorf("CORS origin = %s", w.Header().Get("Access-Control-Allow-Origin"))
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("non-whitelisted origin must not get ACAO, got %q", got)
 	}
 
-	req2 := httptest.NewRequest("OPTIONS", "/test", nil)
+	// Whitelisted dev origin must be echoed.
+	req2 := httptest.NewRequest("GET", "/test", nil)
+	req2.Header.Set("Origin", "http://localhost:5173")
 	w2 := httptest.NewRecorder()
 	handler(w2, req2)
-	if w2.Code != 204 {
-		t.Errorf("OPTIONS status = %d, want 204", w2.Code)
+	if got := w2.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Errorf("whitelisted origin must be echoed, got %q", got)
+	}
+
+	// OPTIONS preflight must return 204.
+	req3 := httptest.NewRequest("OPTIONS", "/test", nil)
+	req3.Header.Set("Origin", "http://localhost:5173")
+	w3 := httptest.NewRecorder()
+	handler(w3, req3)
+	if w3.Code != 204 {
+		t.Errorf("OPTIONS status = %d, want 204", w3.Code)
 	}
 }
 
