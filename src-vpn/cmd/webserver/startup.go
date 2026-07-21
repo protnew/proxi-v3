@@ -2,18 +2,13 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 	"time"
-
-	"encoding/hex"
 	"os/signal"
 	"syscall"
 
@@ -228,247 +223,22 @@ func run() error {
 	// Start dead man's switch checker (every hour)
 	go srv.deadMansSwitchLoop()
 
-	fs := http.FileServer(http.Dir(distDir))
-
-	// API routes with middleware chain
-	publicApiChain := func(h http.HandlerFunc) http.HandlerFunc {
-		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
+	// Initialize auth service (JWT)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "dev-secret-change-me"
 	}
-
-	secret := os.Getenv("JWT_SECRET")
-	if secret == "" {
-		b := make([]byte, 32)
-		rand.Read(b)
-		secret = hex.EncodeToString(b)
-		log.Printf("WARNING: JWT_SECRET not set, generated random secret")
-	}
-	authSvc := auth.NewAuthService(secret)
+	authSvc := auth.NewAuthService(jwtSecret)
 	srv.authService = authSvc
-	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
-		return publicApiChain(authMiddleware(srv.authService, h))
+
+	// Register all HTTP routes (extracted to startup_routes.go)
+	srv.registerRoutes(authSvc, distDir, port)
+
+	// Create HTTP server
+	httpSrv := &http.Server{
+		Addr:              ":" + port,
+		ReadHeaderTimeout: 10 * time.Second,
 	}
-
-	http.HandleFunc("/api/health", publicApiChain(srv.handleHealth))
-	http.HandleFunc("/api/status", publicApiChain(srv.handleStatus))
-	http.HandleFunc("/api/messages", apiChain(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case "GET":
-			srv.handleMessagesGet(w, r)
-		case "POST":
-			srv.handleMessagesPost(w, r)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
-		}
-	}))
-	http.HandleFunc("/api/channels", apiChain(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case "GET":
-			srv.handleChannelsGet(w, r)
-		case "POST":
-			srv.handleChannelsPost(w, r)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
-		}
-	}))
-	http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
-	http.HandleFunc("/api/contacts", apiChain(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case "GET":
-			srv.handleContactsGet(w, r)
-		case "POST":
-			srv.handleContactsSave(w, r)
-		case "DELETE":
-			srv.handleContactsRemove(w, r)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
-		}
-	}))
-	// WebSocket + Identity
-	http.HandleFunc("/ws", srv.handleWS)
-	http.HandleFunc("/api/identity", apiChain(srv.handleIdentityGet))
-	http.HandleFunc("/api/online", apiChain(srv.handleOnlineUsers))
-
-	// File upload/download
-	http.HandleFunc("/api/files/upload", apiChain(srv.handleFileUpload))
-	http.HandleFunc("/api/files/", srv.handleFileGet) // no rate limit for downloads
-	
-	// Media endpoints (v12 content_manifests)
-	http.HandleFunc("/api/media/upload", apiChain(srv.handleMediaUpload))
-	http.HandleFunc("/api/media/", srv.handleMediaGet)
-	// Reactions
-	http.HandleFunc("/api/reactions", apiChain(srv.handleReactions))
-	// Read receipts
-	http.HandleFunc("/api/read-receipts", apiChain(srv.handleReadReceipts))
-	// Profiles
-	http.HandleFunc("/api/profiles", apiChain(srv.handleProfiles))
-	// Search
-	http.HandleFunc("/api/search", apiChain(srv.handleSearch))
-	http.HandleFunc("/api/messages/edit", apiChain(srv.handleEditMessage))
-	http.HandleFunc("/api/messages/delete", apiChain(srv.handleDeleteMessage))
-	http.HandleFunc("/api/messages/schedule", apiChain(srv.handleScheduleMessage))
-	http.HandleFunc("/api/switch/setup", apiChain(srv.handleSwitchSetup))
-	http.HandleFunc("/api/switch/check-in", apiChain(srv.handleSwitchCheckIn))
-	http.HandleFunc("/api/push/subscribe", apiChain(srv.handlePushSubscribe))
-	http.HandleFunc("/api/groups/create", apiChain(srv.handleGroupCreate))
-	http.HandleFunc("/api/groups/list", apiChain(srv.handleGroupList))
-	http.HandleFunc("/api/groups/members", apiChain(srv.handleGroupMembers))
-	http.HandleFunc("/api/groups/kick", apiChain(srv.handleGroupKick))
-	http.HandleFunc("/api/groups/promote", apiChain(srv.handleGroupPromote))
-	http.HandleFunc("/api/vpn/split-tunnel", apiChain(srv.handleSplitTunnel))
-	http.HandleFunc("/api/vpn/dns", apiChain(srv.handleDNSProxy))
-	http.HandleFunc("/api/nostr/stats", apiChain(srv.handleNostrStats))
-	http.HandleFunc("/nostr", srv.handleNostrWS) // NIP-01 WebSocket endpoint
-	http.HandleFunc("/api/ipfs/upload", apiChain(srv.handleIPFSUpload))
-	http.HandleFunc("/api/ipfs/status", apiChain(srv.handleIPFSStatus))
-	http.HandleFunc("/api/nat/discover", apiChain(srv.handleNATDiscover))
-	http.HandleFunc("/api/tor/status", apiChain(srv.handleTorStatus))
-	http.HandleFunc("/api/channels/subscribe", apiChain(srv.handleChannelSubscribe))
-
-	// Stream endpoints (Sprint 3 — Task 1)
-	http.HandleFunc("/api/stream/create", apiChain(srv.handleStreamCreate))
-	http.HandleFunc("/api/stream/list", apiChain(srv.handleStreamList))
-	http.HandleFunc("/api/stream/end", apiChain(srv.handleStreamEnd))
-	http.HandleFunc("/api/stream/subscribe", apiChain(srv.handleStreamSubscribe))
-
-	// Bot endpoints (Sprint 3 — Task 2)
-	http.HandleFunc("/api/bots/register", apiChain(srv.handleBotRegister))
-	http.HandleFunc("/api/bots/list", apiChain(srv.handleBotList))
-
-	// Sticker endpoints (Sprint 3 — Task 2)
-	http.HandleFunc("/api/stickers/packs", apiChain(srv.handleStickerPacks))
-	http.HandleFunc("/api/stickers/pack/", apiChain(srv.handleStickerPackGet))
-
-	// Mesh network endpoints
-	http.HandleFunc("/api/mesh/peers", apiChain(srv.handleMeshPeers))
-	http.HandleFunc("/api/mesh/stats", apiChain(srv.handleMeshStats))
-	http.HandleFunc("/api/mesh/add", apiChain(srv.handleMeshAdd))
-
-	// Federation endpoints (Sprint 6 — S6.1)
-	http.HandleFunc("/api/federation/peer", apiChain(func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case "POST":
-			srv.handleFederationPeerAdd(w, r)
-		case "DELETE":
-			srv.handleFederationPeerRemove(w, r)
-		case "GET":
-			srv.handleFederationPeerList(w, r)
-		default:
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET, POST or DELETE")
-		}
-	}))
-	http.HandleFunc("/api/federation/sync", apiChain(srv.handleFederationSync))
-
-	// Auth endpoints (D1 — JWT authentication)
-	http.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
-			return
-		}
-		var body struct {
-			Npub     string `json:"npub"`
-			Username string `json:"username"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-			return
-		}
-		if body.Npub == "" {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
-			return
-		}
-		userID := hex.EncodeToString([]byte(body.Npub))[:16]
-		username := body.Username
-		if username == "" {
-			username = "user_" + userID[:8]
-		}
-		db.DB().Exec("INSERT OR IGNORE INTO users (id, npub, username, created_at) VALUES (?, ?, ?, ?)",
-			userID, body.Npub, username, time.Now().Unix())
-		accessToken, refreshToken, err := srv.authService.GenerateTokenPair(userID, body.Npub)
-		if err != nil {
-			writeError(w, http.StatusInternalServerError, "TOKEN_ERROR", err.Error())
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
-	}))
-	http.HandleFunc("/api/auth/login", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
-			return
-		}
-		var body struct {
-			Npub string `json:"npub"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-			return
-		}
-		var userID, npub string
-		err := db.DB().QueryRow("SELECT id, npub FROM users WHERE npub = ?", body.Npub).Scan(&userID, &npub)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "NOT_FOUND", "user not found")
-			return
-		}
-		accessToken, refreshToken, _ := srv.authService.GenerateTokenPair(userID, npub)
-		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
-	}))
-	http.HandleFunc("/api/auth/refresh", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" {
-			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
-			return
-		}
-		var body struct {
-			RefreshToken string `json:"refresh_token"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-			return
-		}
-		newAccess, newRefresh, err := srv.authService.RefreshToken(body.RefreshToken)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", err.Error())
-			return
-		}
-		json.NewEncoder(w).Encode(map[string]string{"access_token": newAccess, "refresh_token": newRefresh})
-	}))
-
-	initExtraRoutes(db, apiChain)
-
-	// Static files + SPA fallback
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Security headers for all responses
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-
-		// Path traversal protection
-		cleanPath := path.Clean(r.URL.Path)
-		if strings.Contains(r.URL.Path, "..") || cleanPath != r.URL.Path {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
-
-		// Set MIME type from map
-		if ct, ok := mimeTypes[filepath.Ext(r.URL.Path)]; ok {
-			w.Header().Set("Content-Type", ct)
-		}
-
-		// Set cache headers
-		setCacheHeaders(w, r.URL.Path)
-
-		// SPA fallback: serve index.html for non-file routes
-		fullPath := filepath.Join(distDir, filepath.Clean(r.URL.Path))
-		if info, err := os.Stat(fullPath); err != nil || info.IsDir() {
-			http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
-			return
-		}
-		fs.ServeHTTP(w, r)
-	})
-
-	log.Printf("🔥 Unkillable Messenger v0.1.0")
-	log.Printf("   Web:  http://0.0.0.0:%s", port)
-	log.Printf("   API:  http://0.0.0.0:%s/api/status", port)
-	log.Printf("   Chat: http://0.0.0.0:%s/api/messages", port)
-
-	httpSrv := &http.Server{Addr: ":" + port}
 
 	// Graceful shutdown on SIGINT/SIGTERM
 	idleConnsClosed := make(chan struct{})
