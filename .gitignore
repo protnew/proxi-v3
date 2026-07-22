@@ -1,0 +1,32 @@
+# Go
+*.exe
+messenger-server
+coverage.out
+coverage/
+*.db
+*.db-wal
+*.db-shm
+
+# Node/Svelte
+node_modules/
+dist-svelte/
+*.bak
+fix_*.py
+
+# Android/Gradle
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+
+# Rust/Tauri build artifacts
+src-tauri/target/
+*.rlib
+*.rmeta
+
+# OS
+nul
+.env
+.DS_Store
+Thumbs.db
