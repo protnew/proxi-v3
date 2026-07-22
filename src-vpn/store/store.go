@@ -409,9 +409,3 @@ func (s *Store) UpdateRefreshToken(id, token string) error {
 	}
 	return nil
 }
-
-// ---------------------------------------------------------------------------
-// PreKey Bundles (E2E key exchange)
-// ---------------------------------------------------------------------------
-
-// PreKeyBundleRow represents a stored prekey bundle.

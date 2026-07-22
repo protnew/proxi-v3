@@ -16,6 +16,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/auth"
+	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/federation"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
@@ -211,8 +212,26 @@ func run() error {
 		log.Printf("🔑 Identity loaded from DB: %s", npub)
 	}
 
-	// Initialize chat hub
+	// Initialize chat hub with message persistence callback (M-002)
 	srv.initHub()
+	if srv.hub != nil && srv.db != nil {
+		srv.hub.OnMessage = func(msg *chat.Message) {
+			msgID := msg.ID
+			if msgID == "" {
+				msgID = fmt.Sprintf("msg-%d-%s", msg.Ts, msg.From[:min(len(msg.From), 8)])
+			}
+			srv.db.SaveMessage(store.Message{
+				ID:        msgID,
+				From:      msg.From,
+				To:        msg.To,
+				Text:      msg.Text,
+				Timestamp: msg.Ts,
+				Encrypted: msg.IsE2E,
+				ReplyTo:   msg.ReplyTo,
+				ForwardedFrom: msg.ForwardedFrom,
+			})
+		}
+	}
 
 	// Auto-connect VPN peers on startup
 	go srv.autoConnectPeers()
