@@ -1,9 +1,0 @@
-messenger-server
-node_modules/
-dist-svelte/
-*.exe
-messenger-server
-src-vpn/webserver
-coverage.out
-
-nul
