@@ -1,10 +1,13 @@
 <script lang="ts">
   import * as stores from '../stores/messenger'
+  import { setE2EEnabled, loadE2EPref, toggleVPN } from '../lib/api'
   import { updateProfile } from '../lib/api'
   import { getTheme, toggleTheme, onThemeChange, type Theme } from '../lib/theme'
   import { generateContactQR } from '../lib/qr'
 
   let tab = $state<'profile' | 'contacts' | 'chats' | 'advanced'>('profile')
+  let e2eOn = $state(true)
+  let vpnOn = $state(false)
   let currentProfile = $state<stores.Profile>({ pubkey: '', name: '', about: '', avatar: '👤' })
   let contactList = $state<stores.Contact[]>([])
   let chatList = $state<stores.Chat[]>([])
@@ -111,6 +114,29 @@
       {#if showQR && qrDataUrl}
         <div class="qr-box"><img src={qrDataUrl} alt="QR" /><p>Покажите другу для добавления</p></div>
       {/if}
+    </div>
+  {:else if tab === 'advanced'}
+    <div class="sec">
+      <h4>🔐 Шифрование</h4>
+      <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+        <span>E2E шифрование</span>
+        <button style="background:{e2eOn ? '#3b82f6' : '#333'};color:white;border:none;padding:6px 16px;border-radius:8px;cursor:pointer"
+          onclick={() => { e2eOn = !e2eOn; setE2EEnabled(e2eOn); }}>
+          {e2eOn ? 'ON ✅' : 'OFF ❌'}
+        </button>
+      </div>
+      <p style="font-size:11px;color:#666;margin-top:4px">XChaCha20-Poly1305 AEAD шифрование сообщений</p>
+    </div>
+    <div class="sec">
+      <h4>🌐 VPN</h4>
+      <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+        <span>WebRTC Proxy</span>
+        <button style="background:{vpnOn ? '#3b82f6' : '#333'};color:white;border:none;padding:6px 16px;border-radius:8px;cursor:pointer"
+          onclick={async () => { vpnOn = !vpnOn; await toggleVPN(vpnOn); }}>
+          {vpnOn ? 'ON ✅' : 'OFF ❌'}
+        </button>
+      </div>
+      <p style="font-size:11px;color:#666;margin-top:4px">Маршрутизация трафика через peer SOCKS5</p>
     </div>
   {:else if tab === 'contacts'}
     <div class="sec">

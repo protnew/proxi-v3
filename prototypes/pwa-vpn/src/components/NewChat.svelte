@@ -3,6 +3,8 @@
   import { getName, getUserId } from '../lib/api'
 
   let newKey = $state('')
+  let groupName = $state('')
+  let selectedMembers = $state([])
   let newName = $state('')
   let tab = $state<'new' | 'list'>('new')
   let visible = $state(false)
@@ -12,6 +14,16 @@
   stores.showNewChat.subscribe(v => { visible = v })
   stores.contacts.subscribe(v => { contactList = v })
   stores.profile.subscribe(v => { currentProfile = v })
+
+  async function createGrp() {
+    if (groupName.trim().length < 2) return;
+    const r = await createGroupUI(groupName, selectedMembers);
+    if (r.status < 300) {
+      stores.showNewChat.set(false);
+      groupName = '';
+      selectedMembers = [];
+    }
+  }
 
   function startChat() {
     const pk = newKey.trim()
@@ -42,6 +54,7 @@
       <div class="tabs">
         <button class:active={tab === 'new'} onclick={() => tab = 'new'}>Новый контакт</button>
         <button class:active={tab === 'list'} onclick={() => tab = 'list'}>Контакты ({contactList.length})</button>
+        <button class:active={tab === 'group'} onclick={() => tab = 'group'}>👥 Группа</button>
       </div>
 
       {#if tab === 'new'}
@@ -62,7 +75,24 @@
             </div>
           </div>
         </div>
-      {:else}
+            {:else if tab === 'group'}
+        <div class="form">
+          <label for="grp-name">Название группы</label>
+          <input id="grp-name" type="text" placeholder="Моя группа" bind:value={groupName} />
+          <label>Участники (выбери из контактов)</label>
+          <div class="contact-list" style="max-height:200px;overflow-y:auto">
+            {#each contactList as c}
+              <label class="contact-check" style="display:flex;align-items:center;gap:8px;padding:6px;cursor:pointer">
+                <input type="checkbox" value={c.pubkey} bind:group={selectedMembers} />
+                <span>{c.name || c.pubkey.slice(0, 16)}</span>
+              </label>
+            {/each}
+          </div>
+          <button class="start-btn" onclick={createGrp} disabled={groupName.trim().length < 2}>
+            👥 Создать группу
+          </button>
+        </div>
+{:else}
         <div class="contact-list">
           {#each contactList as c}
             <button class="contact" onclick={() => openExisting(c.pubkey, c.name)}>
