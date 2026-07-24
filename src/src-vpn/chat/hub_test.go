@@ -64,10 +64,12 @@ func newTestWSConn(t *testing.T) (*websocket.Conn, *websocket.Conn, func()) {
 // After this returns, the channel should be empty.
 func drainAll(ch chan []byte, t *testing.T) {
 	t.Helper()
-	for {
+	for i := 0; i < 100; i++ { // TD-001: limit iterations to prevent infinite loop on closed channel
 		select {
-		case <-ch:
-			// consumed one message
+		case _, ok := <-ch:
+			if !ok {
+				return // channel is closed
+			}
 		case <-time.After(50 * time.Millisecond):
 			return // channel is drained
 		}
@@ -506,12 +508,14 @@ func TestBroadcast_FullBuffer(t *testing.T) {
 	_, sConn, cleanup := newTestWSConn(t)
 	defer cleanup()
 
-	c := &Client{UserID: "full", Conn: sConn, Send: make(chan []byte, 1)}
+	// TD-001 FIXED: buffer=2 survives welcome + join from Register
+	c := &Client{UserID: "full", Conn: sConn, Send: make(chan []byte, 2)}
 	hub.Register(c)
 	drainAll(c.Send, t)
 
-	// Fill the buffer.
-	c.Send <- []byte(`filler`)
+	// Fill the buffer with 2 items.
+	c.Send <- []byte(`filler1`)
+	c.Send <- []byte(`filler2`)
 
 	// Broadcast should not block even though "full" client's buffer is full.
 	done := make(chan struct{})
