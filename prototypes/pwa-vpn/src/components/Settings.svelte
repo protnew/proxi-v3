@@ -1,6 +1,6 @@
 <script lang="ts">
   import * as stores from '../stores/messenger'
-  import { setE2EEnabled, loadE2EPref, toggleVPN } from '../lib/api'
+  import { setE2EEnabled, loadE2EPref, toggleVPN } from '../lib/api-extended'
   import { updateProfile } from '../lib/api'
   import { getTheme, toggleTheme, onThemeChange, type Theme } from '../lib/theme'
   import { generateContactQR } from '../lib/qr'

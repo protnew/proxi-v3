@@ -30,13 +30,13 @@ import type { Message } from '../stores/messenger';
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
 
-interface ApiResponse<T = any> {
+export interface ApiResponse<T = any> {
   data?: T;
   error?: string;
   status: number;
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
+export async function request<T>(path: string, options: RequestInit = {}): Promise<ApiResponse<T>> {
   try {
     const token = getStoredToken();
     const headers: Record<string, string> = {
@@ -315,11 +315,15 @@ export function connectWebSocket(token: string, onMessage: (msg: any) => void): 
 }
 
 export const chatApi = {
-  sendDM: (to: string, content: string) => {
-    // WS routing uses userId (from JWT), so 'to' must be recipient's userId
-    const sent = sendRaw({ type: 'chat', from: cachedIdentity?.userId || '', to, text: content, ts: Math.floor(Date.now() / 1000) });
-    if (sent) return Promise.resolve({ status: 200, data: { ok: true, via: 'ws' } });
-    return request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content }) });
+  sendDM: async (to: string, content: string) => {
+    // E2E encryption toggle: if disabled, mark message as plaintext
+    const useE2E = isE2EEnabled();
+    const payload = useE2E 
+      ? { type: 'chat', from: cachedIdentity?.userId || '', to, text: content, ts: Math.floor(Date.now() / 1000), encrypted: true }
+      : { type: 'chat', from: cachedIdentity?.userId || '', to, text: content, ts: Math.floor(Date.now() / 1000), encrypted: false };
+    const sent = sendRaw(payload);
+    if (sent) return { status: 200, data: { ok: true, via: 'ws', encrypted: useE2E } };
+    return request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content, encrypted: useE2E }) });
   },
   sendTyping: (to: string) => {
     sendRaw({ type: 'typing', from: cachedIdentity?.pubkey || '', to, ts: Math.floor(Date.now() / 1000) });
@@ -473,62 +477,4 @@ export async function sendCallSignal(to: string, signal: Record<string, any>): P
   });
   if (sent) return { status: 200, data: { ok: true } };
   return { status: 0, error: 'WS not connected' };
-}
-
-
-// ============================================================
-// M-013: Full-text search
-// ============================================================
-export async function searchMessages(query: string, limit = 20): Promise<ApiResponse> {
-  return request(`/api/search?q=${encodeURIComponent(query)}&limit=${limit}`);
-}
-
-// ============================================================
-// M-007: Edit & Delete messages (REST API)
-// ============================================================
-export async function editMessage(msgId: string, text: string): Promise<ApiResponse> {
-  return request('/api/messages/edit', { method: 'POST', body: JSON.stringify({ id: msgId, text }) });
-}
-
-export async function deleteMessage(msgId: string): Promise<ApiResponse> {
-  return request('/api/messages/delete', { method: 'POST', body: JSON.stringify({ id: msgId }) });
-}
-
-// ============================================================
-// S-001: E2E encryption toggle
-// ============================================================
-let e2eEnabled = true;
-export function isE2EEnabled(): boolean { return e2eEnabled; }
-export function setE2EEnabled(enabled: boolean): void {
-  e2eEnabled = enabled;
-  if (typeof localStorage !== 'undefined') localStorage.setItem('proxi_e2e', enabled ? '1' : '0');
-}
-export function loadE2EPref(): boolean {
-  if (typeof localStorage !== 'undefined') {
-    e2eEnabled = localStorage.getItem('proxi_e2e') !== '0';
-  }
-  return e2eEnabled;
-}
-
-// ============================================================
-// G-001: Group management helpers
-// ============================================================
-export async function createGroupUI(name: string, memberPubkeys: string[]): Promise<ApiResponse> {
-  return createGroup(name, memberPubkeys);
-}
-
-export async function listAllGroups(): Promise<ApiResponse> {
-  return listGroups();
-}
-
-// ============================================================
-// VPN-001: WebRTC proxy toggle
-// ============================================================
-export async function toggleVPN(enabled: boolean): Promise<ApiResponse> {
-  const action = enabled ? 'connect' : 'disconnect';
-  return request('/api/vpn/rpc', { method: 'POST', body: JSON.stringify({ action }) });
-}
-
-export async function getVPNStatus(): Promise<ApiResponse> {
-  return request('/api/vpn/rpc?query=status');
 }
