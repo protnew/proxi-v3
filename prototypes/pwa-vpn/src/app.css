@@ -1,1 +1,58 @@
 :root { color-scheme: dark; }
+
+
+/* UI-005: Mobile responsive layout */
+@media (max-width: 768px) {
+  .app-container, .main-layout, .app {
+    flex-direction: column !important;
+  }
+  .sidebar {
+    width: 100% !important;
+    max-height: 40vh;
+    border-right: none !important;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .sidebar.collapsed {
+    max-height: 50px;
+    overflow: hidden;
+  }
+  .chat-area, .chat {
+    flex: 1;
+    width: 100%;
+  }
+  .settings-panel, .right-panel {
+    width: 100% !important;
+    position: absolute;
+    bottom: 0;
+    max-height: 50vh;
+  }
+  .messages {
+    padding: 8px !important;
+  }
+  .msg .bubble {
+    max-width: 90%;
+    font-size: 13px;
+  }
+  .input-bar input {
+    font-size: 16px; /* prevent iOS zoom */
+  }
+}
+
+@media (max-width: 480px) {
+  .sidebar {
+    max-height: 30vh;
+  }
+  .header {
+    padding: 6px 10px;
+  }
+  .brand h1 {
+    font-size: 14px;
+  }
+  .quick-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+  }
+  .panel {
+    padding: 8px;
+  }
+}
