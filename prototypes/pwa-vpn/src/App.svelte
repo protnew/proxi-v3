@@ -1,4 +1,23 @@
 <script lang="ts">
+// Deep-link routing: ?view=settings, ?view=newchat, ?view=advanced
+const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+const initialView = urlParams.get('view');
+if (initialView === 'settings') {
+  setTimeout(() => { stores.showSettings.set(true); }, 500);
+}
+if (initialView === 'newchat') {
+  setTimeout(() => { stores.showNewChat.update(() => true); }, 500);
+}
+if (initialView === 'advanced') {
+  setTimeout(() => {
+    stores.showSettings.set(true);
+    setTimeout(() => {
+      const gearBtn = document.querySelector('button:last-child');
+      if (gearBtn) (gearBtn as HTMLElement).click();
+    }, 300);
+  }, 500);
+}
+
   import { onMount } from 'svelte'
   import * as stores from './stores/messenger'
   import { initIdentity, initIdentityAsync, connectRelays, sendPresence, getName, onMessage, onPresence, onTyping, getStatus } from './lib/api'
