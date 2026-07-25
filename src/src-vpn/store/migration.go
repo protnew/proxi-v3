@@ -396,6 +396,20 @@ CREATE INDEX IF NOT EXISTS idx_stream_chunks_stream_id ON stream_chunks(stream_i
 CREATE INDEX IF NOT EXISTS idx_stream_chunks_sequence ON stream_chunks(stream_id, sequence_number);
 `,
 	},
+	{
+		Version: 14,
+		Name:    "add_contacts_table",
+		Up: `CREATE TABLE IF NOT EXISTS contacts (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    public_key TEXT NOT NULL DEFAULT '',
+    endpoint TEXT NOT NULL DEFAULT '',
+    is_messenger_friend INTEGER NOT NULL DEFAULT 0,
+    grant_vpn_access INTEGER NOT NULL DEFAULT 0,
+    use_as_vpn_node INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT 0
+);`,
+	},
 }
 
 // runMigrations applies all pending migrations in order.
@@ -407,7 +421,10 @@ func runMigrations(db *sql.DB) error {
 			name TEXT NOT NULL,
 			applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)
-	`); err != nil {
+	`); 
+	
+	
+	err != nil {
 		return fmt.Errorf("create schema_version: %w", err)
 	}
 
