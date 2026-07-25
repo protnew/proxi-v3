@@ -62,6 +62,11 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 // Identity & Token storage
 // ============================================================
 
+// E2E toggle state (shared with api-extended.ts)
+let e2eEnabled = true;
+export function isE2EEnabledLocal(): boolean { return e2eEnabled; }
+export function setE2EEnabledLocal(v: boolean): void { e2eEnabled = v; }
+
 let cachedIdentity: { pubkey: string; privateKey: string; token?: string; userId?: string } | null = null;
 
 function getStoredToken(): string | undefined {
@@ -317,7 +322,7 @@ export function connectWebSocket(token: string, onMessage: (msg: any) => void): 
 export const chatApi = {
   sendDM: async (to: string, content: string) => {
     // E2E encryption toggle: if disabled, mark message as plaintext
-    const useE2E = isE2EEnabled();
+    const useE2E = e2eEnabled;
     const payload = useE2E 
       ? { type: 'chat', from: cachedIdentity?.userId || '', to, text: content, ts: Math.floor(Date.now() / 1000), encrypted: true }
       : { type: 'chat', from: cachedIdentity?.userId || '', to, text: content, ts: Math.floor(Date.now() / 1000), encrypted: false };
