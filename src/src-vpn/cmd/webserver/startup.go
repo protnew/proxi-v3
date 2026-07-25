@@ -299,3 +299,19 @@ func run() error {
 // autoConnectPeers loads saved VPN peers from DB and attempts to reconnect.
 // Runs in background goroutine on startup.
 
+// INF-001: SQLite WAL checkpoint — runs every 24h
+func (srv *Server) startWALCheckpoint(ctx context.Context) {
+    ticker := time.NewTicker(24 * time.Hour)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ticker.C:
+            if srv.db != nil {
+                srv.db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+                log.Println("[infra] WAL checkpoint completed")
+            }
+        case <-ctx.Done():
+            return
+        }
+    }
+}

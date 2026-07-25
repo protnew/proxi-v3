@@ -295,6 +295,31 @@
     a.download = msg.fileName || 'file'
     a.click()
   }
+
+// M-011: URL preview — extract URLs from message text
+function extractUrls(text: string): string[] {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return text.match(urlRegex) || [];
+}
+
+let urlPreviews = $state<Record<string, any>>({});
+
+async function fetchUrlPreview(url: string) {
+  if (urlPreviews[url]) return;
+  try {
+    const resp = await fetch(API_BASE + '/api/url-preview?url=' + encodeURIComponent(url));
+    if (resp.ok) {
+      const data = await resp.json();
+      urlPreviews[url] = data;
+    }
+  } catch (e) { /* ignore */ }
+}
+
+function processMessageUrls(text: string) {
+  const urls = extractUrls(text);
+  urls.forEach(u => fetchUrlPreview(u));
+}
+
 </script>
 
 <svelte:window onclick={closeContext} onkeydown={(e) => e.key === 'Escape' && (contextMenu = null)} onpaste={(e) => {

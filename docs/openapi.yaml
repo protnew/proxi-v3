@@ -1,0 +1,110 @@
+openapi: 3.0.3
+info:
+  title: Indestructible Messenger API
+  version: 1.0.0
+  description: Proxi Messenger — P2P E2E encrypted messenger
+
+paths:
+  /api/health:
+    get:
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Server health status
+  /api/auth/signup:
+    post:
+      summary: Register new user
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                npub: { type: string }
+                username: { type: string }
+      responses:
+        '201': { description: User created, returns JWT }
+        '400': { description: Bad request }
+  /api/auth/login:
+    post:
+      summary: Login
+      security: []
+      responses:
+        '200': { description: Returns JWT token pair }
+  /api/messages:
+    get:
+      summary: Get message history
+      parameters:
+        - name: chat_id
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { description: List of messages }
+    post:
+      summary: Send message
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from: { type: string }
+                to: { type: string }
+                text: { type: string, maxLength: 10000 }
+      responses:
+        '201': { description: Message sent }
+  /api/messages/edit:
+    post:
+      summary: Edit message
+      responses: { '200': { description: Edited } }
+  /api/messages/delete:
+    post:
+      summary: Delete message
+      responses: { '200': { description: Deleted } }
+  /api/groups/create:
+    post:
+      summary: Create group
+      responses: { '201': { description: Group created } }
+  /api/groups/list:
+    get:
+      summary: List groups
+      responses: { '200': { description: Groups list } }
+  /api/search:
+    get:
+      summary: Full-text search
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string }
+      responses: { '200': { description: Search results } }
+  /api/files/upload:
+    post:
+      summary: Upload file
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses: { '201': { description: File URL } }
+  /api/identity:
+    get:
+      summary: Get current identity
+      responses: { '200': { description: Identity info } }
+  /ws:
+    get:
+      summary: WebSocket connection
+      description: Real-time messaging, typing, presence
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - BearerAuth: []
