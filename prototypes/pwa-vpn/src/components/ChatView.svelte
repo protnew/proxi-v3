@@ -94,21 +94,38 @@
       return
     }
 
-    let msg: Message
-    if (isGroup) {
-      const groupId = currentChatId.replace('group:', '')
-      msg = await sendGroupMessage(groupId, text)
-      msg.replyTo = replyTo?.id
-      stores.addMessage(currentChatId, msg)
-    } else {
-      msg = await sendDM(peerPubkey, text, replyTo?.id)
-      stores.addMessage(currentChatId, msg)
+    // Optimistic UI first — never leave text stuck in input
+    const myPk = currentProfile?.pubkey || ''
+    const ts = Date.now()
+    const localId = `local-${ts}-${Math.random().toString(36).slice(2, 8)}`
+    const peer = isGroup ? currentChatId.replace('group:', '') : peerPubkey
+    const msg: Message = {
+      id: localId,
+      from: myPk,
+      to: peer,
+      text,
+      timestamp: ts,
+      type: 'text',
+      read: true,
+      replyTo: replyTo?.id,
     }
-
-    playOutgoing()
+    stores.addMessage(currentChatId, msg)
     inputText = ''
     replyTo = null
     showEmoji = false
+    playOutgoing()
+
+    try {
+      if (isGroup) {
+        const resp: any = await sendGroupMessage(peer, text)
+        if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp)
+      } else {
+        const resp: any = await sendDM(peer, text)
+        if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
+      }
+    } catch (e) {
+      console.error('[chatview] sendMessage error', e)
+    }
   }
 
   let lastTypingTime = 0;
