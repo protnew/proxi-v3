@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"/>
+<title>Proxi Backlog CPO v3 — Bloomberg</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080c14;color:#e2e8f0;font-family:'JetBrains Mono',ui-monospace,monospace;padding:16px}
+a{color:#00d4ff}
+.hdr{display:flex;align-items:center;gap:12px;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid #1a1f2e}
+.logo{background:#00d4ff22;border:1px solid #00d4ff55;color:#00d4ff;padding:8px 12px;font-weight:700;letter-spacing:1px}
+.hmeta{font-size:11px;color:#64748b}
+.live{width:8px;height:8px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.kpi-strip{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;background:#1a1f2e;margin-bottom:12px}
+.kpi-cell{background:#0d1117;padding:12px 8px;text-align:center}
+.kpi-l{font-size:9px;color:#475569;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:6px}
+.kpi-v{font-size:22px;font-weight:700}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#1a1f2e;margin-bottom:12px}
+.panel{background:#0d1117;padding:14px}
+.pt{font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:11px}
+th{text-align:left;color:#475569;font-size:9px;text-transform:uppercase;letter-spacing:1px;padding:6px 4px;border-bottom:1px solid #1a1f2e}
+td{padding:6px 4px;border-bottom:1px solid #121826;color:#cbd5e1}
+code{color:#00d4ff}
+.barrow{display:flex;align-items:center;gap:8px;padding:3px 0}
+.bl{width:140px;text-align:right;font-size:11px;color:#94a3b8}
+.bb{flex:1;background:#111827;height:16px;border-radius:2px}
+.bf{height:100%;border-radius:2px}
+.bv{width:36px;font-size:11px;font-weight:600}
+.foot{margin-top:12px;font-size:10px;color:#475569}
+.full{background:#0d1117;padding:14px;margin-bottom:12px;border:1px solid #1a1f2e}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="logo">PROXI</div>
+  <div>
+    <div style="font-size:16px;font-weight:600">Backlog CPO v3 · Indestructible Messenger</div>
+    <div class="hmeta">08-Backlog/backlog_proxi_v3.db · branch dev · mission Messenger+VPN+P2P</div>
+  </div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:8px"><div class="live"></div><span class="hmeta">2026-07-27</span></div>
+</div>
+
+<div class="kpi-strip">
+  <div class="kpi-cell"><div class="kpi-l">TOTAL</div><div class="kpi-v" style="color:#e2e8f0">85</div></div>
+  <div class="kpi-cell"><div class="kpi-l">TODO</div><div class="kpi-v" style="color:#00d4ff">38</div></div>
+  <div class="kpi-cell"><div class="kpi-l">ICEBOX</div><div class="kpi-v" style="color:#8b5cf6">45</div></div>
+  <div class="kpi-cell"><div class="kpi-l">DONE</div><div class="kpi-v" style="color:#00ff88">2</div></div>
+  <div class="kpi-cell"><div class="kpi-l">IN PROG</div><div class="kpi-v" style="color:#f59e0b">0</div></div>
+  <div class="kpi-cell"><div class="kpi-l">TODO MIN</div><div class="kpi-v" style="color:#00d4ff">462</div></div>
+  <div class="kpi-cell"><div class="kpi-l">ICE MIN</div><div class="kpi-v" style="color:#64748b">540</div></div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <div class="pt">① TODO by block (nested priority)</div>
+    <svg width="700" height="402" xmlns="http://www.w3.org/2000/svg"><text x="120" y="15" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">Auth</text><rect x="130" y="0" width="420" height="22" rx="3" fill="#00d4ff" opacity="0.85"/><text x="560" y="15" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">9 TODO / 10</text><text x="120" y="43" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">MessengerCore</text><rect x="130" y="28" width="420" height="22" rx="3" fill="#00ff88" opacity="0.85"/><text x="560" y="43" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">9 TODO / 12</text><text x="120" y="71" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">QualityGate</text><rect x="130" y="56" width="327" height="22" rx="3" fill="#8b5cf6" opacity="0.85"/><text x="467" y="71" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">7 TODO / 8</text><text x="120" y="99" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">E2EProof</text><rect x="130" y="84" width="233" height="22" rx="3" fill="#f59e0b" opacity="0.85"/><text x="373" y="99" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">5 TODO / 6</text><text x="120" y="127" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">TestingInfra</text><rect x="130" y="112" width="233" height="22" rx="3" fill="#ef4444" opacity="0.85"/><text x="373" y="127" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">5 TODO / 6</text><text x="120" y="155" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">Security</text><rect x="130" y="140" width="140" height="22" rx="3" fill="#06b6d4" opacity="0.85"/><text x="280" y="155" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">3 TODO / 6</text><text x="120" y="183" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">Groups</text><rect x="130" y="168" width="4" height="22" rx="3" fill="#3b82f6" opacity="0.85"/><text x="144" y="183" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 3</text><text x="120" y="211" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">UI</text><rect x="130" y="196" width="4" height="22" rx="3" fill="#a855f7" opacity="0.85"/><text x="144" y="211" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 14</text><text x="120" y="239" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">VPN</text><rect x="130" y="224" width="4" height="22" rx="3" fill="#00d4ff" opacity="0.85"/><text x="144" y="239" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 3</text><text x="120" y="267" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">P2PContent</text><rect x="130" y="252" width="4" height="22" rx="3" fill="#00ff88" opacity="0.85"/><text x="144" y="267" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 3</text><text x="120" y="295" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">MobileDesktop</text><rect x="130" y="280" width="4" height="22" rx="3" fill="#8b5cf6" opacity="0.85"/><text x="144" y="295" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 4</text><text x="120" y="323" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">DevOps</text><rect x="130" y="308" width="4" height="22" rx="3" fill="#f59e0b" opacity="0.85"/><text x="144" y="323" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 5</text><text x="120" y="351" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">Economy</text><rect x="130" y="336" width="4" height="22" rx="3" fill="#ef4444" opacity="0.85"/><text x="144" y="351" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 2</text><text x="120" y="379" text-anchor="end" fill="#94a3b8" font-size="11" font-family="JetBrains Mono,monospace">DocsCompliance</text><rect x="130" y="364" width="4" height="22" rx="3" fill="#06b6d4" opacity="0.85"/><text x="144" y="379" fill="#e2e8f0" font-size="11" font-family="JetBrains Mono,monospace">0 TODO / 3</text></svg>
+  </div>
+  <div class="panel">
+    <div class="pt">② Market feature density (CPO benchmark)</div>
+    <div class="barrow"><div class="bl">Proxi (ours)</div>
+    <div class="bb"><div class="bf" style="width:20.0%;background:#00ff88"></div></div>
+    <div class="bv">40</div></div><div class="barrow"><div class="bl">Telegram</div>
+    <div class="bb"><div class="bf" style="width:100.0%;background:#00d4ff"></div></div>
+    <div class="bv">200</div></div><div class="barrow"><div class="bl">Signal</div>
+    <div class="bb"><div class="bf" style="width:40.0%;background:#00d4ff"></div></div>
+    <div class="bv">80</div></div><div class="barrow"><div class="bl">Session</div>
+    <div class="bb"><div class="bf" style="width:30.0%;background:#00d4ff"></div></div>
+    <div class="bv">60</div></div><div class="barrow"><div class="bl">Element/Matrix</div>
+    <div class="bb"><div class="bf" style="width:60.0%;background:#00d4ff"></div></div>
+    <div class="bv">120</div></div><div class="barrow"><div class="bl">Tox</div>
+    <div class="bb"><div class="bf" style="width:22.5%;background:#00d4ff"></div></div>
+    <div class="bv">45</div></div>
+    <div class="hmeta" style="margin-top:10px">Sources: official product sites · full MD in 00-Product-and-Agile/02-Market-Research/</div>
+  </div>
+</div>
+
+<div class="full">
+  <div class="pt">③ Lead Worker queue — ORDER BY block_priority, subblock_priority, priority_score</div>
+  <table>
+    <thead><tr><th>bp</th><th>sp</th><th>ROI</th><th>ID</th><th>Title</th><th>min</th><th>UV</th><th>block</th></tr></thead>
+    <tbody>
+    <tr><td>100</td><td>100</td><td>7.50</td><td><code>AUTH-001</code></td><td>Map auth routes in Go routing files</td><td>12m</td><td>90</td><td>Auth</td></tr>
+<tr><td>100</td><td>95</td><td>9.50</td><td><code>AUTH-002</code></td><td>Reproduce signup 401 with curl/python</td><td>10m</td><td>95</td><td>Auth</td></tr>
+<tr><td>100</td><td>90</td><td>7.92</td><td><code>AUTH-003</code></td><td>Identify middleware blocking unauthenticated signup</td><td>12m</td><td>95</td><td>Auth</td></tr>
+<tr><td>100</td><td>85</td><td>6.67</td><td><code>AUTH-004</code></td><td>Exempt signup/login from JWT middleware</td><td>15m</td><td>100</td><td>Auth</td></tr>
+<tr><td>100</td><td>80</td><td>7.50</td><td><code>AUTH-005</code></td><td>Return JWT + user_id shape expected by frontend</td><td>12m</td><td>90</td><td>Auth</td></tr>
+<tr><td>100</td><td>75</td><td>7.92</td><td><code>AUTH-006</code></td><td>Persist JWT to localStorage after signup</td><td>12m</td><td>95</td><td>Auth</td></tr>
+<tr><td>100</td><td>70</td><td>8.50</td><td><code>AUTH-007</code></td><td>/api/identity works with Bearer token</td><td>10m</td><td>85</td><td>Auth</td></tr>
+<tr><td>100</td><td>65</td><td>4.67</td><td><code>AUTH-008</code></td><td>Add Go table tests for signup edge cases</td><td>15m</td><td>70</td><td>Auth</td></tr>
+<tr><td>100</td><td>60</td><td>5.87</td><td><code>AUTH-009</code></td><td>Reject or limit anonymous WS in authenticated mode</td><td>15m</td><td>88</td><td>Auth</td></tr>
+<tr><td>98</td><td>100</td><td>7.50</td><td><code>MSG-001</code></td><td>Trace frontend sendDM code path</td><td>12m</td><td>90</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>95</td><td>7.50</td><td><code>MSG-002</code></td><td>Trace backend hub.OnMessage → SaveMessage</td><td>12m</td><td>90</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>90</td><td>7.08</td><td><code>MSG-003</code></td><td>Fix empty message persistence / filter empties</td><td>12m</td><td>85</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>88</td><td>6.67</td><td><code>MSG-004</code></td><td>Fix UI send clears input and appends bubble with text</td><td>15m</td><td>100</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>85</td><td>7.00</td><td><code>MSG-005</code></td><td>SQL cleanup script for empty historical messages</td><td>10m</td><td>70</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>80</td><td>6.50</td><td><code>MSG-006</code></td><td>UI does not render empty bubbles</td><td>10m</td><td>65</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>75</td><td>6.25</td><td><code>MSG-007</code></td><td>WS delivers DM to second connection same user multi-dev</td><td>12m</td><td>75</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>70</td><td>6.67</td><td><code>MSG-008</code></td><td>Cross-user DM delivery integration test</td><td>15m</td><td>100</td><td>MessengerCore</td></tr>
+<tr><td>98</td><td>60</td><td>5.83</td><td><code>MSG-009</code></td><td>isE2EEnabled respected on send path</td><td>12m</td><td>70</td><td>MessengerCore</td></tr>
+<tr><td>95</td><td>100</td><td>6.00</td><td><code>QG-001</code></td><td>Commit AUDITOR_RULES + CPO DoR into 08-Backlog</td><td>10m</td><td>60</td><td>QualityGate</td></tr>
+<tr><td>95</td><td>90</td><td>7.00</td><td><code>QG-002</code></td><td>SQL view/query rejecting DONE without proof</td><td>10m</td><td>70</td><td>QualityGate</td></tr>
+
+    </tbody>
+  </table>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <div class="pt">④ Tenant isolation</div>
+    <div class="barrow"><div class="bl">backend</div><div class="bb"><div class="bf" style="width:38%;background:#8b5cf6"></div></div><div class="bv">32</div></div><div class="barrow"><div class="bl">frontend</div><div class="bb"><div class="bf" style="width:35%;background:#8b5cf6"></div></div><div class="bv">30</div></div><div class="barrow"><div class="bl">infra</div><div class="bb"><div class="bf" style="width:22%;background:#8b5cf6"></div></div><div class="bv">19</div></div><div class="barrow"><div class="bl">mobile</div><div class="bb"><div class="bf" style="width:5%;background:#8b5cf6"></div></div><div class="bv">4</div></div>
+  </div>
+  <div class="panel">
+    <div class="pt">⑤ CPO critical path</div>
+    <div style="font-size:12px;line-height:1.7;color:#94a3b8">
+      <div>1. <code>AUTH-001→009</code> signup 401 + JWT + WS</div>
+      <div>2. <code>MSG-001→008</code> DM send/persist/receive</div>
+      <div>3. <code>E2E-001→004</code> Alice→Bob proof</div>
+      <div>4. Only then pull ICEBOX parity toward Telegram density</div>
+      <div style="margin-top:8px;color:#f59e0b">MVP readiness audit: 3/10 until E2E-004 green</div>
+    </div>
+  </div>
+</div>
+
+<div class="foot">
+  Pure HTML+CSS+SVG · no JS · file:// safe · rules: AUDITOR_CPO_RULES.md ·
+  queue SQL in rules · WAL busy_timeout=5000 · single active DB policy
+</div>
+</body>
+</html>
