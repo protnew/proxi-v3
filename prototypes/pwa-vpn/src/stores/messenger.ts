@@ -114,6 +114,8 @@ export function ensureGroupChat(channelId: string, name: string, members: string
 }
 
 export function addMessage(chatId: string, msg: Message) {
+  // MSG-006: skip empty text bubbles
+  if (!msg || !(msg.text || '').trim()) return
   chats.update(cs => {
     if (!Array.isArray(cs)) cs = [];
     return cs.map(c => {
@@ -221,7 +223,15 @@ export function saveChats() {
 export function loadChats() {
   try {
     const d = localStorage.getItem('messenger-chats')
-    if (d) chats.set(JSON.parse(d))
+    if (d) {
+      const parsed = JSON.parse(d)
+      if (Array.isArray(parsed)) {
+        chats.set(parsed.map((c: Chat) => ({
+          ...c,
+          messages: (c.messages || []).filter((m: Message) => (m.text || '').trim().length > 0),
+        })))
+      }
+    }
   } catch {}
 }
 export function saveContacts() {

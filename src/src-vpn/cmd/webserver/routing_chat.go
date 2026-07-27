@@ -26,7 +26,15 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("since"); v != "" {
 		fmt.Sscanf(v, "%d", &since)
 	}
-	npub := r.URL.Query().Get("npub")
+	// Prefer JWT context npub; accept query npub/peer for filters
+	npub, _ := r.Context().Value("npub").(string)
+	if npub == "" {
+		npub = r.URL.Query().Get("npub")
+	}
+	peer := r.URL.Query().Get("peer")
+	if peer == "" {
+		peer = r.URL.Query().Get("with")
+	}
 	limit := 200
 	if v := r.URL.Query().Get("limit"); v != "" {
 		fmt.Sscanf(v, "%d", &limit)
@@ -42,8 +50,24 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 		msgs = []store.Message{}
 	}
 
+	// MSG-003: drop empty-text rows from API response
+	filtered := make([]store.Message, 0, len(msgs))
+	for _, m := range msgs {
+		if strings.TrimSpace(m.Text) == "" {
+			continue
+		}
+		// Optional conversation filter (peer = other party)
+		if peer != "" {
+			if !((m.From == npub && m.To == peer) || (m.From == peer && m.To == npub) || m.To == "broadcast") {
+				continue
+			}
+		}
+		filtered = append(filtered, m)
+	}
+	msgs = filtered
+
 	// Auto-decrypt messages for the current user
-	currentUserNpub, _ := r.Context().Value("npub").(string)
+	currentUserNpub := npub
 	if currentUserNpub != "" {
 		recipientBundle, err := s.db.GetPreKeyBundle(currentUserNpub)
 		if err == nil && recipientBundle != nil {
@@ -55,7 +79,7 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 					plaintext, err := chat.DecryptMessageFromSender(m.Text, privBundle.IdentityKey, m.From)
 					if err == nil {
 						msgs[i].Text = plaintext
-						msgs[i].Encrypted = false // Mark as decrypted for the UI
+						msgs[i].Encrypted = false
 					} else {
 						zap.S().Warnf("Failed to decrypt message %s from %s: %v", m.ID, m.From, err)
 					}

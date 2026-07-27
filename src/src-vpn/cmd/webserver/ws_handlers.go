@@ -20,22 +20,39 @@ import (
 )
 
 
-// handleWS upgrades HTTP to WebSocket and registers client
+// handleWS upgrades HTTP to WebSocket and registers client.
+// AUTH-009: when authService is set, a valid JWT is required.
+// Routing identity is claims.Npub (full pubkey) so DM to/from match hub keys.
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	userId := ""
 	tokenStr := r.URL.Query().Get("token")
-	if tokenStr != "" && s.authService != nil {
-		if claims, err := s.authService.ValidateToken(tokenStr); err == nil {
+	if s.authService != nil {
+		if tokenStr == "" {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
+			return
+		}
+		claims, err := s.authService.ValidateToken(tokenStr)
+		if err != nil {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"invalid token"}`, http.StatusUnauthorized)
+			return
+		}
+		// Prefer full npub for DM routing; fallback to UserID
+		if claims.Npub != "" {
+			userId = claims.Npub
+		} else {
 			userId = claims.UserID
 		}
-	}
-
-	if userId == "" {
-		userId = r.URL.Query().Get("userId")
-	}
-
-	if userId == "" {
-		userId = "anon-" + randomHex(4)
+	} else {
+		// Legacy open mode (tests / no auth)
+		if tokenStr != "" {
+			userId = tokenStr
+		}
+		if userId == "" {
+			userId = r.URL.Query().Get("userId")
+		}
+		if userId == "" {
+			userId = "anon-" + randomHex(4)
+		}
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
@@ -46,7 +63,7 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("🔌 WS connected: %s", userId)
+	log.Printf("🔌 WS connected: %s", truncate(userId, 16))
 	chat.ServeWS(s.hub, userId, conn, r.Context())
 }
 
@@ -128,8 +145,8 @@ func (s *Server) initHub() {
 			}
 		}
 
-		// Save chat messages to SQLite
-		if msg.Type == "chat" {
+		// Save chat messages to SQLite (skip empty text — MSG-003)
+		if msg.Type == "chat" && strings.TrimSpace(msg.Text) != "" {
 			msgID := fmt.Sprintf("msg-%d-%s", msg.Ts, randomHex(4))
 			storeMsg := store.Message{
 				ID:            msgID,
@@ -159,6 +176,13 @@ func (s *Server) initHub() {
 		}
 	}
 	log.Println("💬 Chat Hub initialized")
+
+	// MSG-005: one-shot cleanup of empty historical bubbles
+	if s.db != nil {
+		if n, err := s.db.DeleteEmptyMessages(); err == nil && n > 0 {
+			log.Printf("🧹 Removed %d empty messages from DB", n)
+		}
+	}
 
 	// Start self-destruct cleaner (runs every 30 seconds)
 	go func() {

@@ -47,15 +47,17 @@
       chatApi.getHistory(peerId, 50).then((resp: any) => {
         if (resp.data?.messages && Array.isArray(resp.data.messages)) {
           resp.data.messages.forEach((msg: any) => {
+            const text = (msg.text || '').trim()
+            if (!text) return // MSG-006: never render empty bubbles
             const chatId = currentChatId
             stores.addMessage(chatId, {
               id: msg.id || `hist-${msg.timestamp}-${msg.from?.slice(0, 8) || 'unknown'}`,
               from: msg.from || msg.sender || '',
               to: msg.to || msg.recipient || '',
-              text: msg.text || '',
+              text,
               timestamp: msg.timestamp || Date.now() / 1000,
               type: 'text',
-              read: true, // mark history as read
+              read: true,
               forwardedFrom: msg.forwarded_from,
             })
           })

@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -35,6 +36,10 @@ type Channel struct {
 // Contact represents a known peer/friend with access roles.
 
 func (s *Store) SaveMessage(msg Message) error {
+	// MSG-003: never persist empty bubbles
+	if len(msg.Text) == 0 || len(strings.TrimSpace(msg.Text)) == 0 {
+		return nil
+	}
 	_, err := s.db.Exec(
 		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -400,3 +405,13 @@ func (s *Store) MarkScheduledSent(id string) error {
 // ---------------------------------------------------------------------------
 
 // DeadMansSwitch represents a message that will be sent if the user doesn't check in.
+
+// DeleteEmptyMessages removes rows with empty/whitespace-only text (MSG-005 cleanup).
+func (s *Store) DeleteEmptyMessages() (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM messages WHERE trim(text) = '' OR text IS NULL`)
+	if err != nil {
+		return 0, fmt.Errorf("delete empty messages: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
