@@ -19,17 +19,24 @@ import (
 // Called from run() in startup.go.
 func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port string) {
 	// Middleware chains
+	// apiChain: rate-limited API without JWT (legacy/open until AUTH-009 hardens)
 	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
+	// publicApiChain: NEVER requires JWT — health/status/signup/login/refresh
+	// BUGFIX AUTH-004 (2026-07-27): previously when authSvc!=nil, publicApiChain
+	// incorrectly wrapped authMiddleware → POST /api/auth/signup always 401.
 	publicApiChain := func(h http.HandlerFunc) http.HandlerFunc {
 		return securityHeadersMiddleware(corsMiddleware(h))
 	}
+	// protectedApiChain: JWT required (use for identity/messages as routes migrate)
+	protectedApiChain := apiChain
 	if authSvc != nil {
-		publicApiChain = func(h http.HandlerFunc) http.HandlerFunc {
-			return securityHeadersMiddleware(corsMiddleware(authMiddleware(authSvc, h)))
+		protectedApiChain = func(h http.HandlerFunc) http.HandlerFunc {
+			return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(authMiddleware(authSvc, h))))
 		}
 	}
+	_ = protectedApiChain // available for AUTH-009 route hardening
 
 	http.HandleFunc("/api/health", publicApiChain(srv.handleHealth))
 	http.HandleFunc("/api/status", publicApiChain(srv.handleStatus))
@@ -159,11 +166,21 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
 			return
 		}
-		userID := hex.EncodeToString([]byte(body.Npub))[:16]
+		// userID: prefer hex prefix of npub (64-char hex pubkey); fallback hash-encode
+		userID := body.Npub
+		if len(userID) >= 16 {
+			userID = userID[:16]
+		} else {
+			userID = hex.EncodeToString([]byte(body.Npub))
+			if len(userID) > 16 {
+				userID = userID[:16]
+			}
+		}
 		username := body.Username
 		if username == "" {
 			username = "user_" + userID[:8]
 		}
+		w.Header().Set("Content-Type", "application/json")
 		srv.db.DB().Exec("INSERT OR IGNORE INTO users (id, npub, username, created_at) VALUES (?, ?, ?, ?)",
 			userID, body.Npub, username, time.Now().Unix())
 		accessToken, refreshToken, err := srv.authService.GenerateTokenPair(userID, body.Npub)
@@ -192,6 +209,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			return
 		}
 		accessToken, refreshToken, _ := srv.authService.GenerateTokenPair(userID, npub)
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
 	}))
 	http.HandleFunc("/api/auth/refresh", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
@@ -211,6 +229,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			writeError(w, http.StatusUnauthorized, "INVALID_TOKEN", err.Error())
 			return
 		}
+		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"access_token": newAccess, "refresh_token": newRefresh})
 	}))
 
