@@ -17,3 +17,6 @@ pwsh scripts/start-messenger-dev.ps1
 | 5 | — | Чат с Alice → видит текст |
 
 Авто: `npx playwright test e2e/messenger.spec.ts e2e/alice-bob.spec.ts`
+
+
+См. также полный гайд: [HOW_TO_TEST_MESSENGER_VPN.md](./HOW_TO_TEST_MESSENGER_VPN.md)

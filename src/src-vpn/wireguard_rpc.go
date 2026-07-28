@@ -144,6 +144,11 @@ func (m *Manager) HandleRPC(request []byte) []byte {
 		if err == nil {
 			result = map[string]string{"status": "connected"}
 		}
+	case "start_local_tunnel":
+		err = m.StartLocalTunnel()
+		if err == nil {
+			result = map[string]string{"status": "connected", "mode": "local"}
+		}
 	case "disconnect":
 		err = m.Disconnect()
 		if err == nil {

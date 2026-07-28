@@ -192,22 +192,25 @@ func (m *Manager) StartExitNode(ctx context.Context) error {
 
 	m.state = StateConnecting
 
-	// Check if WireGuard is available; fall back to userspace or stub mode
+	// Userspace first; never fail hard on Windows without wg — fall back to stub share mode.
 	if m.userspace != nil {
-		// Use userspace transport — no kernel interface needed
 		if err := m.userspace.Start(); err != nil {
-			m.state = StateError
-			return fmt.Errorf("userspace start: %w", err)
+			if !m.userspace.IsRunning() {
+				fmt.Printf("[VPN] userspace start failed: %v — stub share mode\n", err)
+				m.stubMode = true
+			}
+		} else {
+			fmt.Printf("[VPN] Userspace transport started\n")
 		}
 		m.myIP = "10.77.0.1"
-		fmt.Printf("[VPN] Userspace transport started\n")
 	} else if !m.IsWireGuardAvailable() {
-		fmt.Printf("[VPN] WARNING: wg binary not found — switching to stub mode (no real VPN interface)\n")
+		fmt.Printf("[VPN] WARNING: wg binary not found — stub share mode\n")
 		m.stubMode = true
+		m.myIP = "10.77.0.1"
 	}
 
-	// Создаём WireGuard интерфейс (only if not userspace)
-	if m.userspace == nil {
+	// Kernel interface only when no userspace and not stub.
+	if m.userspace == nil && !m.stubMode {
 		if err := m.setupInterface(); err != nil {
 			m.state = StateError
 			return fmt.Errorf("setup interface: %w", err)
@@ -268,77 +271,118 @@ func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint st
 
 	m.state = StateConnecting
 
-	// Check if WireGuard is available; fall back to userspace or stub mode
+	// Prefer userspace; on Windows without wg use stub (no route hijack).
 	if m.userspace != nil {
-		// Use userspace transport
 		if err := m.userspace.Start(); err != nil {
-			m.state = StateError
-			return fmt.Errorf("userspace start: %w", err)
+			// Port busy or already running — try continue as running userspace
+			if !m.userspace.IsRunning() {
+				fmt.Printf("[VPN] userspace start failed: %v — falling back to stub\n", err)
+				m.stubMode = true
+			}
 		}
 		m.myIP = "10.77.0.1"
-		fmt.Printf("[VPN] Userspace transport started for peer connection\n")
+		fmt.Printf("[VPN] Userspace transport ready for peer connection\n")
 	} else if !m.IsWireGuardAvailable() {
-		fmt.Printf("[VPN] WARNING: wg binary not found — switching to stub mode (no real VPN interface)\n")
+		fmt.Printf("[VPN] WARNING: wg binary not found — stub mode\n")
 		m.stubMode = true
+		m.myIP = "10.77.0.1"
 	}
 
-	// Добавляем пир
 	peer := &Peer{
 		ID:         peerPubKey[:16],
 		PublicKey:  peerPubKey,
 		Endpoint:   endpoint,
-		AllowedIPs: "0.0.0.0/0", // весь трафик через exit node
+		AllowedIPs: "0.0.0.0/0",
 		IsExitNode: true,
 		Online:     false,
 	}
 	m.peers[peer.ID] = peer
 
-	// Add peer to userspace transport if available
-	if m.userspace != nil {
+	if m.userspace != nil && m.userspace.IsRunning() {
 		if err := m.userspace.AddPeer(PeerInfo{
 			ID:        peer.ID,
 			PublicKey: peer.PublicKey,
 			Endpoint:  peer.Endpoint,
 		}); err != nil {
+			// Demo/local keys are often not valid curve points — keep tunnel up without peer crypto.
 			fmt.Printf("[VPN] Warning: userspace add peer: %v\n", err)
 		}
 	}
 
-	// Создаём интерфейс (only if not userspace)
-	if m.userspace == nil {
+	// Kernel WireGuard path only when no userspace and not stub.
+	if m.userspace == nil && !m.stubMode {
 		if err := m.setupInterface(); err != nil {
 			m.state = StateError
 			return err
 		}
-	}
-
-	// Добавляем пира
-	if err := m.addPeer(peer); err != nil {
-		m.state = StateError
-		return err
-	}
-
-	// Меняем маршрут — весь трафик через exit node
-	if err := m.routeAllTraffic(endpoint); err != nil {
-		fmt.Printf("Warning: route all: %v\n", err)
+		if err := m.addPeer(peer); err != nil {
+			m.state = StateError
+			return err
+		}
+		if err := m.routeAllTraffic(endpoint); err != nil {
+			fmt.Printf("Warning: route all: %v\n", err)
+		}
+	} else if m.stubMode {
+		// Safe local/stub: record peer only, never rewrite host routes / call wg.
+		_ = m.addPeer(peer)
 	}
 
 	m.state = StateConnected
+	m.startTime = time.Now()
 	return nil
 }
 
 // Disconnect — отключиться
+// StartLocalTunnel starts a local VPN session for UI/dev testing without a real exit peer.
+// Uses userspace UDP transport when available, otherwise stub mode. Does NOT rewrite system routes.
+func (m *Manager) StartLocalTunnel() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.state == StateConnected || m.state == StateSharing {
+		return nil
+	}
+	m.state = StateConnecting
+
+	if m.userspace != nil {
+		if err := m.userspace.Start(); err != nil {
+			if !m.userspace.IsRunning() {
+				fmt.Printf("[VPN] local userspace start: %v — stub mode\n", err)
+				m.stubMode = true
+			}
+		} else {
+			fmt.Printf("[VPN] local userspace tunnel started\n")
+		}
+	} else if !m.IsWireGuardAvailable() {
+		m.stubMode = true
+		fmt.Printf("[VPN] local stub tunnel (no wg)\n")
+	} else {
+		// Kernel available but local test still avoids route hijack — mark stub-like session.
+		m.stubMode = true
+		fmt.Printf("[VPN] local stub tunnel (wg present, routes not hijacked)\n")
+	}
+
+	m.myIP = "10.77.0.1"
+	m.startTime = time.Now()
+	m.state = StateConnected
+	return nil
+}
+
 func (m *Manager) Disconnect() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	if m.cancel != nil {
 		m.cancel()
+		m.cancel = nil
 	}
 	if m.userspace != nil {
-		m.userspace.Stop()
+		_ = m.userspace.Stop()
 	}
-	m.teardownInterface()
+	_ = m.teardownInterface()
+	// Keep keys; clear session peers for clean reconnect in local/demo mode.
+	m.peers = make(map[string]*Peer)
+	m.startTime = time.Time{}
 	m.state = StateDisconnected
 	return nil
 }

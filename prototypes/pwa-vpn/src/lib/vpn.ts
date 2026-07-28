@@ -1,179 +1,222 @@
 /**
- * VPN Module — integrates P2P WebRTC tunnel into messenger
- * Status tracking, connect/disconnect, traffic stats
+ * VPN client — talks to Go backend /api/vpn/rpc (NOT fake browser WebRTC).
+ * Modes:
+ *  - local: start_local_tunnel (testable on Windows without wg)
+ *  - exit:  connect_to_exit_node(publicKey, endpoint)
+ *  - share: start_exit_node
  */
+import { writable } from 'svelte/store'
+import { API_BASE } from './api'
 
-import { writable, derived } from 'svelte/store'
+export type VpnUiStatus = 'disconnected' | 'connecting' | 'connected' | 'sharing' | 'error'
 
-export const vpnStatus = writable<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
-export const vpnStats = writable<{ bytesIn: number; bytesOut: number; peers: number; uptime: number }>({
-  bytesIn: 0, bytesOut: 0, peers: 0, uptime: 0
+export interface VpnBackendStatus {
+  state: string
+  myIP?: string
+  myPublicKey?: string
+  peers?: Array<{
+    id?: string
+    name?: string
+    publicKey?: string
+    endpoint?: string
+    isExitNode?: boolean
+    online?: boolean
+  }>
+  uptime?: number
+  bytesUp?: number
+  bytesDown?: number
+  transport?: string
+}
+
+export const vpnStatus = writable<VpnUiStatus>('disconnected')
+export const vpnStats = writable({
+  bytesIn: 0,
+  bytesOut: 0,
+  peers: 0,
+  uptime: 0,
+  myIP: '',
+  myPublicKey: '',
+  transport: '',
+  lastError: '',
+  mode: '' as '' | 'local' | 'exit' | 'share',
 })
 
-let tunnelConnection: RTCPeerConnection | null = null
-let tunnelChannel: RTCDataChannel | null = null
-let exitNodeUrl = ''
-let startTime = 0
-let statsInterval: ReturnType<typeof setInterval> | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
+let lastMode: '' | 'local' | 'exit' | 'share' = ''
 
-const VPN_RELAY = 'wss://relay.damus.io'
+function authHeaders(): Record<string, string> {
+  const token = localStorage.getItem('proxi_token') || ''
+  const h: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (token) h['Authorization'] = `Bearer ${token}`
+  return h
+}
 
-/**
- * Connect to VPN exit node via WebRTC tunnel
- */
-export async function connectVPN(exitUrl?: string): Promise<boolean> {
-  if (exitUrl) exitNodeUrl = exitUrl
-  if (!exitNodeUrl) {
-    // Default: use built-in proxy approach
-    exitNodeUrl = 'wss://relay.damus.io' // signaling relay for exit node discovery
+async function vpnRpc<T = unknown>(method: string, params?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${API_BASE}/api/vpn/rpc`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: JSON.stringify(params ? { method, params } : { method }),
+  })
+  if (res.status === 401) {
+    throw new Error('Нужна авторизация (JWT). Обновите страницу — signup создаст токен.')
   }
+  if (!res.ok) {
+    const text = await res.text().catch(() => '')
+    throw new Error(`VPN API HTTP ${res.status}: ${text.slice(0, 160)}`)
+  }
+  const body = await res.json()
+  if (body?.error) {
+    throw new Error(body.error.message || JSON.stringify(body.error))
+  }
+  return body.result as T
+}
 
-  vpnStatus.set('connecting')
+function mapState(state: string): VpnUiStatus {
+  switch (state) {
+    case 'connected': return 'connected'
+    case 'sharing': return 'sharing'
+    case 'connecting': return 'connecting'
+    case 'error': return 'error'
+    default: return 'disconnected'
+  }
+}
 
+export async function refreshVPNStatus(): Promise<VpnBackendStatus | null> {
   try {
-    // 1. Find exit node via Nostr signaling (kind 21000)
-    // 2. Establish WebRTC DataChannel
-    // 3. Route traffic through tunnel
+    const st = await vpnRpc<VpnBackendStatus>('get_status')
+    vpnStatus.set(mapState(st?.state || 'disconnected'))
+    vpnStats.update(s => ({
+      ...s,
+      bytesIn: st?.bytesDown || 0,
+      bytesOut: st?.bytesUp || 0,
+      peers: st?.peers?.length || 0,
+      uptime: st?.uptime || 0,
+      myIP: st?.myIP || '',
+      myPublicKey: st?.myPublicKey || '',
+      transport: st?.transport || '',
+      mode: lastMode,
+      lastError: '',
+    }))
+    return st
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    vpnStats.update(s => ({ ...s, lastError: msg }))
+    return null
+  }
+}
 
-    const pc = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ],
-    })
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => { void refreshVPNStatus() }, 2000)
+}
 
-    const dc = pc.createDataChannel('vpn-tunnel', {
-      ordered: false,
-      maxRetransmits: 0,
-    })
+function stopPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
 
-    dc.binaryType = 'arraybuffer'
-
-    // Handle incoming data from tunnel
-    dc.onmessage = (e) => {
-      vpnStats.update(s => ({ ...s, bytesIn: s.bytesIn + (e.data as ArrayBuffer).byteLength }))
-    }
-
-    dc.onopen = () => {
-      tunnelConnection = pc
-      tunnelChannel = dc
-      vpnStatus.set('connected')
-      startTime = Date.now()
-      startStatsUpdate()
-    }
-
-    dc.onerror = () => {
-      vpnStatus.set('error')
-    }
-
-    // ICE
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        // Send ICE to exit node via Nostr
-        sendVPNSignal('ice', { candidate: e.candidate.toJSON() })
-      }
-    }
-
-    // Create offer
-    const offer = await pc.createOffer()
-    await pc.setLocalDescription(offer)
-
-    // Wait for ICE gathering
-    await new Promise<void>(resolve => {
-      if (pc.iceGatheringState === 'complete') return resolve()
-      pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') resolve() }
-      setTimeout(resolve, 5000)
-    })
-
-    // Send offer to exit node
-    sendVPNSignal('offer', { sdp: pc.localDescription!.sdp })
-
+/** Local test tunnel — works on native Windows without WireGuard install. */
+export async function connectLocalVPN(): Promise<boolean> {
+  vpnStatus.set('connecting')
+  lastMode = 'local'
+  try {
+    await vpnRpc('start_local_tunnel')
+    await refreshVPNStatus()
+    startPolling()
     return true
   } catch (e) {
-    console.error('VPN connect error:', e)
+    console.error('VPN local connect:', e)
     vpnStatus.set('error')
+    vpnStats.update(s => ({
+      ...s,
+      lastError: e instanceof Error ? e.message : String(e),
+      mode: 'local',
+    }))
     return false
   }
 }
 
-/**
- * Disconnect VPN
- */
-export function disconnectVPN() {
-  tunnelChannel?.close()
-  tunnelConnection?.close()
-  tunnelChannel = null
-  tunnelConnection = null
-  vpnStatus.set('disconnected')
-  if (statsInterval) clearInterval(statsInterval)
-}
-
-/**
- * Send HTTP request through VPN tunnel
- */
-export async function fetchThroughVPN(url: string, options?: RequestInit): Promise<Response> {
-  if (!tunnelChannel || tunnelChannel.readyState !== 'open') {
-    throw new Error('VPN not connected')
-  }
-
-  // Build HTTP request as string
-  const method = options?.method || 'GET'
-  const headers = options?.headers || {}
-  const body = options?.body as string | undefined
-
-  const requestData = JSON.stringify({ url, method, headers, body })
-  tunnelChannel.send(requestData)
-
-  // Wait for response (simplified — real version needs correlation IDs)
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('VPN request timeout')), 30000)
-
-    const handler = (e: MessageEvent) => {
-      clearTimeout(timeout)
-      tunnelChannel?.removeEventListener('message', handler)
-      vpnStats.update(s => ({ ...s, bytesOut: s.bytesOut + (e.data as ArrayBuffer).byteLength }))
-
-      try {
-        const response = JSON.parse(new TextDecoder().decode(e.data as ArrayBuffer))
-        resolve(new Response(response.body, {
-          status: response.status,
-          headers: new Headers(response.headers),
-        }))
-      } catch {
-        reject(new Error('Invalid VPN response'))
-      }
-    }
-
-    tunnelChannel?.addEventListener('message', handler)
-  })
-}
-
-/**
- * Check if VPN is connected
- */
-export function isConnected(): boolean {
-  return tunnelChannel?.readyState === 'open'
-}
-
-function startStatsUpdate() {
-  statsInterval = setInterval(() => {
+/** Connect to a remote exit node (needs base64/hex pubkey ≥16 chars + host:port). */
+export async function connectExitVPN(publicKey: string, endpoint: string): Promise<boolean> {
+  vpnStatus.set('connecting')
+  lastMode = 'exit'
+  try {
+    if (!publicKey || publicKey.length < 16) throw new Error('Public key exit-node слишком короткий (мин. 16 символов)')
+    if (!endpoint || !endpoint.includes(':')) throw new Error('Endpoint вида host:port обязателен')
+    await vpnRpc('connect_to_exit_node', { publicKey, endpoint })
+    await refreshVPNStatus()
+    startPolling()
+    return true
+  } catch (e) {
+    console.error('VPN exit connect:', e)
+    vpnStatus.set('error')
     vpnStats.update(s => ({
       ...s,
-      uptime: Math.floor((Date.now() - startTime) / 1000),
-      peers: tunnelConnection ? 1 : 0,
+      lastError: e instanceof Error ? e.message : String(e),
+      mode: 'exit',
     }))
-  }, 1000)
+    return false
+  }
 }
 
-function sendVPNSignal(type: string, data: any) {
-  // This would publish to Nostr kind 21000
-  // For now, log
-  console.log('[VPN] Signal:', type, data)
+/** Share this machine as exit node (userspace/stub on Windows). */
+export async function shareExitNode(): Promise<boolean> {
+  vpnStatus.set('connecting')
+  lastMode = 'share'
+  try {
+    await vpnRpc('start_exit_node')
+    await refreshVPNStatus()
+    startPolling()
+    return true
+  } catch (e) {
+    console.error('VPN share:', e)
+    vpnStatus.set('error')
+    vpnStats.update(s => ({
+      ...s,
+      lastError: e instanceof Error ? e.message : String(e),
+      mode: 'share',
+    }))
+    return false
+  }
 }
 
-/**
- * Format bytes for display
- */
+export async function disconnectVPN(): Promise<void> {
+  try {
+    await vpnRpc('disconnect')
+  } catch (e) {
+    console.warn('VPN disconnect:', e)
+  }
+  stopPolling()
+  lastMode = ''
+  vpnStatus.set('disconnected')
+  vpnStats.update(s => ({
+    ...s,
+    bytesIn: 0,
+    bytesOut: 0,
+    peers: 0,
+    uptime: 0,
+    mode: '',
+    lastError: '',
+  }))
+}
+
+/** Back-compat for old VpnPanel toggle */
+export async function connectVPN(exitUrl?: string): Promise<boolean> {
+  if (!exitUrl) return connectLocalVPN()
+  // exitUrl historically was wss://... — if host:port use as endpoint with demo key slot
+  if (exitUrl.includes('://')) {
+    return connectLocalVPN()
+  }
+  // format: pubkey@host:port OR host:port
+  if (exitUrl.includes('@')) {
+    const [pk, ep] = exitUrl.split('@')
+    return connectExitVPN(pk, ep)
+  }
+  return connectExitVPN('LOCAL_DEMO_PEER_KEY_XXXXXXXX', exitUrl)
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + ' B'
   if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
@@ -181,13 +224,15 @@ export function formatBytes(bytes: number): string {
   return (bytes / 1073741824).toFixed(1) + ' GB'
 }
 
-/**
- * Format seconds to mm:ss or hh:mm:ss
- */
 export function formatUptime(seconds: number): string {
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
   if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+// Initial soft refresh (no throw)
+if (typeof window !== 'undefined') {
+  setTimeout(() => { void refreshVPNStatus() }, 800)
 }
