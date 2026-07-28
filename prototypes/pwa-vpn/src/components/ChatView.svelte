@@ -3,6 +3,7 @@
   import * as stores from '../stores/messenger'
   import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage } from '../lib/api'
   import { playOutgoing } from '../lib/sounds'
+  import { formatTime, formatDay, getDate, formatSize, extractUrls } from '../lib/chat-utils'
   import { sendFile } from '../lib/peer-manager'
   import { startRecording as startVoiceRecord, stopRecording as stopVoiceRecord } from '../lib/voice'
   import EmojiPicker from './EmojiPicker.svelte'
@@ -40,7 +41,6 @@
   let currentChatId = $derived($activeChatId)
   let currentProfile = $derived($profileStore)
 
-  // M-003: Load message history when chat opens
   $effect(() => {
     if (currentChatId) {
       const peerId = currentChatId.replace('dm:', '').replace('group:', '')
@@ -145,21 +145,8 @@
     }
   }
 
-  function formatTime(ts: number): string {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  }
-
   function isMine(msg: Message): boolean {
     return msg.from === currentProfile?.pubkey
-  }
-
-  function getDate(ts: number): string {
-    const d = new Date(ts)
-    const now = new Date()
-    if (d.toDateString() === now.toDateString()) return 'Сегодня'
-    const y = new Date(now); y.setDate(y.getDate() - 1)
-    if (d.toDateString() === y.toDateString()) return 'Вчера'
-    return d.toLocaleDateString('ru', { day: 'numeric', month: 'long' })
   }
 
   function getReplyText(msgId: string | undefined): string {
@@ -300,13 +287,6 @@
     input.value = ''
   }
 
-  function formatSize(bytes: number): string {
-    if (!bytes) return ''
-    if (bytes < 1024) return bytes + ' B'
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB'
-    return (bytes / 1048576).toFixed(1) + ' MB'
-  }
-
   function downloadFile(msg: Message) {
     if (!msg.fileUrl) return
     const a = document.createElement('a')
@@ -316,10 +296,6 @@
   }
 
 // M-011: URL preview — extract URLs from message text
-function extractUrls(text: string): string[] {
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  return text.match(urlRegex) || [];
-}
 
 let urlPreviews = $state<Record<string, any>>({});
 

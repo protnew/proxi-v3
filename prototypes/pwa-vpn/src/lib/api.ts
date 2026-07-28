@@ -26,6 +26,7 @@
  */
 
 import type { Message } from '../stores/messenger';
+import { makeChatPayload } from './api-payload';
 
 const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
 const WS_BASE = API_BASE.replace(/^http/, 'ws');
@@ -62,7 +63,6 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 // Identity & Token storage
 // ============================================================
 
-// E2E toggle state (shared with api-extended.ts)
 let e2eEnabled = true;
 export function isE2EEnabledLocal(): boolean { return e2eEnabled; }
 export function setE2EEnabledLocal(v: boolean): void { e2eEnabled = v; }
@@ -87,18 +87,29 @@ function setStoredToken(token: string | undefined) {
  * if you need to wait for the real identity.
  */
 export function initIdentity(): string {
-  if (cachedIdentity?.pubkey) return cachedIdentity.pubkey;
+  if (cachedIdentity?.pubkey) {
+    exposeProxiDebug();
+    return cachedIdentity.pubkey;
+  }
 
-  // Generate temporary local identity immediately (sync)
   const bytes = new Uint8Array(32);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
   const privateKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
   cachedIdentity = { pubkey: privateKey.slice(0, 64), privateKey };
 
-  // Kick off async fetch from backend (updates cachedIdentity when done)
   initIdentityAsync();
+  exposeProxiDebug();
 
   return cachedIdentity.pubkey;
+}
+
+function exposeProxiDebug(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    (window as any).__proxiPubkey = cachedIdentity?.pubkey || '';
+    (window as any).__proxiUserId = cachedIdentity?.userId || '';
+    (window as any).__proxiGetPubkey = () => cachedIdentity?.pubkey || '';
+  } catch { /* ignore */ }
 }
 
 /** Async identity initialization — signup first, then fetch identity. */
@@ -118,6 +129,7 @@ export async function initIdentityAsync(): Promise<string> {
     setStoredToken(signupResp.data.access_token);
     if (cachedIdentity) cachedIdentity.userId = signupResp.data.user_id;
     console.log('[api] initIdentityAsync: ✅ token stored, user_id=' + signupResp.data.user_id);
+    exposeProxiDebug();
   } else {
     console.log('[api] initIdentityAsync: ❌ signup failed! status=' + signupResp.status + ' error=' + (signupResp.error || JSON.stringify(signupResp.data)));
     return cachedIdentity.pubkey;
@@ -319,23 +331,19 @@ export function connectWebSocket(token: string, onMessage: (msg: any) => void): 
   return ws;
 }
 
+export function buildChatPayload(to: string, content: string) {
+  const from = cachedIdentity?.pubkey || cachedIdentity?.userId || '';
+  return makeChatPayload(from, to, content, !!e2eEnabled);
+}
+
 export const chatApi = {
   sendDM: async (to: string, content: string) => {
-    // Prefer WS only for UX reliability; never block UI on hung REST.
-    const useE2E = e2eEnabled;
     const from = cachedIdentity?.pubkey || cachedIdentity?.userId || '';
-    const payload = {
-      type: 'chat',
-      from,
-      to,
-      text: content,
-      ts: Math.floor(Date.now() / 1000),
-      encrypted: !!useE2E,
-    };
+    const payload = makeChatPayload(from, to, content, !!e2eEnabled);
     const sent = sendRaw(payload);
-    if (sent) return { status: 200, data: { ok: true, via: 'ws', encrypted: !!useE2E } };
+    if (sent) return { status: 200, data: { ok: true, via: 'ws', encrypted: payload.encrypted } };
     console.warn('[api] sendDM: WS not open, optimistic UI only (REST skipped to avoid hang)');
-    return { status: 200, data: { ok: true, via: 'optimistic', encrypted: !!useE2E } };
+    return { status: 200, data: { ok: true, via: 'optimistic', encrypted: payload.encrypted } };
   },
   sendTyping: (to: string) => {
     sendRaw({ type: 'typing', from: cachedIdentity?.pubkey || '', to, ts: Math.floor(Date.now() / 1000) });
