@@ -50,14 +50,18 @@ type Config struct {
 
 // Status — полный статус для UI
 type Status struct {
-	State     VPNState `json:"state"`
-	MyIP      string   `json:"myIP"`
-	MyPubKey  string   `json:"myPublicKey"`
-	Peers     []Peer   `json:"peers"`
-	Uptime    int64    `json:"uptime"`
-	BytesUp   int64    `json:"bytesUp"`
-	BytesDown int64    `json:"bytesDown"`
-	Transport string   `json:"transport"`
+	State       VPNState `json:"state"`
+	MyIP        string   `json:"myIP"`
+	MyPubKey    string   `json:"myPublicKey"`
+	Peers       []Peer   `json:"peers"`
+	Uptime      int64    `json:"uptime"`
+	BytesUp     int64    `json:"bytesUp"`
+	BytesDown   int64    `json:"bytesDown"`
+	Transport   string   `json:"transport"`
+	SocksAddr   string   `json:"socksAddr,omitempty"`
+	Upstream    string   `json:"upstream,omitempty"`
+	Mode        string   `json:"mode,omitempty"` // local | real | exit | share
+	RealTraffic bool     `json:"realTraffic"`     // true when SOCKS accepts app traffic
 }
 
 // Manager — управление WireGuard VPN
@@ -73,6 +77,8 @@ type Manager struct {
 	cancel    context.CancelFunc
 	stubMode  bool          // true if wg binary is not available — runs without real interface
 	userspace *UserspaceVPN // userspace transport when kernel WG unavailable
+	socks     *SOCKS5Server // real local SOCKS5 (app traffic path)
+	mode      string        // local | real | exit | share
 }
 
 // NewManager создаёт VPN менеджер
@@ -335,6 +341,8 @@ func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint st
 // Disconnect — отключиться
 // StartLocalTunnel starts a local VPN session for UI/dev testing without a real exit peer.
 // Uses userspace UDP transport when available, otherwise stub mode. Does NOT rewrite system routes.
+// StartLocalTunnel starts a local VPN session for UI/dev testing without a real exit peer.
+// Uses userspace UDP transport when available, otherwise stub mode. Does NOT rewrite system routes.
 func (m *Manager) StartLocalTunnel() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -364,6 +372,7 @@ func (m *Manager) StartLocalTunnel() error {
 
 	m.myIP = "10.77.0.1"
 	m.startTime = time.Now()
+	m.mode = "local"
 	m.state = StateConnected
 	return nil
 }
@@ -376,6 +385,10 @@ func (m *Manager) Disconnect() error {
 		m.cancel()
 		m.cancel = nil
 	}
+	if m.socks != nil {
+		_ = m.socks.Stop()
+		m.socks = nil
+	}
 	if m.userspace != nil {
 		_ = m.userspace.Stop()
 	}
@@ -383,6 +396,7 @@ func (m *Manager) Disconnect() error {
 	// Keep keys; clear session peers for clean reconnect in local/demo mode.
 	m.peers = make(map[string]*Peer)
 	m.startTime = time.Time{}
+	m.mode = ""
 	m.state = StateDisconnected
 	return nil
 }
@@ -403,19 +417,38 @@ func (m *Manager) GetStatus() Status {
 	}
 
 	transport := "kernel"
-	if m.stubMode {
+	if m.socks != nil && m.socks.IsRunning() {
+		transport = "socks5"
+	} else if m.stubMode {
 		transport = "stub"
 	} else if m.userspace != nil {
 		transport = "userspace"
 	}
 
+	var bytesUp, bytesDown int64
+	var socksAddr, upstream string
+	realTraffic := false
+	if m.socks != nil && m.socks.IsRunning() {
+		in, out, _ := m.socks.Stats()
+		bytesDown, bytesUp = in, out
+		socksAddr = m.socks.Addr()
+		upstream = m.socks.Upstream()
+		realTraffic = true
+	}
+
 	return Status{
-		State:     m.state,
-		MyIP:      m.myIP,
-		MyPubKey:  m.pubKey,
-		Peers:     peers,
-		Uptime:    uptime,
-		Transport: transport,
+		State:       m.state,
+		MyIP:        m.myIP,
+		MyPubKey:    m.pubKey,
+		Peers:       peers,
+		Uptime:      uptime,
+		BytesUp:     bytesUp,
+		BytesDown:   bytesDown,
+		Transport:   transport,
+		SocksAddr:   socksAddr,
+		Upstream:    upstream,
+		Mode:        m.mode,
+		RealTraffic: realTraffic,
 	}
 }
 

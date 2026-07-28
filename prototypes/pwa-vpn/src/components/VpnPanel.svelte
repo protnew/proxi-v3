@@ -1,20 +1,23 @@
 <script lang="ts">
   import {
     vpnStatus, vpnStats,
-    connectLocalVPN, connectExitVPN, shareExitNode, disconnectVPN, refreshVPNStatus,
+    connectRealVPN, connectLocalVPN, connectExitVPN, shareExitNode,
+    disconnectVPN, refreshVPNStatus, checkEgressIP,
     formatBytes, formatUptime,
   } from '../lib/vpn'
 
   let expanded = $state(true)
-  let mode = $state<'local' | 'exit' | 'share'>('local')
+  let mode = $state<'real' | 'exit' | 'share' | 'local'>('real')
   let exitPub = $state('')
   let exitEndpoint = $state('')
   let busy = $state(false)
+  let checking = $state(false)
 
   let status = $state('disconnected')
   let stats = $state({
     bytesIn: 0, bytesOut: 0, uptime: 0, peers: 0,
-    myIP: '', myPublicKey: '', transport: '', lastError: '', mode: '' as string,
+    myIP: '', myPublicKey: '', transport: '', socksAddr: '', upstream: '',
+    mode: '', realTraffic: false, lastError: '', egressIP: '',
   })
 
   vpnStatus.subscribe(v => { status = v })
@@ -24,8 +27,8 @@
 
   function statusLabel(s: string): string {
     switch (s) {
-      case 'connected': return 'Подключён'
-      case 'sharing': return 'Раздаю (exit)'
+      case 'connected': return stats.realTraffic ? 'ON · SOCKS' : 'Подключён'
+      case 'sharing': return 'Раздаю'
       case 'connecting': return 'Подключение…'
       case 'error': return 'Ошибка'
       default: return 'Отключён'
@@ -36,38 +39,41 @@
     if (busy) return
     busy = true
     try {
-      if (active) {
-        await disconnectVPN()
-        return
-      }
-      if (mode === 'local') {
-        await connectLocalVPN()
-      } else if (mode === 'share') {
-        await shareExitNode()
-      } else {
-        await connectExitVPN(exitPub.trim(), exitEndpoint.trim())
-      }
+      if (active) { await disconnectVPN(); return }
+      if (mode === 'real') await connectRealVPN('')
+      else if (mode === 'local') await connectLocalVPN()
+      else if (mode === 'share') await shareExitNode()
+      else await connectExitVPN(exitPub.trim(), exitEndpoint.trim())
     } finally {
       busy = false
       await refreshVPNStatus()
     }
   }
 
-  function copyPub() {
-    if (!stats.myPublicKey) return
-    navigator.clipboard.writeText(stats.myPublicKey)
+  async function onCheckIP() {
+    checking = true
+    try {
+      await checkEgressIP()
+    } catch (e) {
+      stats = { ...stats, lastError: e instanceof Error ? e.message : String(e) }
+    } finally {
+      checking = false
+      await refreshVPNStatus()
+    }
+  }
+
+  function copySocks() {
+    if (stats.socksAddr) navigator.clipboard.writeText(stats.socksAddr)
   }
 </script>
 
-<div class="vpn-panel" class:expanded class:on={active}>
+<div class="vpn-panel" class:expanded class:on={active} class:real={stats.realTraffic}>
   <button type="button" class="vpn-bar" onclick={() => expanded = !expanded}>
     <span class="icon">🛡️</span>
     <span class="label">VPN</span>
     <span class="status" class:on={active} class:connecting={status === 'connecting'} class:err={status === 'error'}>
       {statusLabel(status)}
-      {#if stats.transport}
-        <span class="tr">· {stats.transport}</span>
-      {/if}
+      {#if stats.transport}<span class="tr"> · {stats.transport}</span>{/if}
     </span>
     <span class="chevron">{expanded ? '▼' : '▲'}</span>
   </button>
@@ -75,56 +81,59 @@
   {#if expanded}
     <div class="vpn-details">
       <p class="desc">
-        <strong>Как это работает</strong><br />
-        1) <em>Локальный туннель</em> — тестовый режим на этом ПК (userspace/stub). Не меняет маршруты Windows, можно жать сразу.<br />
-        2) <em>К exit-node</em> — нужен pubkey (≥16) и endpoint <code>host:port</code> друга/сервера.<br />
-        3) <em>Раздать интернет</em> — стать exit-node для других (на Windows без WireGuard = userspace/stub).
+        <strong>Настоящий VPN (Windows)</strong><br />
+        Режим <em>SOCKS5</em> поднимает прокси <code>127.0.0.1:10808</code>. Браузер/приложение шлёт трафик туда — байты считаются, IP можно проверить кнопкой.<br />
+        Системные маршруты Windows не переписываем (нужен admin + Wintun — отдельно).<br />
+        <em>Exit</em>: укажи upstream SOCKS <code>host:port</code> (VPS/Tor) — цепочка через него.
       </p>
 
       {#if !active}
         <div class="modes">
-          <label class:sel={mode === 'local'}><input type="radio" bind:group={mode} value="local" /> Локальный тест</label>
-          <label class:sel={mode === 'exit'}><input type="radio" bind:group={mode} value="exit" /> К exit-node</label>
+          <label class:sel={mode === 'real'}><input type="radio" bind:group={mode} value="real" /> Настоящий SOCKS5</label>
+          <label class:sel={mode === 'exit'}><input type="radio" bind:group={mode} value="exit" /> Через exit SOCKS</label>
           <label class:sel={mode === 'share'}><input type="radio" bind:group={mode} value="share" /> Раздать</label>
+          <label class:sel={mode === 'local'}><input type="radio" bind:group={mode} value="local" /> Только статус (тест)</label>
         </div>
       {/if}
 
       {#if mode === 'exit' && !active}
         <div class="setup">
-          <label for="exit-pub">Public key exit-node</label>
-          <input id="exit-pub" type="text" placeholder="base64/hex ключ (≥16 символов)" bind:value={exitPub} />
-          <label for="exit-ep">Endpoint</label>
-          <input id="exit-ep" type="text" placeholder="example.com:51820" bind:value={exitEndpoint} />
+          <label for="exit-ep">Upstream SOCKS5 (host:port)</label>
+          <input id="exit-ep" type="text" placeholder="vps.example.com:1080 или 127.0.0.1:9050 (Tor)" bind:value={exitEndpoint} />
+          <label for="exit-pub">Peer pubkey (опц., для WG mesh)</label>
+          <input id="exit-pub" type="text" placeholder="можно пусто — будет SOCKS upstream" bind:value={exitPub} />
         </div>
       {/if}
 
       {#if active}
         <div class="stats">
-          <div class="stat"><span class="sl">IP</span><span class="sv">{stats.myIP || '—'}</span></div>
+          <div class="stat"><span class="sl">Режим</span><span class="sv">{stats.mode || '—'} {stats.realTraffic ? '· REAL' : ''}</span></div>
           <div class="stat"><span class="sl">Транспорт</span><span class="sv">{stats.transport || '—'}</span></div>
           <div class="stat"><span class="sl">↓ / ↑</span><span class="sv">{formatBytes(stats.bytesIn)} / {formatBytes(stats.bytesOut)}</span></div>
-          <div class="stat"><span class="sl">⏱ / пиры</span><span class="sv">{formatUptime(stats.uptime)} · {stats.peers}</span></div>
+          <div class="stat"><span class="sl">⏱</span><span class="sv">{formatUptime(stats.uptime)}</span></div>
         </div>
-        {#if stats.myPublicKey}
-          <div class="pubkey-row">
-            <span class="sl">Мой VPN key</span>
-            <code>{stats.myPublicKey.slice(0, 18)}…</code>
-            <button type="button" class="copy" onclick={copyPub}>📋</button>
+
+        {#if stats.socksAddr}
+          <div class="socks-row">
+            <span class="sl">SOCKS5</span>
+            <code>{stats.socksAddr}</code>
+            <button type="button" class="copy" onclick={copySocks}>📋</button>
           </div>
+          <p class="hint ok">
+            В Chrome: Settings → System → Open proxy settings → вручную SOCKS5 <code>{stats.socksAddr}</code><br />
+            Или: <code>curl --socks5 {stats.socksAddr} https://api.ipify.org</code>
+          </p>
         {/if}
-        <p class="hint ok">
-          {#if stats.transport === 'stub'}
-            Stub-режим: UI и API статуса работают, системный трафик Windows не перехватывается (нет wg/TUN).
-          {:else if stats.transport === 'userspace'}
-            Userspace UDP-туннель поднят. Полный system-wide VPN — только с peer/exit и ОС-маршрутами.
-          {:else}
-            Туннель активен ({stats.transport || 'unknown'}).
-          {/if}
-        </p>
-      {:else}
-        <p class="hint">
-          Messenger (чаты) работает отдельно от VPN. VPN-кнопка управляет бэкендом <code>/api/vpn/rpc</code>.
-        </p>
+
+        {#if stats.egressIP}
+          <div class="ip-box">IP через туннель: <strong>{stats.egressIP}</strong></div>
+        {/if}
+
+        {#if stats.realTraffic}
+          <button type="button" class="check-btn" disabled={checking} onclick={onCheckIP}>
+            {checking ? '⏳ Проверяю IP…' : '🌐 Проверить IP через VPN'}
+          </button>
+        {/if}
       {/if}
 
       {#if stats.lastError}
@@ -136,12 +145,14 @@
           ⏳ Работаю…
         {:else if active}
           🛑 Отключить VPN
-        {:else if mode === 'local'}
-          🚀 Включить локальный туннель
+        {:else if mode === 'real'}
+          🚀 Включить настоящий SOCKS5
+        {:else if mode === 'exit'}
+          🔗 Подключить через exit
         {:else if mode === 'share'}
-          📡 Начать раздачу (exit)
+          📡 Раздать + SOCKS
         {:else}
-          🔗 Подключить к exit-node
+          🧪 Только статус (без трафика)
         {/if}
       </button>
     </div>
@@ -151,6 +162,7 @@
 <style>
   .vpn-panel { background: #0e1621; border-top: 1px solid #1a2533; }
   .vpn-panel.on { border-top-color: #2a6a3a; }
+  .vpn-panel.real.on { border-top-color: #3b82f6; }
   .vpn-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; cursor: pointer; font-size: 13px; width: 100%; background: none; border: none; color: inherit; font-family: inherit; text-align: left; }
   .vpn-bar:hover { background: #131d2a; }
   .icon { font-size: 16px; }
@@ -159,7 +171,7 @@
   .status.on { color: #4fae4e; }
   .status.connecting { color: #ffaa00; }
   .status.err { color: #ff6b6b; }
-  .tr { opacity: 0.75; font-weight: 400; }
+  .tr { opacity: 0.75; }
   .chevron { color: #555; font-size: 10px; }
   .vpn-details { padding: 0 12px 12px; }
   .desc { font-size: 11px; color: #9aabbb; line-height: 1.45; margin: 0 0 10px; }
@@ -175,14 +187,17 @@
   .stat { background: #17212b; padding: 8px; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; }
   .sl { font-size: 11px; color: #7a8a9a; }
   .sv { font-size: 13px; font-weight: 600; color: #e0e0e0; word-break: break-all; }
-  .pubkey-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 11px; }
-  .pubkey-row code { flex: 1; color: #cde; overflow: hidden; text-overflow: ellipsis; }
+  .socks-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-size: 12px; }
+  .socks-row code { flex: 1; color: #7dd3fc; }
   .copy { background: none; border: 1px solid #333; border-radius: 6px; cursor: pointer; }
   .hint { font-size: 10px; color: #6a7a8a; margin: 0 0 10px; line-height: 1.4; }
   .hint.ok { color: #7aaf7a; }
-  .hint code { font-size: 10px; }
+  .hint code { font-size: 10px; color: #cde; }
+  .ip-box { background: #0f2a1a; color: #6ee7b7; padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; }
   .err-box { background: #3a1a1a; color: #ff8a8a; font-size: 11px; padding: 8px; border-radius: 6px; margin-bottom: 8px; word-break: break-word; }
-  .toggle-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: #2a4a3a; color: #4fae4e; font-family: inherit; }
+  .check-btn { width: 100%; margin-bottom: 8px; padding: 8px; border-radius: 8px; border: 1px solid #2a4a6a; background: #17212b; color: #7dd3fc; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .check-btn:disabled { opacity: 0.6; }
+  .toggle-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: #1e3a5f; color: #7dd3fc; font-family: inherit; }
   .toggle-btn.on { background: #3a1a1a; color: #ff6b6b; }
   .toggle-btn:disabled { opacity: 0.6; cursor: wait; }
 </style>

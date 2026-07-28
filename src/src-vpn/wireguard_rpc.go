@@ -138,16 +138,56 @@ func (m *Manager) HandleRPC(request []byte) []byte {
 		var params struct {
 			PublicKey string `json:"publicKey"`
 			Endpoint  string `json:"endpoint"`
+			Upstream  string `json:"upstream"` // optional SOCKS5 upstream host:port
 		}
 		json.Unmarshal(req.Params, &params)
-		err = m.ConnectToExitNode(context.Background(), params.PublicKey, params.Endpoint)
-		if err == nil {
-			result = map[string]string{"status": "connected"}
+		// Prefer REAL SOCKS path when upstream SOCKS given (or endpoint is socks host:port without peer crypto).
+		up := params.Upstream
+		if up == "" && params.Endpoint != "" && (params.PublicKey == "" || params.PublicKey == "socks" || len(params.PublicKey) < 32) {
+			up = params.Endpoint
+		}
+		if up != "" {
+			err = m.StartRealTunnel("127.0.0.1:10808", up)
+			if err == nil {
+				st := m.GetStatus()
+				result = map[string]interface{}{"status": "connected", "socksAddr": st.SocksAddr, "mode": st.Mode, "realTraffic": true}
+			}
+		} else {
+			err = m.ConnectToExitNode(context.Background(), params.PublicKey, params.Endpoint)
+			if err == nil {
+				// Also expose local SOCKS so apps can send traffic even if kernel route not set.
+				_ = m.StartRealTunnel("127.0.0.1:10808", "")
+				st := m.GetStatus()
+				result = map[string]interface{}{"status": "connected", "socksAddr": st.SocksAddr, "mode": "exit", "realTraffic": st.RealTraffic}
+			}
 		}
 	case "start_local_tunnel":
 		err = m.StartLocalTunnel()
 		if err == nil {
 			result = map[string]string{"status": "connected", "mode": "local"}
+		}
+	case "start_real_tunnel":
+		var params struct {
+			Listen   string `json:"listen"`
+			Upstream string `json:"upstream"`
+		}
+		_ = json.Unmarshal(req.Params, &params)
+		err = m.StartRealTunnel(params.Listen, params.Upstream)
+		if err == nil {
+			st := m.GetStatus()
+			result = map[string]interface{}{
+				"status":      "connected",
+				"mode":        st.Mode,
+				"socksAddr":   st.SocksAddr,
+				"transport":   st.Transport,
+				"realTraffic": st.RealTraffic,
+			}
+		}
+	case "check_egress_ip":
+		var ip string
+		ip, err = m.CheckEgressIP()
+		if err == nil {
+			result = map[string]string{"ip": ip}
 		}
 	case "disconnect":
 		err = m.Disconnect()

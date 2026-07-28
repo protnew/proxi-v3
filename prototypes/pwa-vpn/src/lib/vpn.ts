@@ -1,9 +1,6 @@
 /**
- * VPN client — talks to Go backend /api/vpn/rpc (NOT fake browser WebRTC).
- * Modes:
- *  - local: start_local_tunnel (testable on Windows without wg)
- *  - exit:  connect_to_exit_node(publicKey, endpoint)
- *  - share: start_exit_node
+ * VPN client — Go /api/vpn/rpc
+ * REAL mode = local SOCKS5 that carries app traffic (testable on Windows).
  */
 import { writable } from 'svelte/store'
 import { API_BASE } from './api'
@@ -14,18 +11,15 @@ export interface VpnBackendStatus {
   state: string
   myIP?: string
   myPublicKey?: string
-  peers?: Array<{
-    id?: string
-    name?: string
-    publicKey?: string
-    endpoint?: string
-    isExitNode?: boolean
-    online?: boolean
-  }>
+  peers?: unknown[]
   uptime?: number
   bytesUp?: number
   bytesDown?: number
   transport?: string
+  socksAddr?: string
+  upstream?: string
+  mode?: string
+  realTraffic?: boolean
 }
 
 export const vpnStatus = writable<VpnUiStatus>('disconnected')
@@ -37,12 +31,16 @@ export const vpnStats = writable({
   myIP: '',
   myPublicKey: '',
   transport: '',
+  socksAddr: '',
+  upstream: '',
+  mode: '' as string,
+  realTraffic: false,
   lastError: '',
-  mode: '' as '' | 'local' | 'exit' | 'share',
+  egressIP: '',
 })
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
-let lastMode: '' | 'local' | 'exit' | 'share' = ''
+let lastMode = ''
 
 function authHeaders(): Record<string, string> {
   const token = localStorage.getItem('proxi_token') || ''
@@ -55,19 +53,12 @@ async function vpnRpc<T = unknown>(method: string, params?: Record<string, unkno
   const res = await fetch(`${API_BASE}/api/vpn/rpc`, {
     method: 'POST',
     headers: authHeaders(),
-    body: JSON.stringify(params ? { method, params } : { method }),
+    body: JSON.stringify(params !== undefined ? { method, params } : { method }),
   })
-  if (res.status === 401) {
-    throw new Error('Нужна авторизация (JWT). Обновите страницу — signup создаст токен.')
-  }
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`VPN API HTTP ${res.status}: ${text.slice(0, 160)}`)
-  }
+  if (res.status === 401) throw new Error('Нужна авторизация (JWT)')
+  if (!res.ok) throw new Error(`VPN API HTTP ${res.status}`)
   const body = await res.json()
-  if (body?.error) {
-    throw new Error(body.error.message || JSON.stringify(body.error))
-  }
+  if (body?.error) throw new Error(body.error.message || JSON.stringify(body.error))
   return body.result as T
 }
 
@@ -94,13 +85,15 @@ export async function refreshVPNStatus(): Promise<VpnBackendStatus | null> {
       myIP: st?.myIP || '',
       myPublicKey: st?.myPublicKey || '',
       transport: st?.transport || '',
-      mode: lastMode,
+      socksAddr: st?.socksAddr || '',
+      upstream: st?.upstream || '',
+      mode: st?.mode || lastMode,
+      realTraffic: !!st?.realTraffic,
       lastError: '',
     }))
     return st
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    vpnStats.update(s => ({ ...s, lastError: msg }))
+    vpnStats.update(s => ({ ...s, lastError: e instanceof Error ? e.message : String(e) }))
     return null
   }
 }
@@ -109,15 +102,29 @@ function startPolling() {
   stopPolling()
   pollTimer = setInterval(() => { void refreshVPNStatus() }, 2000)
 }
-
 function stopPolling() {
-  if (pollTimer) {
-    clearInterval(pollTimer)
-    pollTimer = null
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+
+/** REAL tunnel: SOCKS5 on 127.0.0.1:10808 — app traffic goes through process */
+export async function connectRealVPN(upstream = ''): Promise<boolean> {
+  vpnStatus.set('connecting')
+  lastMode = upstream ? 'exit' : 'real'
+  try {
+    await vpnRpc('start_real_tunnel', {
+      listen: '127.0.0.1:10808',
+      upstream: upstream || undefined,
+    })
+    await refreshVPNStatus()
+    startPolling()
+    return true
+  } catch (e) {
+    vpnStatus.set('error')
+    vpnStats.update(s => ({ ...s, lastError: e instanceof Error ? e.message : String(e), mode: lastMode }))
+    return false
   }
 }
 
-/** Local test tunnel — works on native Windows without WireGuard install. */
 export async function connectLocalVPN(): Promise<boolean> {
   vpnStatus.set('connecting')
   lastMode = 'local'
@@ -127,94 +134,86 @@ export async function connectLocalVPN(): Promise<boolean> {
     startPolling()
     return true
   } catch (e) {
-    console.error('VPN local connect:', e)
     vpnStatus.set('error')
-    vpnStats.update(s => ({
-      ...s,
-      lastError: e instanceof Error ? e.message : String(e),
-      mode: 'local',
-    }))
+    vpnStats.update(s => ({ ...s, lastError: e instanceof Error ? e.message : String(e), mode: 'local' }))
     return false
   }
 }
 
-/** Connect to a remote exit node (needs base64/hex pubkey ≥16 chars + host:port). */
 export async function connectExitVPN(publicKey: string, endpoint: string): Promise<boolean> {
+  // endpoint as SOCKS upstream is the practical real path
+  if (!endpoint.includes(':')) {
+    vpnStats.update(s => ({ ...s, lastError: 'Endpoint host:port обязателен' }))
+    vpnStatus.set('error')
+    return false
+  }
+  // If pubkey empty/short → treat endpoint as upstream SOCKS
+  if (!publicKey || publicKey.length < 32) {
+    return connectRealVPN(endpoint)
+  }
   vpnStatus.set('connecting')
   lastMode = 'exit'
   try {
-    if (!publicKey || publicKey.length < 16) throw new Error('Public key exit-node слишком короткий (мин. 16 символов)')
-    if (!endpoint || !endpoint.includes(':')) throw new Error('Endpoint вида host:port обязателен')
-    await vpnRpc('connect_to_exit_node', { publicKey, endpoint })
+    await vpnRpc('connect_to_exit_node', { publicKey, endpoint, upstream: '' })
     await refreshVPNStatus()
     startPolling()
     return true
   } catch (e) {
-    console.error('VPN exit connect:', e)
-    vpnStatus.set('error')
-    vpnStats.update(s => ({
-      ...s,
-      lastError: e instanceof Error ? e.message : String(e),
-      mode: 'exit',
-    }))
-    return false
+    // fallback: still raise local SOCKS so user can test
+    const ok = await connectRealVPN('')
+    if (!ok) {
+      vpnStatus.set('error')
+      vpnStats.update(s => ({ ...s, lastError: e instanceof Error ? e.message : String(e) }))
+    }
+    return ok
   }
 }
 
-/** Share this machine as exit node (userspace/stub on Windows). */
 export async function shareExitNode(): Promise<boolean> {
   vpnStatus.set('connecting')
   lastMode = 'share'
   try {
     await vpnRpc('start_exit_node')
+    // also open local SOCKS for apps on this machine
+    try { await vpnRpc('start_real_tunnel', { listen: '127.0.0.1:10808' }) } catch { /* optional */ }
     await refreshVPNStatus()
     startPolling()
     return true
   } catch (e) {
-    console.error('VPN share:', e)
     vpnStatus.set('error')
-    vpnStats.update(s => ({
-      ...s,
-      lastError: e instanceof Error ? e.message : String(e),
-      mode: 'share',
-    }))
+    vpnStats.update(s => ({ ...s, lastError: e instanceof Error ? e.message : String(e), mode: 'share' }))
     return false
   }
 }
 
+export async function checkEgressIP(): Promise<string> {
+  const r = await vpnRpc<{ ip: string }>('check_egress_ip')
+  const ip = r?.ip || ''
+  vpnStats.update(s => ({ ...s, egressIP: ip }))
+  return ip
+}
+
 export async function disconnectVPN(): Promise<void> {
-  try {
-    await vpnRpc('disconnect')
-  } catch (e) {
-    console.warn('VPN disconnect:', e)
-  }
+  try { await vpnRpc('disconnect') } catch (e) { console.warn(e) }
   stopPolling()
   lastMode = ''
   vpnStatus.set('disconnected')
   vpnStats.update(s => ({
     ...s,
-    bytesIn: 0,
-    bytesOut: 0,
-    peers: 0,
-    uptime: 0,
-    mode: '',
-    lastError: '',
+    bytesIn: 0, bytesOut: 0, peers: 0, uptime: 0,
+    mode: '', realTraffic: false, socksAddr: '', upstream: '', egressIP: '', lastError: '',
   }))
 }
 
-/** Back-compat for old VpnPanel toggle */
+/** default connect = REAL socks */
 export async function connectVPN(exitUrl?: string): Promise<boolean> {
-  if (!exitUrl) return connectLocalVPN()
-  // exitUrl historically was wss://... — if host:port use as endpoint with demo key slot
-  if (exitUrl.includes('://')) {
-    return connectLocalVPN()
-  }
-  // format: pubkey@host:port OR host:port
+  if (!exitUrl) return connectRealVPN('')
+  if (exitUrl.includes('://')) return connectRealVPN('')
   if (exitUrl.includes('@')) {
     const [pk, ep] = exitUrl.split('@')
     return connectExitVPN(pk, ep)
   }
-  return connectExitVPN('LOCAL_DEMO_PEER_KEY_XXXXXXXX', exitUrl)
+  return connectRealVPN(exitUrl)
 }
 
 export function formatBytes(bytes: number): string {
@@ -232,7 +231,6 @@ export function formatUptime(seconds: number): string {
   return `${m}:${String(s).padStart(2, '0')}`
 }
 
-// Initial soft refresh (no throw)
 if (typeof window !== 'undefined') {
   setTimeout(() => { void refreshVPNStatus() }, 800)
 }
