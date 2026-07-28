@@ -12,6 +12,24 @@
   import { searchMessages, type SearchResult } from '../lib/search'
   import VpnPanel from './VpnPanel.svelte'
 
+  let myId = $state(getPubkey() || '')
+  let copied = $state(false)
+  $effect(() => {
+    const id = getPubkey() || ''
+    if (id) myId = id
+    const t = setInterval(() => {
+      const n = getPubkey() || ''
+      if (n && n !== myId) myId = n
+    }, 1000)
+    return () => clearInterval(t)
+  })
+  function copyMyId() {
+    if (!myId) return
+    navigator.clipboard.writeText(myId)
+    copied = true
+    setTimeout(() => { copied = false }, 1500)
+  }
+
   let search = $state('')
   let sortedList = $state<stores.ChatView[]>([])
   let currentActiveId = $state<string | null>(null)
@@ -63,6 +81,12 @@
     <button class="menu-btn" onclick={toggleSettings}>☰</button>
     <input type="text" placeholder="Поиск" bind:value={search} />
     <button class="new-btn" onclick={() => stores.showNewChat.update(() => true)}>✏️</button>
+  </div>
+
+  <div class="my-id-bar" title={myId || 'identity loading...'}>
+    <span class="my-id-label">Мой ID</span>
+    <code class="my-id-val">{myId ? (myId.slice(0, 12) + '…' + myId.slice(-4)) : '…'}</code>
+    <button type="button" class="copy-id" onclick={copyMyId} disabled={!myId}>{copied ? '✓' : '📋'}</button>
   </div>
 
   <div class="chat-list">
@@ -160,4 +184,11 @@
     border-radius: 50%;
     margin-right: 6px;
   }
+
+  .my-id-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
+  .my-id-label { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+  .my-id-val { flex: 1; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .copy-id { background: none; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 2px 8px; color: var(--text); }
+  .copy-id:hover { background: var(--bg-hover); }
+  .copy-id:disabled { opacity: 0.4; cursor: default; }
 </style>
