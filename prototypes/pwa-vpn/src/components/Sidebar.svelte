@@ -83,11 +83,14 @@
     <button class="new-btn" onclick={() => stores.showNewChat.update(() => true)}>✏️</button>
   </div>
 
-  <div class="my-id-bar" title={myId || 'identity loading...'}>
+  <div class="my-id-bar" title={myId ? ('Полный ID: ' + myId + ' — копируй только 📋') : 'identity loading...'}>
     <span class="my-id-label">Мой ID</span>
     <code class="my-id-val">{myId ? (myId.slice(0, 12) + '…' + myId.slice(-4)) : '…'}</code>
-    <button type="button" class="copy-id" onclick={copyMyId} disabled={!myId}>{copied ? '✓' : '📋'}</button>
+    <button type="button" class="copy-id" onclick={copyMyId} disabled={!myId} title="Копировать ПОЛНЫЙ ID">{copied ? '✓' : '📋'}</button>
   </div>
+  {#if myId}
+    <div class="my-id-hint">В чат вставляй только из 📋 — на экране обрезка</div>
+  {/if}
 
   <div class="chat-list">
     {#if showSearch && searchResults.length > 0}
