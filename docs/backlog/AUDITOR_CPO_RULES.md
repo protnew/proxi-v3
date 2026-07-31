@@ -1,41 +1,55 @@
-# CPO + Supreme Auditor — Rules (Proxi)
+# AUDITOR RULES + CPO DEFINITION OF READY
 
-## Source of truth
-- **Active DB (WAL):** `08-Backlog/backlog_proxi_v3.db`
-- **Dashboard:** `08-Backlog/backlog_dashboard_v1.html`
-- **Branch:** `dev`
-- **Archive:** `10-Archive/backlogs/`
+## 1. DoR (Definition of Ready)
 
-## Lead Worker queue SQL
-```sql
-SELECT * FROM tasks
-WHERE status='TODO'
-ORDER BY block_priority DESC, subblock_priority DESC, priority_score DESC
-LIMIT 1;
-```
-`priority_score` = `user_value / agent_minutes` (ROI).
+Задача готова к выполнению если:
+1. `task_id`, `title`, `description` заполнены
+2. `acceptance_criteria` ≥ 1 проверяемое условие
+3. `agent_minutes` между 5 и 20 (leaf-size)
+4. `depends_on_task_id` указан или явно NULL
+5. `proof_type` ∈ {autotest, api, e2e, playwright, manual, none}
+6. `epic` назначен
 
-## Definition of Ready (leaf)
-- agent_minutes **10–15** (hard 5–20)
-- Hard acceptance_criteria
-- depends_on_task_id DAG when needed
-- tenant_id: backend|frontend|infra|mobile
+## 2. DoD (Definition of Done)
 
-## Definition of Done
-- status DONE only with proof_type in (autotest, e2e, api) [+manual ok]
-- test_logs = real stdout
-- 10-POV notes in auditor_pov when closing critical path
-- commit + push `dev`
+Задача DONE только если:
+1. `status = 'DONE'`
+2. `proof_type ≠ 'none'` — есть подтверждение
+3. `test_logs` содержит конкретный результат (PASS count, URL, файл)
+4. `updated_at` обновлён
+5. Если `proof_type ∈ {autotest,e2e,playwright,api}` — команда проверки записана
 
-## Status enum
-ICEBOX | TODO | IN_PROGRESS | REVIEW | DONE | BLOCKED
+## 3. Шкала Proof
 
-## Forbidden
-- Parallel active backlog DB
-- Fake DONE (keyword/build/exists)
-- Files ≥500 LOC
-- Direct ALTER TABLE (use migrations/)
-- File-copy backup of live WAL DB (use sqlite3.backup / .dump)
+| proof_type | Что значит | Доверие |
+|------------|-----------|---------|
+| autotest | pytest/go test/vitest PASS | Высокое |
+| e2e | Playwright/cypress PASS | Высокое |
+| playwright | Playwright PASS | Высокое |
+| api | curl/RPC вернул ожидаемый результат | Среднее |
+| manual | Человек видел | Среднее |
+| none | Нет proof | **DONE запрещён** |
 
-## Swarm roles
-CPO, BA, Value Appraiser, Architect, DBA, UX Dashboard, Lead Worker, Parallel Worker, QA, Security Auditor
+## 4. CPO Priority Score
+
+`priority_score = user_value / agent_minutes`
+
+- `user_value` 1–10 (impact на пользователя/продукт)
+- `agent_minutes` 5–20 (leaf-size)
+- Сортировка: DESC priority_score
+
+## 5. Epic Mapping
+
+| Epic | Блоки |
+|------|-------|
+| A-Messaging | Auth, MessengerCore, Groups |
+| B-VPN-Privacy | VPN, P2PContent |
+| C-Quality-Security | QualityGate, TestingInfra, Security, E2EProof |
+| D-UserExperience | UI, MVP |
+| E-Platform-Scale | DevOps, DocsCompliance, MobileDesktop, Economy |
+
+## 6. Запрещённые маркеры в test_logs
+
+- "100% DONE" без proof → отклонить
+- "PASS" без count/command → отклонить
+- "works" без evidence → отклонить
