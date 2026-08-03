@@ -30,3 +30,21 @@ nul
 .env
 .DS_Store
 Thumbs.db
+
+# --- agent/runtime junk (gap-5) ---
+**/*.exe~
+**/auth_cov.out
+**/coverage.out
+**/*_cov.out
+**/server-dev.log
+**/server-critic.log
+**/vite-dev.log
+**/data-dev/
+src/src-vpn/data-dev/
+src/src-vpn/*.log
+src/src-vpn/messenger-server-dev.exe
+src/src-vpn/messenger-server-dev.exe~
+prototypes/pwa-vpn/vite-dev.log
+# accidental duplicate test path
+prototypes/pwa-vpn/tests/api-no-token.test.ts
+

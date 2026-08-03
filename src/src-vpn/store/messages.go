@@ -9,8 +9,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// SEC-002: max body size for DM/channel messages
-const MaxMessageLen = 16384 // 16 KB
+// SEC-002: MUST equal vpn.MaxMessageLen (root validation.go). Keep in sync.
+const MaxMessageLen = 16384 // 16 KB — SoT mirror of vpn.MaxMessageLen
 
 type Message struct {
 	ID            string `json:"id"`

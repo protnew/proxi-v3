@@ -4,6 +4,7 @@
 package main
 
 import (
+	vpnroot "github.com/unkillable-messenger/vpn"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -127,8 +128,9 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Message text is required")
 		return
 	}
-	if len(req.Text) > 16384 { // SEC-002: vpn.MaxMessageLen (16 KB)
-		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Message too long (max 10000 chars)")
+	// SEC-002: single SoT — vpnroot.MaxMessageLen / ValidateMessage
+	if err := vpnroot.ValidateMessage(req.Text); err != nil {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
 	if req.To == "" {
