@@ -1,0 +1,572 @@
+{
+  "timestamp": "2026-08-03T21:02:16Z",
+  "project": "04-Неубиваемый-контент / Indestructible Messenger",
+  "git_hint": "dev branch .04-Src",
+  "go": {
+    "packages_total": [
+      {
+        "pkg": "./auth/",
+        "status": "PASS",
+        "cov": 54.4,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 8.7,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/auth\t2.729s\tcoverage: 54.4% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_auth_.out"
+      },
+      {
+        "pkg": "./chat/",
+        "status": "PASS",
+        "cov": 84.8,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 18.5,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/chat\t9.215s\tcoverage: 84.8% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_chat_.out"
+      },
+      {
+        "pkg": "./store/",
+        "status": "PASS",
+        "cov": 58.1,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 11.9,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/store\t5.288s\tcoverage: 58.1% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_store_.out"
+      },
+      {
+        "pkg": "./middleware/",
+        "status": "PASS",
+        "cov": 94.2,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 3.6,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/middleware\t1.320s\tcoverage: 94.2% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_middleware_.out"
+      },
+      {
+        "pkg": "./cmd/webserver/",
+        "status": "PASS",
+        "cov": 34.0,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 16.7,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/cmd/webserver\t4.035s\tcoverage: 34.0% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_cmd_webserver_.out"
+      },
+      {
+        "pkg": ".",
+        "status": "PASS",
+        "cov": 62.4,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 5.6,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn\t2.023s\tcoverage: 62.4% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_root.out"
+      },
+      {
+        "pkg": "./identity/",
+        "status": "PASS",
+        "cov": 59.7,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.4,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/identity\t0.749s\tcoverage: 59.7% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_identity_.out"
+      },
+      {
+        "pkg": "./crypto/",
+        "status": "PASS",
+        "cov": 71.9,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.7,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/crypto\t0.788s\tcoverage: 71.9% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_crypto_.out"
+      },
+      {
+        "pkg": "./content/",
+        "status": "PASS",
+        "cov": 82.8,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 5.1,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/content\t2.014s\tcoverage: 82.8% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_content_.out"
+      },
+      {
+        "pkg": "./mesh/",
+        "status": "PASS",
+        "cov": 91.6,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.5,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/mesh\t0.780s\tcoverage: 91.6% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_mesh_.out"
+      },
+      {
+        "pkg": "./storage/",
+        "status": "PASS",
+        "cov": 74.1,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 4.2,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/storage\t1.406s\tcoverage: 74.1% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_storage_.out"
+      },
+      {
+        "pkg": "./tor/",
+        "status": "PASS",
+        "cov": 64.0,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 3.1,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/tor\t1.073s\tcoverage: 64.0% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_tor_.out"
+      },
+      {
+        "pkg": "./bot/",
+        "status": "PASS",
+        "cov": 92.0,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 6.3,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/bot\t2.759s\tcoverage: 92.0% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_bot_.out"
+      },
+      {
+        "pkg": "./federation/",
+        "status": "PASS",
+        "cov": 75.1,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 23.3,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/federation\t9.162s\tcoverage: 75.1% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_federation_.out"
+      },
+      {
+        "pkg": "./ipfs/",
+        "status": "PASS",
+        "cov": 57.0,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 11.8,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/ipfs\t1.683s\tcoverage: 57.0% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_ipfs_.out"
+      },
+      {
+        "pkg": "./push/",
+        "status": "PASS",
+        "cov": 70.9,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 3.9,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/push\t1.429s\tcoverage: 70.9% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_push_.out"
+      },
+      {
+        "pkg": "./admin/",
+        "status": "PASS",
+        "cov": 92.6,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.9,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/admin\t1.139s\tcoverage: 92.6% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_admin_.out"
+      },
+      {
+        "pkg": "./analytics/",
+        "status": "PASS",
+        "cov": 94.4,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.2,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/analytics\t0.818s\tcoverage: 94.4% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_analytics_.out"
+      },
+      {
+        "pkg": "./api/",
+        "status": "PASS",
+        "cov": 94.2,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 3.7,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/api\t1.291s\tcoverage: 94.2% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_api_.out"
+      },
+      {
+        "pkg": "./i18n/",
+        "status": "PASS",
+        "cov": 100.0,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.1,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/i18n\t0.692s\tcoverage: 100.0% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_i18n_.out"
+      },
+      {
+        "pkg": "./media/",
+        "status": "PASS",
+        "cov": 78.1,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.9,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/media\t0.657s\tcoverage: 78.1% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_media_.out"
+      },
+      {
+        "pkg": "./msgops/",
+        "status": "PASS",
+        "cov": 92.9,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.0,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/msgops\t0.635s\tcoverage: 92.9% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_msgops_.out"
+      },
+      {
+        "pkg": "./nat/",
+        "status": "PASS",
+        "cov": 83.3,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.4,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/nat\t0.868s\tcoverage: 83.3% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_nat_.out"
+      },
+      {
+        "pkg": "./social/",
+        "status": "PASS",
+        "cov": 91.2,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 3.1,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/social\t1.130s\tcoverage: 91.2% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_social_.out"
+      },
+      {
+        "pkg": "./stream/",
+        "status": "PASS",
+        "cov": 83.5,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 2.2,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/stream\t0.645s\tcoverage: 83.5% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_stream_.out"
+      },
+      {
+        "pkg": "./nostr/",
+        "status": "PASS",
+        "cov": 71.2,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 5.8,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/nostr\t2.074s\tcoverage: 71.2% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_nostr_.out"
+      },
+      {
+        "pkg": "./integration/",
+        "status": "PASS",
+        "cov": 100.0,
+        "pass": 0,
+        "fail": 0,
+        "fails": [],
+        "sec": 4.2,
+        "rc": 0,
+        "tail": "ok  \tgithub.com/unkillable-messenger/vpn/integration\t1.743s\tcoverage: 100.0% of statements | ",
+        "covf": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\cov_integration_.out"
+      }
+    ],
+    "packages_pass": null,
+    "packages_fail": null,
+    "tests_listed": 770,
+    "tests_executed_status": "all packages PASS (exit 0)",
+    "statement_coverage_pct": 65.3,
+    "per_package_coverage": {
+      "./auth/": 54.4,
+      "./chat/": 84.8,
+      "./store/": 58.1,
+      "./middleware/": 94.2,
+      "./cmd/webserver/": 34.0,
+      ".": 62.4,
+      "./identity/": 59.7,
+      "./crypto/": 71.9,
+      "./content/": 82.8,
+      "./mesh/": 91.6,
+      "./storage/": 74.1,
+      "./tor/": 64.0,
+      "./bot/": 92.0,
+      "./federation/": 75.1,
+      "./ipfs/": 57.0,
+      "./push/": 70.9,
+      "./admin/": 92.6,
+      "./analytics/": 94.4,
+      "./api/": 94.2,
+      "./i18n/": 100.0,
+      "./media/": 78.1,
+      "./msgops/": 92.9,
+      "./nat/": 83.3,
+      "./social/": 91.2,
+      "./stream/": 83.5,
+      "./nostr/": 71.2,
+      "./integration/": 100.0
+    }
+  },
+  "vitest": {
+    "files": 3,
+    "tests_pass": 19,
+    "tests_fail": 0,
+    "statement_coverage_pct": null,
+    "src_files": 40,
+    "test_files": 3
+  },
+  "playwright": {
+    "e2e_dir": {
+      "total": 16,
+      "pass": 16,
+      "fail": 0
+    },
+    "tests_dir_orphan": {
+      "pass": 0,
+      "fail": 0,
+      "note": "not in playwright testDir by default"
+    },
+    "specs_in_config": [
+      "alice-bob",
+      "messenger",
+      "vpn",
+      "deep"
+    ]
+  },
+  "bats": {
+    "files": [
+      "dns_leak.bats",
+      "headscale.bats",
+      "mqtt_broker.bats",
+      "naiveproxy.bats",
+      "simplex.bats"
+    ],
+    "runner_available": false,
+    "executed": null
+  },
+  "scenarios": {
+    "total": 20,
+    "covered": 11,
+    "pct": 55.0,
+    "items": [
+      {
+        "id": "S01",
+        "name": "Signup / get JWT",
+        "layer": "unit+e2e",
+        "covered": true,
+        "note": "auth + webserver + alice-bob"
+      },
+      {
+        "id": "S02",
+        "name": "Login / token restore",
+        "layer": "unit",
+        "covered": true,
+        "note": "auth tests"
+      },
+      {
+        "id": "S03",
+        "name": "Create DM chat (User ID)",
+        "layer": "e2e",
+        "covered": true,
+        "note": "messenger.spec + alice-bob"
+      },
+      {
+        "id": "S04",
+        "name": "Send message Alice→Bob",
+        "layer": "e2e+unit",
+        "covered": true,
+        "note": "alice-bob + chat hub + store"
+      },
+      {
+        "id": "S05",
+        "name": "WS delivery realtime",
+        "layer": "e2e+unit",
+        "covered": true,
+        "note": "alice-bob + chat"
+      },
+      {
+        "id": "S06",
+        "name": "Empty message rejected",
+        "layer": "unit",
+        "covered": true,
+        "note": "store SaveMessage"
+      },
+      {
+        "id": "S07",
+        "name": "Oversized message rejected",
+        "layer": "unit+api",
+        "covered": true,
+        "note": "ValidateMessage + store test + live"
+      },
+      {
+        "id": "S08",
+        "name": "Emoji picker UI",
+        "layer": "e2e",
+        "covered": true,
+        "note": "messenger.spec"
+      },
+      {
+        "id": "S09",
+        "name": "VPN SOCKS start/IP/disconnect",
+        "layer": "e2e",
+        "covered": true,
+        "note": "vpn.spec"
+      },
+      {
+        "id": "S10",
+        "name": "Settings / profile / QR screens",
+        "layer": "e2e-screenshot",
+        "covered": true,
+        "note": "deep.spec (weak asserts)"
+      },
+      {
+        "id": "S11",
+        "name": "Group create/list API client",
+        "layer": "unit-fe",
+        "covered": true,
+        "note": "vitest api.test"
+      },
+      {
+        "id": "S12",
+        "name": "Group full E2E UI",
+        "layer": "e2e",
+        "covered": false,
+        "note": "ICEBOX GRP"
+      },
+      {
+        "id": "S13",
+        "name": "File upload E2E",
+        "layer": "e2e",
+        "covered": false,
+        "note": "ICEBOX"
+      },
+      {
+        "id": "S14",
+        "name": "Multi-device sync",
+        "layer": "e2e",
+        "covered": false,
+        "note": "partial unit only"
+      },
+      {
+        "id": "S15",
+        "name": "E2E encryption roundtrip UI",
+        "layer": "e2e",
+        "covered": false,
+        "note": "crypto unit exists, UI weak"
+      },
+      {
+        "id": "S16",
+        "name": "Voice/call",
+        "layer": "e2e",
+        "covered": false,
+        "note": "ICEBOX"
+      },
+      {
+        "id": "S17",
+        "name": "Android/mobile",
+        "layer": "maestro",
+        "covered": false,
+        "note": "stubs only"
+      },
+      {
+        "id": "S18",
+        "name": "Tor/mesh real path",
+        "layer": "e2e",
+        "covered": false,
+        "note": "unit only"
+      },
+      {
+        "id": "S19",
+        "name": "Push notifications",
+        "layer": "e2e",
+        "covered": false,
+        "note": "unit push pkg"
+      },
+      {
+        "id": "S20",
+        "name": "System-wide Wintun VPN",
+        "layer": "e2e",
+        "covered": false,
+        "note": "ICEBOX"
+      }
+    ]
+  },
+  "loc_limit_500": {
+    "files_over": [
+      {
+        "stack": "go",
+        "path": "archive\\vpn-v1-2026-06-24.go",
+        "loc": 823
+      }
+    ],
+    "count_over": 1,
+    "prod_files": 172,
+    "compliance_pct": 99.4
+  },
+  "zero_point_metrics": {
+    "unit_logic_coverage_pct": 65.3,
+    "frontend_unit_coverage_pct": "N/A (no coverage provider or failed)",
+    "user_scenarios_e2e_pct": 55.0,
+    "infra_bats_pct": 15.0,
+    "loc_compliance_pct": 99.4,
+    "overall_test_readiness_pct": 57.5,
+    "weights": "unit40 + scenarios40 + infra10 + loc10"
+  }
+}
