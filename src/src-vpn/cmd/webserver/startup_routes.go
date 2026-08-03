@@ -167,6 +167,15 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
 			return
 		}
+		// SEC-002: input length validation
+		if len(body.Npub) > 128 {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub too long (max 128)")
+			return
+		}
+		if len(body.Username) > 100 {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "username too long (max 100)")
+			return
+		}
 		// userID: prefer hex prefix of npub (64-char hex pubkey); fallback hash-encode
 		userID := body.Npub
 		if len(userID) >= 16 {

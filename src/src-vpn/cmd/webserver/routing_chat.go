@@ -127,7 +127,7 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Message text is required")
 		return
 	}
-	if len(req.Text) > 10000 {
+	if len(req.Text) > 16384 { // SEC-002: vpn.MaxMessageLen (16 KB)
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Message too long (max 10000 chars)")
 		return
 	}
