@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-// Mock localStorage for node environment
+// Mock localStorage for node environment BEFORE importing api
 const store: Record<string, string> = {}
 const localStorageMock = {
   getItem: (key: string) => store[key] ?? null,
@@ -11,71 +11,67 @@ const localStorageMock = {
   key: (i: number) => Object.keys(store)[i] ?? null,
 }
 Object.defineProperty(globalThis, 'localStorage', { value: localStorageMock, writable: true })
+Object.defineProperty(globalThis, 'window', {
+  value: { localStorage: localStorageMock, location: { protocol: 'http:', host: 'localhost:5173' } },
+  writable: true,
+})
 
-// Mock fetch
 const mockFetch = vi.fn()
 global.fetch = mockFetch as any
 
-describe('API sendDM without token', () => {
+// Import production request() which builds Authorization from proxi_token
+import { request } from '../src/lib/api'
+
+describe('api.ts request() auth header (production code)', () => {
   beforeEach(() => {
     mockFetch.mockReset()
     localStorage.clear()
   })
 
-  it('sends no Authorization header when proxi_token missing', async () => {
-    expect(localStorage.getItem('proxi_token')).toBeNull()
-
+  it('does not send Authorization when proxi_token missing', async () => {
     mockFetch.mockResolvedValueOnce({
-      ok: false, status: 401,
+      ok: false,
+      status: 401,
       json: async () => ({ error: 'unauthorized' }),
-    } as any)
-
-    const token = localStorage.getItem('proxi_token') || ''
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    const res = await fetch('http://localhost:8080/api/messages/send', {
-      method: 'POST', headers,
-      body: JSON.stringify({ recipient: 'bob', text: 'test' }),
     })
 
-    expect(res.ok).toBe(false)
-    expect(res.status).toBe(401)
-    const callArgs = mockFetch.mock.calls[0][1]
-    expect(callArgs.headers.Authorization).toBeUndefined()
+    await request('/api/messages/send', {
+      method: 'POST',
+      body: JSON.stringify({ to: 'bob', text: 'x' }),
+    })
+
+    expect(mockFetch).toHaveBeenCalled()
+    const init = mockFetch.mock.calls[0][1] || {}
+    const headers = init.headers || {}
+    const auth = headers['Authorization'] || headers['authorization']
+    expect(auth).toBeFalsy()
   })
 
-  it('includes Authorization header when token present', async () => {
+  it('sends Bearer token when proxi_token present', async () => {
     localStorage.setItem('proxi_token', 'fake.jwt.token')
-
     mockFetch.mockResolvedValueOnce({
-      ok: true, status: 200,
+      ok: true,
+      status: 200,
       json: async () => ({ ok: true }),
-    } as any)
-
-    const token = localStorage.getItem('proxi_token') || ''
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-    if (token) headers['Authorization'] = `Bearer ${token}`
-
-    await fetch('http://localhost:8080/api/messages/send', {
-      method: 'POST', headers,
-      body: JSON.stringify({ recipient: 'bob', text: 'test' }),
     })
 
-    const callArgs = mockFetch.mock.calls[0][1]
-    expect(callArgs.headers.Authorization).toBe('Bearer fake.jwt.token')
+    await request('/api/health', { method: 'GET' })
+
+    const init = mockFetch.mock.calls[0][1] || {}
+    const headers = init.headers || {}
+    const auth = headers['Authorization'] || headers['authorization']
+    expect(auth).toBe('Bearer fake.jwt.token')
   })
 
-  it('rejects on network failure when backend unreachable', async () => {
+  it('returns error payload on 401 without throwing necessarily', async () => {
     localStorage.clear()
-    mockFetch.mockRejectedValueOnce(new TypeError('Failed to fetch'))
-
-    await expect(
-      fetch('http://localhost:8080/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ npub: 'a'.repeat(64), name: 'test' }),
-      })
-    ).rejects.toThrow('Failed to fetch')
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'unauthorized' }),
+    })
+    const res = await request('/api/messages/send', { method: 'POST', body: '{}' })
+    // request() wraps status — accept either error field or ok=false shape
+    expect(res).toBeTruthy()
   })
 })

@@ -9,6 +9,9 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// SEC-002: max body size for DM/channel messages
+const MaxMessageLen = 16384 // 16 KB
+
 type Message struct {
 	ID            string `json:"id"`
 	From          string `json:"from"`
@@ -39,6 +42,10 @@ func (s *Store) SaveMessage(msg Message) error {
 	// MSG-003: never persist empty bubbles
 	if len(msg.Text) == 0 || len(strings.TrimSpace(msg.Text)) == 0 {
 		return nil
+	}
+	// SEC-002: reject oversized payloads
+	if len(msg.Text) > MaxMessageLen {
+		return fmt.Errorf("message too long: %d > %d", len(msg.Text), MaxMessageLen)
 	}
 	_, err := s.db.Exec(
 		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl)

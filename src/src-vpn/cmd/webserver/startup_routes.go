@@ -5,6 +5,7 @@
 package main
 
 import (
+	vpnroot "github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/auth"
 	"encoding/hex"
 	"encoding/json"
@@ -167,13 +168,9 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
 			return
 		}
-		// SEC-002: input length validation
-		if len(body.Npub) > 128 {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub too long (max 128)")
-			return
-		}
-		if len(body.Username) > 100 {
-			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "username too long (max 100)")
+		// SEC-002: shared validator (vpnroot.ValidateSignupInput)
+		if err := vpnroot.ValidateSignupInput(body.Username, body.Npub); err != nil {
+			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
 			return
 		}
 		// userID: prefer hex prefix of npub (64-char hex pubkey); fallback hash-encode
