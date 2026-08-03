@@ -1,10 +1,13 @@
-# 08-Backlog — Единый CPO backlog
+# Backlog docs (git mirror)
 
-| Файл | Роль |
-|---|---|
-| `backlog_proxi_v3.db` | **Source of truth** (SQLite WAL) |
-| `AUDITOR_CPO_RULES.md` | DoR/DoD + queue SQL |
-| `backlog_dashboard_v1.html` | Bloomberg dashboard |
-| `BACKLOG_CPO_V3.md` | Human mirror |
+## Актуальные
+- `backlog_proxi_v3.db` — SoT mirror
+- `BACKLOG_EPICS.md` — 5 эпиков A–E
+- `AUDITOR_CPO_RULES.md` — DoR/DoD
+- `SEC_SCAN_REPORT.md`
 
-Старые DB → `10-Archive/backlogs/`. Не создавать `backlog_*.db` рядом.
+## Устаревшие (не использовать)
+- `BACKLOG.md` — pre-CPO, header DEPRECATED
+- `backlog.db` — pre-unified, не SoT
+
+Vault SoT: `C:\Obsidian\New\Projects\04-Неубиваемый-контент V2\08-Backlog\`

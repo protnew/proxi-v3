@@ -1,3 +1,13 @@
+<!-- DEPRECATED 2026-08-03: use BACKLOG_EPICS.md + backlog_proxi_v3.db -->
+# ⚠️ DEPRECATED
+
+Актуальный бэклог:
+- `BACKLOG_EPICS.md`
+- `backlog_proxi_v3.db`
+- vault: `08-Backlog/`
+
+---
+
 # Единый бэклог Proxi (Indestructible Messenger)
 **Обновлён:** 2026-07-27  
 **Source of truth:** `00-Product-and-Agile/01-Backlog-Roadmap/backlog.db`  
