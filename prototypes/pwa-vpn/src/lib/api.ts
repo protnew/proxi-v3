@@ -28,8 +28,10 @@
 import type { Message } from '../stores/messenger';
 import { makeChatPayload } from './api-payload';
 
-const API_BASE = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8080';
-const WS_BASE = API_BASE.replace(/^http/, 'ws');
+// If VITE_API_URL is empty → same-origin (Go serves both dist + API on one port).
+// This is how "Telegram Web" works: one URL, no separate API host.
+const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
+const WS_BASE = API_BASE ? API_BASE.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
 
 export interface ApiResponse<T = any> {
   data?: T;

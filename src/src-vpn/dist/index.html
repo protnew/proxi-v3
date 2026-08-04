@@ -1,48 +1,20 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Unkillable Messenger</title>
-  <meta name="description" content="Censorship-resistant encrypted messenger">
-  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <style>
-    /* Sentry init is loaded before app scripts so errors are captured from the start */
-  </style>
-</head>
-<body>
-  <div id="app">
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-  </div>
-
-  <!-- Sentry Browser SDK via CDN (no npm required) -->
-  <!-- SENTRY_DSN will be injected at build/deploy time via env substitution or sed -->
-  <script
-    src="https://browser.sentry-cdn.com/9.35.0/bundle.tracing.min.js"
-    integrity="sha384-RM6bDZKXHxBLLg1VGBxd7RQWqGEJK7aN6MKMHWXeGBjLaMv0DX5wEwbfRqDjNqxi"
-    crossorigin="anonymous"
-  ></script>
-  <script>
-    (function() {
-      // SENTRY_DSN is replaced at deploy time; if empty/placeholder, Sentry stays disabled
-      var sentryDSN = "__SENTRY_DSN__";
-      if (sentryDSN && sentryDSN !== "" && sentryDSN !== "__SENTRY_DSN__") {
-        Sentry.init({
-          dsn: sentryDSN,
-          release: "unkillable-messenger@0.1.0",
-          environment: "__SENTRY_ENVIRONMENT__" || "production",
-          tracesSampleRate: 0.1,
-          replaysSessionSampleRate: 0,
-          replaysOnErrorSampleRate: 1.0,
-        });
-        console.log("[Sentry] Error tracking enabled");
-      } else {
-        console.log("[Sentry] Disabled (no DSN configured)");
-      }
-    })();
-  </script>
-
-  <!-- App scripts -->
-  <script type="module" src="/app.js"></script>
-</body>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Indestructible VPN</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #0f0f23; color: #e0e0e0; font-family: system-ui, sans-serif; }
+    </style>
+    <script type="module" crossorigin src="/assets/index-C5kC0Vsv.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-C_3cBucR.css">
+  <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
+  <body>
+    <div id="app"></div>
+  </body>
 </html>
