@@ -351,9 +351,20 @@ export const chatApi = {
     const from = cachedIdentity?.pubkey || cachedIdentity?.userId || '';
     const payload = makeChatPayload(from, to, content, !!e2eEnabled);
     const sent = sendRaw(payload);
-    if (sent) return { status: 200, data: { ok: true, via: 'ws', encrypted: payload.encrypted } };
-    console.warn('[api] sendDM: WS not open, optimistic UI only (REST skipped to avoid hang)');
-    return { status: 200, data: { ok: true, via: 'optimistic', encrypted: payload.encrypted } };
+    if (sent) {
+      // SL-032: persist via REST so DM survives page reload (WS is ephemeral)
+      try {
+        request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content }) });
+      } catch {}
+      return { status: 200, data: { ok: true, via: 'ws', encrypted: payload.encrypted } };
+    }
+    // WS not open → REST fallback (message persists + delivered on next poll)
+    try {
+      return await request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content }) });
+    } catch {
+      console.warn('[api] sendDM: WS not open, optimistic UI only');
+      return { status: 200, data: { ok: true, via: 'optimistic', encrypted: payload.encrypted } };
+    }
   },
   sendTyping: (to: string) => {
     sendRaw({ type: 'typing', from: cachedIdentity?.pubkey || '', to, ts: Math.floor(Date.now() / 1000) });

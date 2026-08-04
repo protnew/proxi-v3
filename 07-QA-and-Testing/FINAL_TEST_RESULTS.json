@@ -1,0 +1,23 @@
+{
+  "go": {
+    "pass": 27,
+    "fail": 0,
+    "exit": 0
+  },
+  "vitest": {
+    "pass": 10,
+    "fail": 0
+  },
+  "playwright": {
+    "pass": 19,
+    "fail": 1
+  },
+  "tunnel": {
+    "status": "HTTP/1.1 200 OK",
+    "ok": true
+  },
+  "dm_api": {
+    "send_status": 201,
+    "delivered": true
+  }
+}
