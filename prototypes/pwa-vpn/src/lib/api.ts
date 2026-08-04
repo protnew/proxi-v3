@@ -102,6 +102,21 @@ export function initIdentity(): string {
     return cachedIdentity.pubkey;
   }
 
+  // Demo mode: check for fixed test identities (Alice/Bob)
+  const demoRole = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_demo_role') : null;
+  if (demoRole === 'tester1') {
+    const k1 = '1'.repeat(64);
+    cachedIdentity = { pubkey: k1, privateKey: k1 };
+    exposeProxiDebug();
+    return cachedIdentity.pubkey;
+  }
+  if (demoRole === 'tester2') {
+    const k2 = '2'.repeat(64);
+    cachedIdentity = { pubkey: k2, privateKey: k2 };
+    exposeProxiDebug();
+    return cachedIdentity.pubkey;
+  }
+
   const bytes = new Uint8Array(32);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
   const privateKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');

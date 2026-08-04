@@ -104,9 +104,18 @@ if (initialView === 'advanced') {
 
     // 6. Browser identity (secp256k1 keys in localStorage, no Go server needed)
     statusText = 'Генерация ключей...'
-    const browserId: Identity = await getIdentity()
+    // Demo mode: if initIdentity set demo keys, preserve them
+    const demoRole = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_demo_role') : null;
+    let browserId: Identity;
+    if (demoRole === 'tester1' || demoRole === 'tester2') {
+      const demoKey = demoRole === 'tester1' ? '1'.repeat(64) : '2'.repeat(64);
+      browserId = { privateKey: demoKey, publicKey: demoKey, npub: 'npub1demo' + demoKey.slice(0, 16) };
+      console.log('[app] Demo mode identity:', demoRole);
+    } else {
+      browserId = await getIdentity();
+    }
     stores.profile.update(p => ({ ...p, pubkey: browserId.publicKey }))
-    console.log('[app] Browser identity:', browserId.npub.slice(0, 20) + '...')
+    console.log('[app] Identity:', browserId.publicKey.slice(0, 16) + '...')
 
     // 7. Try Nostr relays first (serverless mode)
     statusText = 'Подключение к Nostr relays...'
@@ -166,6 +175,23 @@ if (initialView === 'advanced') {
     })
 
     sendPresence(true)
+
+    // Auto-setup demo contacts: Alice and Bob pre-linked
+    const DEMO_ALICE = '1'.repeat(64);
+    const DEMO_BOB = '2'.repeat(64);
+    const myPk = pk || browserId.publicKey; // prefer demo key from initIdentity
+    if (myPk === DEMO_ALICE || myPk === DEMO_BOB) {
+      const isAlice = myPk === DEMO_ALICE;
+      const partnerPk = isAlice ? DEMO_BOB : DEMO_ALICE;
+      const partnerName = isAlice ? 'Bob' : 'Alice';
+      // Pre-create DM chat with partner
+      stores.ensureDMChat(partnerPk, partnerName);
+      stores.setContactOnline(partnerPk, true);
+      // Auto-select the chat
+      stores.activeChatId.set(`dm:${partnerPk}`);
+      console.log(`[app] Demo mode: ${isAlice ? 'Alice' : 'Bob'} → chat with ${partnerName} ready`);
+    }
+
     loading = false
   })
 
