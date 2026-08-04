@@ -1,0 +1,36 @@
+{
+  "ts": "2026-08-04T07:55:06Z",
+  "git": "0d028dd chore(qa): drop coverage *.out from git; keep Zero-Point reports only",
+  "branch": "dev",
+  "go_clean_pass": 29,
+  "go_clean_fail": [],
+  "covers": {
+    ".": {
+      "ok": true,
+      "cov": 62.4
+    },
+    "./auth/": {
+      "ok": true,
+      "cov": 91.2
+    },
+    "./chat/": {
+      "ok": true,
+      "cov": 84.7
+    },
+    "./store/": {
+      "ok": true,
+      "cov": 58.1
+    },
+    "./cmd/webserver/": {
+      "ok": true,
+      "cov": 34.2
+    },
+    "./nostr/": {
+      "ok": true,
+      "cov": 71.2
+    }
+  },
+  "vitest": "33/0",
+  "playwright": "20/0",
+  "howto": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\HOW_TO_RUN_FULL_FUNCTIONAL_TESTS.md"
+}
