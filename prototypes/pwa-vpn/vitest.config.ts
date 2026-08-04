@@ -7,6 +7,12 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['test/**/*.test.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'json-summary'],
+      include: ['src/lib/**/*.{ts,js}'],
+      exclude: ['src/lib/nostr_old.ts', 'src/lib/**/*.d.ts'],
+    },
   },
   resolve: {
     alias: {

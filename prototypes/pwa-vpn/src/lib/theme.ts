@@ -10,11 +10,12 @@ const listeners = new Set<(theme: Theme) => void>()
 
 export function getTheme(): Theme { return currentTheme }
 
-export function setTheme(theme: Theme) {
+export function setTheme(theme: Theme): Theme {
   currentTheme = theme
   localStorage.setItem('messenger-theme', theme)
   applyTheme(theme)
   listeners.forEach(cb => cb(theme))
+  return theme
 }
 
 export function toggleTheme(): Theme {

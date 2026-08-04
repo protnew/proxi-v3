@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:latest
+    container_name: indestructible_toxiproxy
+    ports:
+      # API порт Toxiproxy
+      - "8474:8474"
+      # Проксируемые порты (например, для WebTransport/WebRTC)
+      - "8443:8443/udp" # WebTransport proxy
+      - "8443:8443/tcp"
+      - "8080:8080/tcp" # Signaling proxy
+    command: ["-host=0.0.0.0", "-port=8474"]
+    restart: unless-stopped

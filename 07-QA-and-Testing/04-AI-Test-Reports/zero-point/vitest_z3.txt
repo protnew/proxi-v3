@@ -1,0 +1,57 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90mC:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn[39m
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted true by default
+[22m[39m[api] initIdentityAsync: signing up with npub=148e270db0ae63b2...
+
+[90mstdout[2m | test/api.test.ts[2m > [22m[2mAPI client[2m > [22m[2mshould initIdentity synchronously returning a hex string
+[22m[39m[api] initIdentityAsync: signing up with npub=b7014aa4ec7b1e06...
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted true by default
+[22m[39m[api] initIdentityAsync: ❌ signup failed! status=0 error=Cannot read properties of undefined (reading 'json')
+
+[90mstdout[2m | test/api.test.ts[2m > [22m[2mAPI client[2m > [22m[2mshould initIdentity synchronously returning a hex string
+[22m[39m[api] initIdentityAsync: ❌ signup failed! status=0 error=Cannot read properties of undefined (reading 'json')
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted false when E2E disabled
+[22m[39m[api] initIdentityAsync: signing up with npub=6c96e5273a9aabf4...
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted false when E2E disabled
+[22m[39m[api] initIdentityAsync: ❌ signup failed! status=0 error=Cannot read properties of undefined (reading 'json')
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mtoggling E2E flips subsequent payloads
+[22m[39m[api] initIdentityAsync: signing up with npub=d5b073fcc5c7bded...
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mtoggling E2E flips subsequent payloads
+[22m[39m[api] initIdentityAsync: ❌ signup failed! status=0 error=Cannot read properties of undefined (reading 'json')
+
+ [32m✓[39m test/api-no-token.test.ts[2m > [22mapi.ts request() auth header (production code)[2m > [22mdoes not send Authorization when proxi_token missing[32m 5[2mms[22m[39m
+ [32m✓[39m test/api-no-token.test.ts[2m > [22mapi.ts request() auth header (production code)[2m > [22msends Bearer token when proxi_token present[32m 1[2mms[22m[39m
+ [32m✓[39m test/api-no-token.test.ts[2m > [22mapi.ts request() auth header (production code)[2m > [22mreturns error payload on 401 without throwing necessarily[32m 1[2mms[22m[39m
+ [32m✓[39m test/e2e-flag.test.ts[2m > [22mMSG-009 isE2EEnabled on send path[2m > [22mbuildChatPayload.encrypted true by default[32m 52[2mms[22m[39m
+ [32m✓[39m test/e2e-flag.test.ts[2m > [22mMSG-009 isE2EEnabled on send path[2m > [22mbuildChatPayload.encrypted false when E2E disabled[32m 3[2mms[22m[39m
+ [32m✓[39m test/e2e-flag.test.ts[2m > [22mMSG-009 isE2EEnabled on send path[2m > [22mtoggling E2E flips subsequent payloads[32m 3[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould expose API_BASE[32m 40[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould initIdentity synchronously returning a hex string[32m 7[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould getPubkey returns cached identity[32m 0[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould getSeckey returns cached private key[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould getUserId returns empty initially[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould setIdentity stores pubkey and privateKey[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould sendPresence does not crash[32m 2[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould getName returns cached name or truncated pubkey[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould getStatus returns object[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould onMessage/onPresence/onTyping register callbacks[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould sendDM via WS returns 200[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould createGroup calls /api/groups/create[32m 1[2mms[22m[39m
+ [32m✓[39m test/api.test.ts[2m > [22mAPI client[2m > [22mshould listGroups calls /api/groups/list[32m 1[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m3 passed[39m[22m[90m (3)[39m
+[2m      Tests [22m [1m[32m19 passed[39m[22m[90m (19)[39m
+[2m   Start at [22m 06:32:58
+[2m   Duration [22m 550ms[2m (transform 241ms, setup 0ms, import 284ms, tests 132ms, environment 1ms)[22m
+
+06:32:58 [vite-plugin-svelte] invalid plugin options "hot" in inline config
+{ hot: false }
+[90mstderr[2m | test/api.test.ts[2m > [22m[2mAPI client[2m > [22m[2mshould sendDM via WS returns 200
+[22m[39m[api] sendDM: WS not open, optimistic UI only (REST skipped to avoid hang)
+

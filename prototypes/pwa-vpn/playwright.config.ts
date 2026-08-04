@@ -1,15 +1,20 @@
 import { defineConfig } from '@playwright/test';
 
-// Native Windows / local: expects Vite :5173 and Go API :8080 already running
-// (no Docker). CI starts them as services/steps.
+// Native Windows: Vite :5173 + Go API :8080 must be up
 export default defineConfig({
-  testDir: './e2e',
+  testDir: '.',
+  testMatch: [
+    'e2e/**/*.{spec,test}.{ts,js}',
+    'tests/e2e-messenger.spec.ts',
+  ],
+  // WebRTC preview suite needs :4173 — not part of native dev smoke
+  testIgnore: ['tests/e2e.spec.ts', '**/node_modules/**'],
   timeout: 45000,
   fullyParallel: false,
   retries: 0,
+  workers: 1,
   use: {
-    baseURL: process.env.APP_URL || 'http://localhost:5173',
+    baseURL: process.env.APP_URL || 'http://127.0.0.1:5173',
     trace: 'on-first-retry',
   },
-  // Keep deep.spec + messenger + alice-bob under e2e/
 });

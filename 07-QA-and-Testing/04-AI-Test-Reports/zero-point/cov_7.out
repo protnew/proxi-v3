@@ -1,0 +1,9 @@
+mode: atomic
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:15.13,17.16 2 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:17.16,20.3 2 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:23.2,34.21 4 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:34.21,36.21 2 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:36.21,37.12 1 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:40.3,42.32 3 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:46.2,46.18 1 0
+github.com/unkillable-messenger/vpn/cmd/bridge/main.go:49.39,53.2 3 0

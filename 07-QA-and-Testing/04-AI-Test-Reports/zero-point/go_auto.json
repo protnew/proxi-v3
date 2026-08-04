@@ -1,0 +1,209 @@
+{
+  "total": 65.3,
+  "packages": [
+    {
+      "pkg": ".",
+      "status": "PASS",
+      "cov": 62.4,
+      "sec": 12.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn\t5.612s\tcoverage: 62.4% of statements\n"
+    },
+    {
+      "pkg": "admin",
+      "status": "PASS",
+      "cov": 92.6,
+      "sec": 11.8,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/admin\t3.677s\tcoverage: 92.6% of statements\n"
+    },
+    {
+      "pkg": "analytics",
+      "status": "PASS",
+      "cov": 94.4,
+      "sec": 6.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/analytics\t1.726s\tcoverage: 94.4% of statements\n"
+    },
+    {
+      "pkg": "api",
+      "status": "PASS",
+      "cov": 94.2,
+      "sec": 6.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/api\t2.661s\tcoverage: 94.2% of statements\n"
+    },
+    {
+      "pkg": "auth",
+      "status": "PASS",
+      "cov": 91.2,
+      "sec": 5.8,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/auth\t2.406s\tcoverage: 91.2% of statements\n"
+    },
+    {
+      "pkg": "bot",
+      "status": "PASS",
+      "cov": 92.0,
+      "sec": 8.0,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/bot\t2.763s\tcoverage: 92.0% of statements\n"
+    },
+    {
+      "pkg": "chat",
+      "status": "PASS",
+      "cov": 84.8,
+      "sec": 18.9,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/chat\t8.048s\tcoverage: 84.8% of statements\n"
+    },
+    {
+      "pkg": "cmd/bridge",
+      "status": "PASS",
+      "cov": 0.0,
+      "sec": 10.5,
+      "tail": "\tgithub.com/unkillable-messenger/vpn/cmd/bridge\t\tcoverage: 0.0% of statements\n"
+    },
+    {
+      "pkg": "cmd/webserver",
+      "status": "PASS",
+      "cov": 34.2,
+      "sec": 9.1,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/cmd/webserver\t3.725s\tcoverage: 34.2% of statements\n"
+    },
+    {
+      "pkg": "content",
+      "status": "PASS",
+      "cov": 82.8,
+      "sec": 4.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/content\t1.757s\tcoverage: 82.8% of statements\n"
+    },
+    {
+      "pkg": "crypto",
+      "status": "PASS",
+      "cov": 71.9,
+      "sec": 2.2,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/crypto\t0.576s\tcoverage: 71.9% of statements\n"
+    },
+    {
+      "pkg": "economy",
+      "status": "PASS",
+      "cov": 0.0,
+      "sec": 1.3,
+      "tail": "\tgithub.com/unkillable-messenger/vpn/economy\t\tcoverage: 0.0% of statements\n"
+    },
+    {
+      "pkg": "federation",
+      "status": "PASS",
+      "cov": 75.1,
+      "sec": 5.6,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/federation\t3.044s\tcoverage: 75.1% of statements\n"
+    },
+    {
+      "pkg": "i18n",
+      "status": "PASS",
+      "cov": 100.0,
+      "sec": 1.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/i18n\t0.489s\tcoverage: 100.0% of statements\n"
+    },
+    {
+      "pkg": "identity",
+      "status": "PASS",
+      "cov": 59.7,
+      "sec": 2.1,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/identity\t0.630s\tcoverage: 59.7% of statements\n"
+    },
+    {
+      "pkg": "integration",
+      "status": "PASS",
+      "cov": 100.0,
+      "sec": 3.2,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/integration\t1.234s\tcoverage: 100.0% of statements\n"
+    },
+    {
+      "pkg": "ipfs",
+      "status": "PASS",
+      "cov": 57.0,
+      "sec": 3.4,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/ipfs\t1.290s\tcoverage: 57.0% of statements\n"
+    },
+    {
+      "pkg": "media",
+      "status": "PASS",
+      "cov": 78.1,
+      "sec": 2.0,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/media\t0.569s\tcoverage: 78.1% of statements\n"
+    },
+    {
+      "pkg": "mesh",
+      "status": "PASS",
+      "cov": 91.6,
+      "sec": 2.1,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/mesh\t0.634s\tcoverage: 91.6% of statements\n"
+    },
+    {
+      "pkg": "middleware",
+      "status": "PASS",
+      "cov": 94.2,
+      "sec": 3.2,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/middleware\t1.142s\tcoverage: 94.2% of statements\n"
+    },
+    {
+      "pkg": "msgops",
+      "status": "PASS",
+      "cov": 92.9,
+      "sec": 2.0,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/msgops\t0.638s\tcoverage: 92.9% of statements\n"
+    },
+    {
+      "pkg": "nat",
+      "status": "PASS",
+      "cov": 83.3,
+      "sec": 2.4,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/nat\t0.895s\tcoverage: 83.3% of statements\n"
+    },
+    {
+      "pkg": "nostr",
+      "status": "PASS",
+      "cov": 71.2,
+      "sec": 4.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/nostr\t1.800s\tcoverage: 71.2% of statements\n"
+    },
+    {
+      "pkg": "push",
+      "status": "PASS",
+      "cov": 70.9,
+      "sec": 3.7,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/push\t1.335s\tcoverage: 70.9% of statements\n"
+    },
+    {
+      "pkg": "social",
+      "status": "PASS",
+      "cov": 91.2,
+      "sec": 2.9,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/social\t1.107s\tcoverage: 91.2% of statements\n"
+    },
+    {
+      "pkg": "storage",
+      "status": "PASS",
+      "cov": 74.1,
+      "sec": 4.0,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/storage\t1.366s\tcoverage: 74.1% of statements\n"
+    },
+    {
+      "pkg": "store",
+      "status": "PASS",
+      "cov": 58.1,
+      "sec": 4.5,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/store\t2.978s\tcoverage: 58.1% of statements\n"
+    },
+    {
+      "pkg": "stream",
+      "status": "PASS",
+      "cov": 83.5,
+      "sec": 2.2,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/stream\t0.647s\tcoverage: 83.5% of statements\n"
+    },
+    {
+      "pkg": "tor",
+      "status": "PASS",
+      "cov": 64.0,
+      "sec": 3.2,
+      "tail": "ok  \tgithub.com/unkillable-messenger/vpn/tor\t1.131s\tcoverage: 64.0% of statements\n"
+    }
+  ],
+  "ts": "2026-08-04T05:59:54Z"
+}

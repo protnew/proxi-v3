@@ -1,0 +1,13 @@
+mode: set
+github.com/unkillable-messenger/vpn/economy/bandwidth.go:18.91,23.2 1 0
+github.com/unkillable-messenger/vpn/economy/bandwidth.go:26.93,28.32 2 0
+github.com/unkillable-messenger/vpn/economy/bandwidth.go:28.32,29.34 1 0
+github.com/unkillable-messenger/vpn/economy/bandwidth.go:29.34,31.4 1 0
+github.com/unkillable-messenger/vpn/economy/bandwidth.go:33.2,33.50 1 0
+github.com/unkillable-messenger/vpn/economy/bandwidth.go:36.42,38.2 1 0
+github.com/unkillable-messenger/vpn/economy/lightning.go:11.60,13.2 1 0
+github.com/unkillable-messenger/vpn/economy/lightning.go:16.95,19.2 1 0
+github.com/unkillable-messenger/vpn/economy/lightning.go:22.61,25.2 1 0
+github.com/unkillable-messenger/vpn/economy/lightning.go:28.58,31.2 1 0
+github.com/unkillable-messenger/vpn/economy/storage.go:13.77,16.2 2 0
+github.com/unkillable-messenger/vpn/economy/storage.go:19.61,21.2 1 0
