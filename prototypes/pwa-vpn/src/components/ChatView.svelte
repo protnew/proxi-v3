@@ -122,8 +122,15 @@
         const resp: any = await sendGroupMessage(peer, text)
         if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp)
       } else {
-        const resp: any = await sendDM(peer, text)
-        if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
+        // SL-012: Try Nostr (serverless) first, fall back to Go API
+        const nostr = (window as any).__nostrChat
+        if (nostr && nostr.isConnected) {
+          const ok = await nostr.sendDM(peer, text)
+          if (!ok) console.warn('[chatview] Nostr send failed, not connected to any relay')
+        } else {
+          const resp: any = await sendDM(peer, text)
+          if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
+        }
       }
     } catch (e) {
       console.error('[chatview] sendMessage error', e)

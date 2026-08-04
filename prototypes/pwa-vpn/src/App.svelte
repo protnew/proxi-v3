@@ -21,6 +21,8 @@ if (initialView === 'advanced') {
   import { onMount } from 'svelte'
   import * as stores from './stores/messenger'
   import { initIdentity, initIdentityAsync, connectRelays, sendPresence, getName, onMessage, onPresence, onTyping, getStatus } from './lib/api'
+  import { getIdentity, type Identity } from './lib/identity'
+  import { NostrChat, type NostrMessage } from './lib/nostr-chat'
   import { setOnFileComplete } from './lib/peer-manager'
   import { initTheme } from './lib/theme'
   import { initSounds, playIncoming } from './lib/sounds'
@@ -100,18 +102,47 @@ if (initialView === 'advanced') {
       Notification.requestPermission()
     }
 
-    // 6. Complete identity (signup + JWT token) — MUST finish before WS connect
-    statusText = 'Авторизация...'
-    const realPk = await initIdentityAsync()
-    if (realPk) {
-      stores.profile.update(p => ({ ...p, pubkey: realPk }))
-    }
+    // 6. Browser identity (secp256k1 keys in localStorage, no Go server needed)
+    statusText = 'Генерация ключей...'
+    const browserId: Identity = await getIdentity()
+    stores.profile.update(p => ({ ...p, pubkey: browserId.publicKey }))
+    console.log('[app] Browser identity:', browserId.npub.slice(0, 20) + '...')
 
-    // 7. Connect WebSocket with JWT token
-    statusText = 'Подключение к серверу...'
-    const relayCount = await connectRelays()
-    statusText = `Подключено к ${relayCount} relays`
-    console.log('[app] Nostr status:', getStatus())
+    // 7. Try Nostr relays first (serverless mode)
+    statusText = 'Подключение к Nostr relays...'
+    let nostrChat: NostrChat | null = new NostrChat(browserId)
+    nostrChat.onMessage((msg: NostrMessage) => {
+      console.log('[app] Nostr DM from', msg.from.slice(0, 16), ':', msg.text.slice(0, 50))
+      const peerName = getName(msg.from)
+      stores.ensureDMChat(msg.from, peerName)
+      stores.addMessage(`dm:${msg.from}`, {
+        id: msg.id, from: msg.from, to: msg.to, text: msg.text,
+        timestamp: msg.timestamp, type: 'text', read: false,
+      })
+      playIncoming()
+    })
+    const nostrRelays = await nostrChat.connect()
+    statusText = nostrRelays > 0
+      ? `Nostr: ${nostrRelays} relays (serverless)`
+      : 'Fallback: Go server mode...'
+    console.log('[app] Transport:', nostrRelays > 0 ? 'Nostr (serverless)' : 'Go fallback')
+
+    // SL-014: If Nostr failed, fall back to Go WS (backward compat)
+    let goRelays = 0
+    if (nostrRelays === 0) {
+      nostrChat = null
+      try {
+        const realPk = await initIdentityAsync()
+        if (realPk) stores.profile.update(p => ({ ...p, pubkey: realPk }))
+        goRelays = await connectRelays()
+        statusText = `Go server: ${goRelays} relay`
+      } catch (e) {
+        console.warn('[app] Go fallback also failed:', e)
+        statusText = 'Offline mode (messages queued)'
+      }
+    }
+    // Expose nostrChat globally for ChatView to use
+    ;(window as any).__nostrChat = nostrChat
 
     // Set up incoming file handler
     setOnFileComplete((blob: Blob, manifest) => {

@@ -31,7 +31,15 @@ import { makeChatPayload } from './api-payload';
 // If VITE_API_URL is empty → same-origin (Go serves both dist + API on one port).
 // This is how "Telegram Web" works: one URL, no separate API host.
 const API_BASE = (import.meta as any).env?.VITE_API_URL || '';
-const WS_BASE = API_BASE ? API_BASE.replace(/^http/, 'ws') : `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+// In browser: derive WS from location. In Node.js tests: fallback to localhost.
+function deriveWsBase(): string {
+  if (API_BASE) return API_BASE.replace(/^http/, 'ws');
+  if (typeof location !== 'undefined') {
+    return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
+  }
+  return 'ws://localhost:8080'; // Node.js test fallback
+}
+const WS_BASE = deriveWsBase();
 
 export interface ApiResponse<T = any> {
   data?: T;
