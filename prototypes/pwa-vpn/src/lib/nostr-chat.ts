@@ -32,7 +32,8 @@ export interface NostrMessage {
 type MessageCallback = (msg: NostrMessage) => void
 
 async function deriveSharedSecret(privKey: string, pubKey: string): Promise<string> {
-  const shared = secp.getSharedSecret(privKey, '02' + pubKey)
+  // @noble/secp256k1 v2: requires Uint8Array
+  const shared = secp.getSharedSecret(hexToBytes(privKey), hexToBytes('02' + pubKey))
   return bytesToHex(shared.slice(1, 33))
 }
 
