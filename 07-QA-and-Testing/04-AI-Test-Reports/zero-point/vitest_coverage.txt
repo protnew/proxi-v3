@@ -1,5 +1,0 @@
-00:02:27 [vite-plugin-svelte] invalid plugin options "hot" in inline config
-{ hot: false }
-[1m[30m[41m MISSING DEPENDENCY [49m[39m[22m [31mCannot find dependency '@vitest/coverage-v8'
-
-[39m

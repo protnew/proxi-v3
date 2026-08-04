@@ -48,3 +48,14 @@ prototypes/pwa-vpn/vite-dev.log
 # accidental duplicate test path
 prototypes/pwa-vpn/tests/api-no-token.test.ts
 
+
+# coverage artifacts (do not commit)
+**/coverage/
+**/*.out
+07-QA-and-Testing/**/*.out
+07-QA-and-Testing/**/*_output.txt
+07-QA-and-Testing/**/vitest_*.txt
+07-QA-and-Testing/**/playwright_*.txt
+07-QA-and-Testing/**/r2_*.out
+07-QA-and-Testing/**/z3_*.out
+07-QA-and-Testing/**/cov_*.out
