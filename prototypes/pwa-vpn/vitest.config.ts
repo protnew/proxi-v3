@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['test/**/*.test.ts'],
+    setupFiles: ['test/_setup.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json-summary'],
@@ -17,6 +18,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '$app': '/dev/null',
-    }
-  }
+    },
+  },
 });

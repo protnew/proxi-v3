@@ -96,7 +96,7 @@ export async function signEvent(event: Record<string, unknown>, privateKey: stri
   const msgHash = bytesToHex(
     new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(serialized)))
   )
-  const sigBytes = await secp.schnorr.sign(hexToBytes(msgHash), hexToBytes(privateKey))
+  const sigBytes = await secp.schnorr.signAsync(hexToBytes(msgHash), hexToBytes(privateKey))
   const sig = bytesToHex(sigBytes)
   return sig
 }
