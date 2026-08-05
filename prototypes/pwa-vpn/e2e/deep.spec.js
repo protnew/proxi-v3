@@ -1,10 +1,10 @@
 import { test, expect } from '@playwright/test';
-const BASE = 'http://localhost:5173';
+const BASE = process.env.APP_URL || 'http://127.0.0.1:8080';
 
 test.describe.serial('10 Functional Screenshots', () => {
 
   test('01 Main chat screen', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(4000);
     await page.screenshot({ path: 'e2e-shots/s01-main.png', fullPage: true });
     const text = await page.locator('body').textContent();
@@ -12,7 +12,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('02 Sidebar search', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const search = page.locator('input[placeholder*="Поиск"], input[type="text"]').first();
     await search.fill('test query');
@@ -21,7 +21,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('03 New chat dialog', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const btn = page.locator('.new-btn').first();
     if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -32,7 +32,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('04 Group tab', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const btn = page.locator('.new-btn').first();
     if (await btn.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -46,7 +46,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('05 Settings profile', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const menu = page.locator('.menu-btn').first();
     if (await menu.isVisible({ timeout: 3000 }).catch(() => false)) await menu.click();
@@ -55,7 +55,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('06 Public key + QR', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const menu = page.locator('.menu-btn').first();
     if (await menu.isVisible()) await menu.click();
@@ -67,7 +67,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('07 Advanced tab', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const menu = page.locator('.menu-btn').first();
     if (await menu.isVisible()) await menu.click();
@@ -79,7 +79,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('08 E2E toggle click', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const menu = page.locator('.menu-btn').first();
     if (await menu.isVisible()) await menu.click();
@@ -96,7 +96,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('09 Alice demo', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const alice = page.locator('button:has-text("Alice"), button:has-text("T1")').first();
     if (await alice.isVisible({ timeout: 3000 }).catch(() => false)) {
@@ -107,7 +107,7 @@ test.describe.serial('10 Functional Screenshots', () => {
   });
 
   test('10 Bob demo final', async ({ page }) => {
-    await page.goto(BASE, { waitUntil: 'networkidle' });
+    await page.goto(BASE, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(3000);
     const bob = page.locator('button:has-text("Bob"), button:has-text("T2")').first();
     if (await bob.isVisible({ timeout: 3000 }).catch(() => false)) {
