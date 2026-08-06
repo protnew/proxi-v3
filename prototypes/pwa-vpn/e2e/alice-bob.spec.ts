@@ -1,7 +1,7 @@
 import { test, expect, Page } from '@playwright/test'
 
 const APP_URL = process.env.APP_URL || 'http://localhost:5173'
-const API = process.env.API_URL || 'http://localhost:8080'
+const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
 async function waitForApp(page: Page) {
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' })
@@ -47,7 +47,7 @@ test.describe('Alice → Bob DM', () => {
   test('message delivery via WS or REST reload', async ({ browser }) => {
     test.setTimeout(90000) // 90s for two-browser E2E
     const health = await fetch(`${API}/api/health`).then(r => r.status).catch(() => 0)
-    expect(health, 'Go server :8080 required').toBe(200)
+    expect(health, 'Go API required').toBe(200)
 
     const aliceCtx = await browser.newContext()
     const bobCtx = await browser.newContext()
