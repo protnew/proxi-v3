@@ -7,6 +7,14 @@ const roleParam = urlParams.get('role');
 if (roleParam === 'alice' || roleParam === 'bob') {
   localStorage.setItem('proxi_demo_role', roleParam === 'alice' ? 'tester1' : 'tester2');
 }
+
+// Mobile view switching: sidebar <-> chat
+let mobileChatOpen = $state(false);
+function openMobileChat() { mobileChatOpen = true; }
+function closeMobileChat() { mobileChatOpen = false; }
+
+// Detect mobile
+const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
 if (initialView === 'settings') {
   setTimeout(() => { stores.showSettings.set(true); }, 500);
 }
@@ -254,11 +262,17 @@ if (initialView === 'advanced') {
 {:else}
   <div class="app">
     {#if showSettingsView}
-      <Settings />
+      <div class="settings-mobile-wrapper" class:hidden-mobile={mobileChatOpen}>
+        <Settings />
+      </div>
     {:else}
-      <Sidebar />
+      <div class="sidebar-mobile-wrapper" class:hidden-mobile={mobileChatOpen}>
+        <Sidebar on:chatselect={openMobileChat} />
+      </div>
     {/if}
-    <ChatView />
+    <div class="chat-mobile-wrapper" class:hidden-mobile={!mobileChatOpen && isMobile}>
+      <ChatView on:back={closeMobileChat} />
+    </div>
     <NewChat />
     <GroupCreate />
     <CallOverlay />
@@ -318,4 +332,17 @@ if (initialView === 'advanced') {
   .spinner { width: 40px; height: 40px; border: 3px solid #2a2a4a; border-top-color: #3a7bd5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .loading p { color: #7a8a9a; font-size: 14px; }
+
+  /* Mobile wrappers */
+  .sidebar-mobile-wrapper { height: 100%; }
+  .chat-mobile-wrapper { flex: 1; height: 100%; min-width: 0; }
+  .settings-mobile-wrapper { width: 100%; height: 100%; overflow-y: auto; }
+  @media (max-width: 768px) {
+    .sidebar-mobile-wrapper { width: 100%; }
+    .sidebar-mobile-wrapper.hidden-mobile { display: none; }
+    .chat-mobile-wrapper.hidden-mobile { display: none; }
+    .settings-mobile-wrapper.hidden-mobile { display: none; }
+    .chat-mobile-wrapper { width: 100%; flex: none; }
+  }
+
 </style>

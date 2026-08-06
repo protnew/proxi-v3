@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  const dispatch = createEventDispatcher();
   import * as stores from '../stores/messenger'
   import { getPubkey, getName } from '../lib/api'
   import { onPresence } from '../lib/api'
@@ -59,6 +61,8 @@
   })
 
   function selectChat(id: string) {
+    dispatch('chatselect');
+
     stores.activeChatId.set(id)
     stores.markRead(id)
   }

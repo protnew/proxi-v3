@@ -1,58 +1,97 @@
 :root { color-scheme: dark; }
 
+/* === MOBILE RESPONSIVE === */
 
-/* UI-005: Mobile responsive layout */
+/* Tablet and phone: show one panel at a time */
 @media (max-width: 768px) {
-  .app-container, .main-layout, .app {
-    flex-direction: column !important;
+  .app {
+    flex-direction: row !important;
+    position: relative;
   }
+
+  /* Sidebar: full width, slides out when chat open */
   .sidebar {
     width: 100% !important;
-    max-height: 40vh;
-    border-right: none !important;
-    border-bottom: 1px solid rgba(255,255,255,0.08);
+    min-width: 0 !important;
+    max-width: 100% !important;
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    z-index: 100;
+    transition: transform 0.25s ease;
   }
-  .sidebar.collapsed {
-    max-height: 50px;
-    overflow: hidden;
+  .sidebar.hidden-mobile {
+    transform: translateX(-100%);
   }
-  .chat-area, .chat {
-    flex: 1;
-    width: 100%;
-  }
-  .settings-panel, .right-panel {
+
+  /* Chat area: full width when visible */
+  .chat-area {
     width: 100% !important;
     position: absolute;
-    bottom: 0;
-    max-height: 50vh;
+    top: 0; left: 0; bottom: 0; right: 0;
+    z-index: 90;
   }
+  .chat-area.hidden-mobile {
+    display: none !important;
+  }
+
+  /* Back button visible on mobile */
+  .back-btn { display: flex !important; }
+
+  /* Messages fill screen */
   .messages {
     padding: 8px !important;
   }
-  .msg .bubble {
-    max-width: 90%;
-    font-size: 13px;
+  .bubble {
+    max-width: 85% !important;
+    font-size: 14px;
   }
-  .input-bar input {
-    font-size: 16px; /* prevent iOS zoom */
+
+  /* Input bar: prevent iOS zoom */
+  textarea, .input-bar input {
+    font-size: 16px !important;
+  }
+  .input-area {
+    padding: 8px 10px !important;
+  }
+
+  /* VPN panel compact */
+  .vpn-panel {
+    padding: 8px !important;
+  }
+  .vpn-panel .modes label {
+    font-size: 10px !important;
+    padding: 4px 6px !important;
+  }
+
+  /* Demo panel: collapsible on mobile */
+  .demo-panel {
+    width: calc(100vw - 32px) !important;
+    max-width: 320px;
+    bottom: 8px !important;
+    right: 8px !important;
+  }
+  .demo-panel.collapsed .demo-content {
+    display: none !important;
+  }
+  .demo-panel.collapsed {
+    width: auto !important;
   }
 }
 
 @media (max-width: 480px) {
-  .sidebar {
-    max-height: 30vh;
+  .sidebar .header {
+    padding: 8px 10px !important;
   }
-  .header {
-    padding: 6px 10px;
+  .chat-header {
+    padding: 8px 12px !important;
   }
-  .brand h1 {
-    font-size: 14px;
+  .avatar {
+    width: 36px !important;
+    height: 36px !important;
+    font-size: 16px !important;
   }
-  .quick-btn {
-    font-size: 10px;
-    padding: 4px 8px;
-  }
-  .panel {
-    padding: 8px;
+  .send-btn, .mic-btn {
+    width: 40px !important;
+    height: 40px !important;
   }
 }

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
+  const dispatch = createEventDispatcher();
   import "./ChatView.css";
   import * as stores from '../stores/messenger'
   import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getStatus } from '../lib/api'
@@ -346,6 +348,7 @@ function processMessageUrls(text: string) {
 {#if currentChat}
   <div class="chat-area">
     <div class="chat-header">
+      <button class="back-btn" onclick={() => dispatch('back')} title="Назад">‹ Назад</button>
       <button class="back-btn" onclick={goBack}>←</button>
       <div class="avatar">{currentChat.avatar}</div>
       <div class="peer-info">

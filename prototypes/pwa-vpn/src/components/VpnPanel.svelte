@@ -65,6 +65,20 @@
   function copySocks() {
     if (stats.socksAddr) navigator.clipboard.writeText(stats.socksAddr)
   }
+
+  // Generate share link for friend: socks://host:port
+  let shareUrl = $state('')
+  $effect(() => {
+    if (stats.socksAddr) {
+      const host = window.location.hostname || '127.0.0.1'
+      const port = stats.socksAddr.split(':').pop() || '10808'
+      shareUrl = `socks5://${host}:${port}`
+    }
+  })
+
+  function copyShareLink() {
+    if (shareUrl) navigator.clipboard.writeText(shareUrl)
+  }
 </script>
 
 <div class="vpn-panel" class:expanded class:on={active} class:real={stats.realTraffic}>
@@ -119,6 +133,20 @@
             <code>{stats.socksAddr}</code>
             <button type="button" class="copy" onclick={copySocks}>📋</button>
           </div>
+
+          {#if active && stats.socksAddr}
+            <div class="share-box">
+              <div class="share-title">📡 Поделиться VPN с другом</div>
+              <div class="share-link-row">
+                <input type="text" readonly value={shareUrl} class="share-input" />
+                <button type="button" class="copy share-copy" onclick={copyShareLink}>📋</button>
+              </div>
+              <p class="hint">
+                Отправь эту ссылку другу. Он откроет её, нажмёт «Подключиться» — и его трафик пойдёт через твой SOCKS5.
+              </p>
+            </div>
+          {/if}
+
           <p class="hint ok">
             В Chrome: Settings → System → Open proxy settings → вручную SOCKS5 <code>{stats.socksAddr}</code><br />
             Или: <code>curl --socks5 {stats.socksAddr} https://api.ipify.org</code>
@@ -200,4 +228,9 @@
   .toggle-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: #1e3a5f; color: #7dd3fc; font-family: inherit; }
   .toggle-btn.on { background: #3a1a1a; color: #ff6b6b; }
   .toggle-btn:disabled { opacity: 0.6; cursor: wait; }
+  .share-box { background: #0d2818; border: 1px solid #1a4a2a; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+  .share-title { font-size: 12px; font-weight: 600; color: #6ee7b7; margin-bottom: 6px; }
+  .share-link-row { display: flex; gap: 6px; }
+  .share-input { flex: 1; background: #17212b; border: 1px solid #2a4a3a; color: #6ee7b7; padding: 6px 8px; border-radius: 6px; font-size: 12px; font-family: monospace; }
+  .share-copy { flex: none; }
 </style>
