@@ -1,7 +1,12 @@
 <script lang="ts">
-// Deep-link routing: ?view=settings, ?view=newchat, ?view=advanced
+// Deep-link routing: ?view=settings, ?view=newchat, ?view=advanced, ?role=alice|bob
 const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
 const initialView = urlParams.get('view');
+// ?role=alice → tester1 (key 111…), ?role=bob → tester2 (key 222…)
+const roleParam = urlParams.get('role');
+if (roleParam === 'alice' || roleParam === 'bob') {
+  localStorage.setItem('proxi_demo_role', roleParam === 'alice' ? 'tester1' : 'tester2');
+}
 if (initialView === 'settings') {
   setTimeout(() => { stores.showSettings.set(true); }, 500);
 }
