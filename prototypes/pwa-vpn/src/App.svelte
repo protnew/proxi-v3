@@ -117,8 +117,10 @@ if (initialView === 'advanced') {
     stores.profile.update(p => ({ ...p, pubkey: browserId.publicKey }))
     console.log('[app] Identity:', browserId.publicKey.slice(0, 16) + '...')
 
-    // 7. Try Nostr relays first (serverless mode)
-    statusText = 'Подключение к Nostr relays...'
+    // 7. DUAL TRANSPORT (audit 2026-08-05):
+    //    - Nostr = optional serverless path
+    //    - Go /ws = ALWAYS when local API healthy (do NOT skip if Nostr connects)
+    statusText = 'Подключение транспортов...'
     let nostrChat: NostrChat | null = new NostrChat(browserId)
     nostrChat.onMessage((msg: NostrMessage) => {
       console.log('[app] Nostr DM from', msg.from.slice(0, 16), ':', msg.text.slice(0, 50))
@@ -130,28 +132,54 @@ if (initialView === 'advanced') {
       })
       playIncoming()
     })
-    const nostrRelays = await nostrChat.connect()
-    statusText = nostrRelays > 0
-      ? `Nostr: ${nostrRelays} relays (serverless)`
-      : 'Fallback: Go server mode...'
-    console.log('[app] Transport:', nostrRelays > 0 ? 'Nostr (serverless)' : 'Go fallback')
+    let nostrRelays = 0
+    try {
+      nostrRelays = await nostrChat.connect()
+    } catch (e) {
+      console.warn('[app] Nostr connect failed:', e)
+      nostrRelays = 0
+    }
+    if (nostrRelays === 0) nostrChat = null
 
-    // SL-014: If Nostr failed, fall back to Go WS (backward compat)
+    // Go hub — always attempt (signup JWT + /ws). Independent of Nostr.
     let goRelays = 0
-    if (nostrRelays === 0) {
-      nostrChat = null
+    try {
+      // Probe health first (same-origin or VITE_API_URL)
+      const healthUrl = ((import.meta as any).env?.VITE_API_URL || '') + '/api/health'
+      let healthOk = false
       try {
+        const hr = await fetch(healthUrl || '/api/health', { method: 'GET' })
+        healthOk = hr.ok
+      } catch {
+        healthOk = false
+      }
+      if (healthOk) {
         const realPk = await initIdentityAsync()
         if (realPk) stores.profile.update(p => ({ ...p, pubkey: realPk }))
         goRelays = await connectRelays()
-        statusText = `Go server: ${goRelays} relay`
-      } catch (e) {
-        console.warn('[app] Go fallback also failed:', e)
-        statusText = 'Offline mode (messages queued)'
+      } else {
+        console.warn('[app] Go /api/health not OK — skip local WS')
       }
+    } catch (e) {
+      console.warn('[app] Go transport failed:', e)
+      goRelays = 0
     }
-    // Expose nostrChat globally for ChatView to use
+
+    const parts: string[] = []
+    if (goRelays > 0) parts.push(`Go WS: ${goRelays}`)
+    if (nostrRelays > 0) parts.push(`Nostr: ${nostrRelays}`)
+    statusText = parts.length ? parts.join(' + ') : 'Offline mode (messages queued)'
+    console.log('[app] Transport dual:', { goRelays, nostrRelays, statusText })
+
+    // Expose transports for ChatView / DemoPanel
     ;(window as any).__nostrChat = nostrChat
+    ;(window as any).__goRelays = goRelays
+    ;(window as any).__nostrRelays = nostrRelays
+    ;(window as any).__transportStatus = {
+      go: goRelays > 0,
+      nostr: nostrRelays > 0,
+      label: statusText,
+    }
 
     // Set up incoming file handler
     setOnFileComplete((blob: Blob, manifest) => {

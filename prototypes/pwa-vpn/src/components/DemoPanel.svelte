@@ -54,7 +54,16 @@
   function checkWS() {
     import('../lib/api').then(api => {
       const status = api.getStatus();
-      wsStatus = status.connected ? `✅ ${status.url || 'connected'}` : '❌ disconnected';
+      const t = (window as any).__transportStatus;
+      const goOk = !!(status?.connected || t?.go);
+      const nostrOk = !!(t?.nostr || (window as any).__nostrChat?.isConnected);
+      const parts: string[] = [];
+      if (goOk) parts.push('Go WS ✅');
+      else parts.push('Go WS ✕');
+      if (nostrOk) parts.push('Nostr ✅');
+      else parts.push('Nostr ✕');
+      wsStatus = parts.join(' · ');
+      if (status?.url && goOk) wsStatus += ` (${status.url})`;
     });
   }
 
@@ -111,7 +120,7 @@
     <!-- WS Status -->
     <div class="info-block">
       <div class="info-label">⚡ WebSocket</div>
-      <div class="info-value ws-{wsStatus.startsWith('✅') ? 'ok' : 'fail'}">{wsStatus}</div>
+      <div class="info-value ws-{wsStatus.includes('Go WS ✅') || wsStatus.includes('Nostr ✅') ? 'ok' : 'fail'}">{wsStatus}</div>
     </div>
 
     <!-- Identity -->

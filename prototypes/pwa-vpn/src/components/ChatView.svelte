@@ -1,7 +1,7 @@
 <script lang="ts">
   import "./ChatView.css";
   import * as stores from '../stores/messenger'
-  import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage } from '../lib/api'
+  import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getStatus } from '../lib/api'
   import { playOutgoing } from '../lib/sounds'
   import { formatTime, formatDay, getDate, formatSize, extractUrls } from '../lib/chat-utils'
   import { sendFile } from '../lib/peer-manager'
@@ -122,14 +122,21 @@
         const resp: any = await sendGroupMessage(peer, text)
         if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp)
       } else {
-        // SL-012: Try Nostr (serverless) first, fall back to Go API
+        // Dual: Go first if connected; Nostr optional backup
+        const go = getStatus()
         const nostr = (window as any).__nostrChat
-        if (nostr && nostr.isConnected) {
-          const ok = await nostr.sendDM(peer, text)
-          if (!ok) console.warn('[chatview] Nostr send failed, not connected to any relay')
-        } else {
+        let sent = false
+        if (go?.connected) {
           const resp: any = await sendDM(peer, text)
           if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
+          else sent = true
+        }
+        if (nostr?.isConnected) {
+          try { if (await nostr.sendDM(peer, text)) sent = true } catch {}
+        }
+        if (!sent) {
+          const resp: any = await sendDM(peer, text)
+          if (resp?.status >= 400) console.error('[chatview] sendDM fallback failed', resp)
         }
       }
     } catch (e) {
@@ -418,7 +425,6 @@ function processMessageUrls(text: string) {
           </div>
         </div>
       {/each}
-
       {#if currentChat.messages.length === 0}
         <div class="no-msg">
           <div>💬</div>
@@ -427,7 +433,6 @@ function processMessageUrls(text: string) {
         </div>
       {/if}
     </div>
-
     {#if contextMenu}
       <div class="ctx-menu" style="left:{contextMenu.x}px;top:{contextMenu.y}px">
         <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doReply(m) }}>↩ Ответить</button>
@@ -443,21 +448,18 @@ function processMessageUrls(text: string) {
         </div>
       </div>
     {/if}
-
     {#if replyTo}
       <div class="reply-bar">
         <span>↩ {replyTo.text.slice(0, 50)}{replyTo.text.length > 50 ? '...' : ''}</span>
         <button onclick={() => replyTo = null}>✕</button>
       </div>
     {/if}
-
     {#if editingMsg}
       <div class="reply-bar editing">
         <span>✏️ Редактирование: {editingMsg.text.slice(0, 50)}</span>
         <button onclick={() => { editingMsg = null; inputText = '' }}>✕</button>
       </div>
     {/if}
-
     <div class="input-area">
       <button class="ibtn" onclick={() => showEmoji = !showEmoji}>😊</button>
       <EmojiPicker {showEmoji} onSelect={addEmoji} />
@@ -478,7 +480,6 @@ function processMessageUrls(text: string) {
         </button>
       {/if}
     </div>
-
     <!-- Upload progress -->
     {#if uploading}
       <div class="upload-bar">
