@@ -14,7 +14,7 @@ test('node: signed kind:30090 accepted by local relay', async () => {
   expect(out).toContain('published')
 })
 
-test('product UI: give VPN → WT start + signed invite log', async ({ page }) => {
+test('product UI: give VPN → signed invite (WebRTC)', async ({ page }) => {
   await page.goto(BASE + '/?role=alice', { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(6000)
   await expect(page.getByTestId('vpn-give')).toBeVisible()
@@ -26,19 +26,18 @@ test('product UI: give VPN → WT start + signed invite log', async ({ page }) =
   for (let i = 0; i < 15; i++) {
     await page.waitForTimeout(1000)
     log = await page.getByTestId('vpn-log').innerText().catch(() => '')
-    if (/Инвайт OK|WT /.test(log)) break
+    if (/Инвайт OK|WebRTC|exit node/.test(log)) break
   }
   console.log('VPN LOG FULL:\n', log)
   await page.screenshot({ path: 'e2e-shots/crit-give-vpn-flow.png', fullPage: true })
-  expect(log).toMatch(/Nostr VPN signaling ON|Инвайт OK|WT /)
+  expect(log).toMatch(/Nostr VPN signaling ON|Инвайт OK|WebRTC|exit node/)
   // Hard success if invite signed path completed
   if (log.includes('Инвайт OK')) {
-    expect(log).toMatch(/Инвайт OK/)
-    expect(log).toMatch(/WT /)
+    expect(log).toMatch(/Инвайт OK|exit node|WebRTC/)
   } else {
     // surface error for critique
     console.log('INVITE_NOT_COMPLETE')
-    expect(log).toMatch(/Ошибка|WT |signaling/)
+    expect(log).toMatch(/Ошибка|signaling|exit node/)
   }
 })
 

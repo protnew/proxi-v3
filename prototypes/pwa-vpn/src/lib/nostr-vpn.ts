@@ -24,7 +24,7 @@ function signingIdentity(): { pubkey: string; seckey: string } {
   return { pubkey, seckey: sk }
 }
 
-export type VPNEventType = 'vpn-invite' | 'vpn-request' | 'vpn-accept' | 'vpn-reject' | 'vpn-cancel'
+export type VPNEventType = 'vpn-invite' | 'vpn-request' | 'vpn-accept' | 'vpn-reject' | 'vpn-cancel' | 'rtc-offer' | 'rtc-answer' | 'rtc-ice'
 
 export interface VPNEvent {
   type: VPNEventType
@@ -34,6 +34,10 @@ export interface VPNEvent {
   wtCertHash?: string
   wtAddr?: string
   timestamp: number
+  // WebRTC fields (architecture table 26_Signaling_Protocol)
+  rtcSdp?: string
+  rtcType?: "offer" | "answer"
+  iceCandidates?: string[]
 }
 
 const KIND_VPN = 30090
@@ -169,6 +173,15 @@ export class NostrVPNSignaling {
     return this.sendVPNEvent('vpn-accept', toPubkey, { wtAddr, wtCertHash })
   }
 
+  async sendRTCOffer(toPubkey: string, sdp: string, iceCandidates: string[]): Promise<string> {
+    return this.sendVPNEvent("rtc-offer", toPubkey, { rtcSdp: sdp, rtcType: "offer", iceCandidates })
+  }
+  async sendRTCAnswer(toPubkey: string, sdp: string, iceCandidates: string[]): Promise<string> {
+    return this.sendVPNEvent("rtc-answer", toPubkey, { rtcSdp: sdp, rtcType: "answer", iceCandidates })
+  }
+  async sendICE(toPubkey: string, candidate: string): Promise<string> {
+    return this.sendVPNEvent("rtc-ice", toPubkey, { iceCandidates: [candidate] })
+  }
   async rejectVPN(toPubkey: string): Promise<string> {
     return this.sendVPNEvent('vpn-reject', toPubkey)
   }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
-  import { wtVPN } from '../lib/webtransport'
+  import { rtcVPN } from '../lib/webrtc-vpn'
   import { getPubkey, getSeckey } from '../lib/api'
   import * as secp from '@noble/secp256k1'
 
@@ -77,20 +77,17 @@
     await nostrVPN.init(mySigningPubkey())
   }
 
-  // "Give VPN to friend"
+  // "Give VPN to friend" — Alice becomes exit node, waits for friend's WebRTC offer
   async function giveVPN() {
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
     try {
       await ensureNostr()
-      const { wtAddr, certHash } = await startWTServer()
       const peer = normalizePeerId(friendId)
-      const id = await nostrVPN.inviteFriend(peer, wtAddr, certHash)
+      const id = await nostrVPN.inviteFriend(peer, '', '')
       vpnStatus = 'sharing'
-      statusText = `Раздаю VPN · ${wtAddr}`
-      addLog(`WT ${wtAddr} hash=${certHash.slice(0, 12)}…`)
-      addLog(`Инвайт OK id=${id.slice(0, 12)}… → ${peer.slice(0, 12)}…`)
-      // Tell SW we are exit node (optional)
-      navigator.serviceWorker?.controller?.postMessage({ type: 'VPN_EXIT_ON', wtAddr, certHash })
+      statusText = 'Раздаю VPN · жду подключения друга'
+      addLog('Инвайт отправлен, готов как exit node (WebRTC)')
+      addLog('Инвайт OK id=' + id.slice(0, 12) + '…')
       showInviteModal = false
     } catch (e) {
       addLog('Ошибка: ' + (e as Error).message)
@@ -118,60 +115,33 @@
     try {
       await ensureNostr()
       if (ev.type === 'vpn-request') {
-        const { wtAddr, certHash } = await startWTServer()
-        await nostrVPN.acceptVPN(ev.from, wtAddr, certHash)
+        // Friend wants VPN from us — we become exit node
+        await nostrVPN.acceptVPN(ev.from, '', '')
         vpnStatus = 'sharing'
-        statusText = `Раздаю VPN · ${wtAddr}`
-        addLog('Запрос принят, раздаю ' + wtAddr)
-      } else {
-        await nostrVPN.acceptVPN(ev.from)
-        if (!ev.wtAddr) throw new Error('В инвайте нет wtAddr')
-        addLog('WT connect → ' + ev.wtAddr)
-        await wtVPN.connect(ev.wtAddr, ev.wtCertHash)
-        navigator.serviceWorker?.controller?.postMessage({
-          type: 'VPN_CLIENT_ON',
-          wtAddr: ev.wtAddr,
-          certHash: ev.wtCertHash || '',
-        })
-        // Stable probe: try api.ipify.org, fallback to stats from server
-        let probeOk = false
-        let probeIp = ''
-        for (const probeUrl of ['http://api.ipify.org', 'http://ifconfig.me/ip']) {
-          try {
-            const body = (await wtVPN.fetchHTTP(probeUrl)).trim()
-            if (body && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(body)) {
-              probeOk = true
-              probeIp = body
-              break
-            }
-          } catch {
-            // try next
+        statusText = 'Раздаю VPN · жду WebRTC offer'
+        addLog('Запрос принят, готов как exit node (WebRTC)')
+      } else if (ev.type === 'vpn-invite') {
+        // Friend offers VPN — we are caller, create WebRTC offer
+        addLog('WebRTC: создаю offer для exit node ' + ev.from.slice(0, 12) + '…')
+        const { sdp, gatherIce } = await rtcVPN.createOffer()
+        const iceCandidates: string[] = []
+        await gatherIce((c) => { if (c !== 'END') iceCandidates.push(c) })
+        await nostrVPN.sendRTCOffer(ev.from, sdp, iceCandidates)
+        addLog('WebRTC offer отправлен (' + iceCandidates.length + ' ICE candidates)')
+        vpnStatus = 'connecting'
+        statusText = 'WebRTC connecting…'
+        // Wait for answer via Nostr
+        const answerTimeout = setTimeout(() => {
+          if (vpnStatus === 'connecting') {
+            addLog('WebRTC: таймаут ожидания answer')
+            vpnStatus = 'off'
+            statusText = 'VPN выключен'
           }
+        }, 30000)
+        rtcAnswerResolver = (sdp: string, ice: string[]) => {
+          clearTimeout(answerTimeout)
+          applyRTCAnswer(sdp, ice, ev.from)
         }
-        if (probeOk) {
-          lastTunnelIp = probeIp
-          addLog('✅ Туннель IP: ' + probeIp)
-        } else {
-          // Fallback: check server-side stats for bytes transferred
-          try {
-            const token = localStorage.getItem('proxi_token')
-            const r = await fetch('/api/vpn/wt/stats', {
-              headers: { Authorization: 'Bearer ' + (token || '') },
-            })
-            const stats = await r.json()
-            if (stats.bytesIn > 0 || stats.bytesOut > 0) {
-              lastTunnelIp = 'туннель активен'
-              addLog(`✅ Туннель активен: ↓${stats.bytesIn}B ↑${stats.bytesOut}B`)
-            } else {
-              addLog('Туннель CONNECT OK (нет данных)')
-            }
-          } catch {
-            addLog('Туннель CONNECT OK')
-          }
-        }
-        vpnStatus = 'connected'
-        statusText = 'Подключён к VPN друга'
-        addLog('WebTransport connected')
       }
       dismissedFrom = { ...dismissedFrom, [ev.from]: Date.now() }
     } catch (e) {
@@ -179,6 +149,30 @@
       dismissedFrom = { ...dismissedFrom, [ev.from]: Date.now() }
     } finally {
       handlingIncoming = false
+    }
+  }
+
+  let rtcAnswerResolver: ((sdp: string, ice: string[]) => void) | null = null
+
+  async function applyRTCAnswer(sdp: string, ice: string[], from: string) {
+    try {
+      await rtcVPN.applyAnswer(sdp, ice)
+      await rtcVPN.waitForOpen(15000)
+      // Probe tunnel
+      const body = await rtcVPN.fetchThroughTunnel('http://api.ipify.org')
+      const ip = body.trim()
+      if (ip && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+        lastTunnelIp = ip
+        addLog('WebRTC P2P connected! Exit IP: ' + ip)
+      } else {
+        addLog('WebRTC connected (IP probe empty)')
+      }
+      vpnStatus = 'connected'
+      statusText = 'VPN подключён (WebRTC P2P)'
+    } catch (e) {
+      addLog('WebRTC answer failed: ' + (e as Error).message)
+      vpnStatus = 'off'
+      statusText = 'VPN выключен'
     }
   }
 
@@ -195,72 +189,34 @@
   }
 
   async function disconnectVPN() {
-    try { await wtVPN.disconnect() } catch {}
+    try { await rtcVPN.disconnect() } catch {}
     navigator.serviceWorker?.controller?.postMessage({ type: 'VPN_OFF' })
-    try {
-      const h = await authHeaders()
-      await fetch('/api/vpn/wt/stop', { method: 'POST', headers: h, body: '{}' })
-    } catch {}
     vpnStatus = 'off'
     statusText = 'VPN выключен'
     lastTunnelIp = ''
-    addLog('Отключён')
+    addLog('WebRTC отключён')
   }
 
 
-  // ── SW Tunnel Handler ──
-  // SW intercepts external fetches, asks page to route through WT CONNECT tunnel
+  // SW tunnel handler — routes fetches through WebRTC DataChannel
   async function handleTunnelFetch(event: MessageEvent) {
     const data = (event as any).data || {}
     if (data.type !== 'TUNNEL_FETCH') return
     const port = (event as any).ports?.[0]
     if (!port) return
-    const { target, method, path, host, headers } = data
     try {
-      const { readable, writable } = await wtVPN.openConnect(target)
-      const writer = writable.getWriter()
-      const enc = new TextEncoder()
-      let req = `${method} ${path} HTTP/1.1\r\nHost: ${host}\r\n`
-      for (const [k, v] of Object.entries(headers || {})) {
-        if (k.toLowerCase() === 'host') continue
-        req += `${k}: ${(v as string)}\r\n`
-      }
-      req += 'Connection: close\r\n\r\n'
-      await writer.write(enc.encode(req))
-      try { await writer.close() } catch {}
-      const reader = readable.getReader()
-      const chunks: Uint8Array[] = []
-      let total = 0
-      const deadline = Date.now() + 10000
-      while (Date.now() < deadline) {
-        const { value, done } = await Promise.race([
-          reader.read(),
-          new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), 3000)),
-        ]) as any
-        if (done) break
-        if (value) {
-          chunks.push(value)
-          total += value.byteLength
-          if (total > 1048576) break
-        }
-      }
-      try { reader.releaseLock() } catch {}
-      const resp = new Uint8Array(total)
-      let off = 0
-      for (const c of chunks) { resp.set(c, off); off += c.byteLength }
-      port.postMessage({ type: 'COMPLETE', body: resp }, [resp.buffer])
+      const body = await rtcVPN.fetchThroughTunnel(data.target || 'api.ipify.org:80')
+      port.postMessage({ type: 'COMPLETE', body: new TextEncoder().encode(body) })
     } catch (e) {
       port.postMessage({ type: 'ERROR', error: (e as Error).message })
     }
   }
-
   function registerSWTunnel() {
     if (typeof navigator === 'undefined' || !navigator.serviceWorker) return
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.addEventListener('message', handleTunnelFetch)
-      const mc = new MessageChannel()
-      navigator.serviceWorker.controller.postMessage({ type: 'VPN_PAGE_READY' }, [mc.port2])
-      console.log('[VPN] SW tunnel provider registered')
+      navigator.serviceWorker.controller.postMessage({ type: 'VPN_PAGE_READY' })
+      console.log('[VPN] WebRTC SW tunnel registered')
     }
   }
 
@@ -277,13 +233,29 @@
           if (event.type === 'vpn-invite' || event.type === 'vpn-request') {
             if (handlingIncoming || vpnStatus !== 'off') return
             if (dismissedFrom[event.from] && Date.now() - dismissedFrom[event.from] < 60000) return
-            if (incomingEvent) return // one at a time
+            if (incomingEvent) return
             incomingEvent = event
-            addLog(`Входящий ${event.type} от ${event.from.slice(0, 12)}…`)
+            addLog('Входящий ' + event.type + ' от ' + event.from.slice(0, 12) + '…')
+          } else if (event.type === 'rtc-offer') {
+            // We are exit node — create WebRTC answer
+            handleRTCOffer(event)
+          } else if (event.type === 'rtc-answer') {
+            // We are caller — apply answer
+            if (rtcAnswerResolver) {
+              rtcAnswerResolver(event.rtcSdp || '', event.iceCandidates || [])
+              rtcAnswerResolver = null
+            }
+          } else if (event.type === 'rtc-ice') {
+            // Trickle ICE
+            if (event.iceCandidates) {
+              for (const c of event.iceCandidates) {
+                try { rtcVPN['pc']?.addIceCandidate({ candidate: c, sdpMid: '0', sdpMLineIndex: 0 }) } catch {}
+              }
+            }
           } else if (event.type === 'vpn-accept') {
-            addLog(`Accept от ${event.from.slice(0, 12)}… addr=${event.wtAddr || '—'}`)
+            addLog('Accept от ' + event.from.slice(0, 12) + '…')
           } else if (event.type === 'vpn-reject') {
-            addLog(`Reject от ${event.from.slice(0, 12)}…`)
+            addLog('Reject от ' + event.from.slice(0, 12) + '…')
           }
         })
         addLog('Nostr VPN signaling ON')
