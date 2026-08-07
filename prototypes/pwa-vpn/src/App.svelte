@@ -162,7 +162,7 @@ if (initialView === 'advanced') {
       // Timeout external relay connections — don't let them block the UI
       nostrRelays = await Promise.race([
         nostrChat.connect(),
-        new Promise<number>((resolve) => setTimeout(() => resolve(0), 4000)),
+        new Promise<number>((resolve) => setTimeout(() => resolve(0), 10000)),
       ])
     } catch (e) {
       console.warn('[app] Nostr connect failed:', e)

@@ -500,3 +500,4 @@ function processMessageUrls(text: string) {
     <p class="sub">P2P • E2E • Неубиваемо</p>
   </div>
 {/if}
+
