@@ -136,3 +136,59 @@ func (s *Server) handleDNSProxy(w http.ResponseWriter, r *http.Request) {
 // nhooyrWSConn adapts nhooyr.io/websocket.Conn to nostr.WebSocketConn.
 
 
+
+
+// ========== WebTransport ==========
+
+var wtServer *vpn.WTServer
+
+// handleWTStats returns WebTransport server statistics.
+func (s *Server) handleWTStats(w http.ResponseWriter, r *http.Request) {
+	if wtServer == nil {
+		writeJSON(w, 200, map[string]interface{}{
+			"transport": "webtransport",
+			"running":   false,
+		})
+		return
+	}
+	writeJSON(w, 200, wtServer.GetStats())
+}
+
+// handleWTStart starts the WebTransport server for PWA VPN.
+func (s *Server) handleWTStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+
+	if wtServer != nil {
+		writeJSON(w, 200, map[string]interface{}{"status": "already running", "stats": wtServer.GetStats()})
+		return
+	}
+
+	// Start WT server on port 4433 (QUIC default alt port)
+	srv, err := vpn.NewWTServer("0.0.0.0:4433")
+	if err != nil {
+		writeError(w, 500, "WT_INIT_ERROR", err.Error())
+		return
+	}
+	if err := srv.Start(); err != nil {
+		writeError(w, 500, "WT_START_ERROR", err.Error())
+		return
+	}
+	wtServer = srv
+	writeJSON(w, 200, srv.GetStats())
+}
+
+// handleWTStop stops the WebTransport server.
+func (s *Server) handleWTStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	if wtServer != nil {
+		wtServer.Stop()
+		wtServer = nil
+	}
+	writeJSON(w, 200, map[string]string{"status": "stopped"})
+}

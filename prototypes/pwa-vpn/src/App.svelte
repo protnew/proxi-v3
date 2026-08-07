@@ -15,6 +15,9 @@ function closeMobileChat() { mobileChatOpen = false; }
 
 // Detect mobile
 const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+
+  // Dev mode: show raw SOCKS5/WG settings (hidden in product mode)
+  const isDevMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1';
 if (initialView === 'settings') {
   setTimeout(() => { stores.showSettings.set(true); }, 500);
 }
@@ -45,6 +48,7 @@ if (initialView === 'advanced') {
   import NewChat from './components/NewChat.svelte'
   import CallOverlay from './components/CallOverlay.svelte'
   import GroupCreate from './components/GroupCreate.svelte'
+  import VPNProductPanel from './components/VPNProductPanel.svelte'
   import DemoPanel from './components/DemoPanel.svelte'
   import type { Message } from './stores/messenger'
 
@@ -276,6 +280,11 @@ if (initialView === 'advanced') {
     <NewChat />
     <GroupCreate />
     <CallOverlay />
+    {#if isDevMode}
+      <VpnPanel />
+    {:else}
+      <VPNProductPanel />
+    {/if}
     <DemoPanel />
   </div>
 {/if}

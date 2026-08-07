@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-const BASE = process.env.APP_URL || 'http://127.0.0.1:8080';
+const BASE = process.env.APP_URL || 'http://127.0.0.1:8090';
 
 test.describe.serial('10 Functional Screenshots', () => {
 
