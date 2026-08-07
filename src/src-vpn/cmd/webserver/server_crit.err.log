@@ -1,0 +1,43 @@
+2026/08/07 08:44:36 No .env file found or error loading it, relying on system env vars
+2026/08/07 08:44:36 🔍 Sentry disabled (SENTRY_DSN not set)
+{"level":"info","ts":1786081476.1264489,"caller":"webserver/startup.go:62","msg":"🚀 Unkillable Messenger initializing..."}
+{"level":"info","ts":1786081476.1274483,"caller":"webserver/startup.go:97","msg":"📁 Serving static files from C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\prototypes\\pwa-vpn\\dist"}
+{"level":"info","ts":1786081476.1396213,"caller":"webserver/startup.go:103","msg":"⚠️  IPFS node start warning: ipfs executable not found in PATH: exec: \"ipfs\": executable file not found in %PATH%"}
+{"level":"info","ts":1786081476.1466594,"caller":"store/migration.go:443","msg":"📦 Migration v1: initial_schema"}
+{"level":"info","ts":1786081476.1524243,"caller":"store/migration.go:463","msg":"✅ Migration v1 applied"}
+{"level":"info","ts":1786081476.1529918,"caller":"store/migration.go:443","msg":"📦 Migration v2: streams_and_files"}
+{"level":"info","ts":1786081476.157483,"caller":"store/migration.go:463","msg":"✅ Migration v2 applied"}
+{"level":"info","ts":1786081476.1580086,"caller":"store/migration.go:443","msg":"📦 Migration v3: nostr_and_identity"}
+{"level":"info","ts":1786081476.1667373,"caller":"store/migration.go:463","msg":"✅ Migration v3 applied"}
+{"level":"info","ts":1786081476.1673143,"caller":"store/migration.go:443","msg":"📦 Migration v4: user_bans_reports_invites"}
+{"level":"info","ts":1786081476.1780906,"caller":"store/migration.go:463","msg":"✅ Migration v4 applied"}
+{"level":"info","ts":1786081476.1787982,"caller":"store/migration.go:443","msg":"📦 Migration v5: analytics_referrals"}
+{"level":"info","ts":1786081476.1862597,"caller":"store/migration.go:463","msg":"✅ Migration v5 applied"}
+{"level":"info","ts":1786081476.186792,"caller":"store/migration.go:443","msg":"📦 Migration v6: subscriptions_donations_stories"}
+{"level":"info","ts":1786081476.1956556,"caller":"store/migration.go:463","msg":"✅ Migration v6 applied"}
+{"level":"info","ts":1786081476.1961968,"caller":"store/migration.go:443","msg":"📦 Migration v7: audit_brand_governance"}
+{"level":"info","ts":1786081476.2010212,"caller":"store/migration.go:463","msg":"✅ Migration v7 applied"}
+{"level":"info","ts":1786081476.2010212,"caller":"store/migration.go:443","msg":"📦 Migration v8: users_and_prekeys"}
+{"level":"info","ts":1786081476.2083347,"caller":"store/migration.go:463","msg":"✅ Migration v8 applied"}
+{"level":"info","ts":1786081476.2088633,"caller":"store/migration.go:443","msg":"📦 Migration v9: fts5_search"}
+{"level":"info","ts":1786081476.2121303,"caller":"store/migration.go:463","msg":"✅ Migration v9 applied"}
+{"level":"info","ts":1786081476.2121303,"caller":"store/migration.go:443","msg":"📦 Migration v10: groups_and_switch"}
+{"level":"info","ts":1786081476.2167225,"caller":"store/migration.go:463","msg":"✅ Migration v10 applied"}
+{"level":"info","ts":1786081476.2177377,"caller":"store/migration.go:443","msg":"📦 Migration v11: federation_peers"}
+{"level":"info","ts":1786081476.224395,"caller":"store/migration.go:463","msg":"✅ Migration v11 applied"}
+{"level":"info","ts":1786081476.2253964,"caller":"store/migration.go:443","msg":"📦 Migration v12: content_vault"}
+{"level":"info","ts":1786081476.2294304,"caller":"store/migration.go:463","msg":"✅ Migration v12 applied"}
+{"level":"info","ts":1786081476.2294304,"caller":"store/migration.go:443","msg":"📦 Migration v13: hls_streaming"}
+{"level":"info","ts":1786081476.2365212,"caller":"store/migration.go:463","msg":"✅ Migration v13 applied"}
+{"level":"info","ts":1786081476.2365212,"caller":"store/migration.go:443","msg":"📦 Migration v14: add_contacts_table"}
+{"level":"info","ts":1786081476.2416644,"caller":"store/migration.go:463","msg":"✅ Migration v14 applied"}
+{"level":"info","ts":1786081476.242203,"caller":"webserver/startup.go:122","msg":"✅ Database initialized"}
+{"level":"info","ts":1786081476.242742,"caller":"webserver/ws_handlers.go:178","msg":"💬 Chat Hub initialized"}
+{"level":"info","ts":1786081476.2438152,"caller":"webserver/startup.go:147","msg":"🕸️  P2P Mesh Network initialized (maxHops=6, prune every 5m, stale after 30m)"}
+{"level":"info","ts":1786081476.2438152,"caller":"webserver/startup.go:151","msg":"📡 Nostr NIP-01 relay initialized"}
+{"level":"info","ts":1786081476.2443419,"caller":"webserver/startup.go:168","msg":"🌐 Federation relay initialized (no peers)"}
+{"level":"info","ts":1786081476.246836,"caller":"webserver/startup.go:177","msg":"📦 IPFS daemon not found (file upload will return error)"}
+{"level":"info","ts":1786081476.2479491,"caller":"webserver/startup.go:185","msg":"🧅 Tor not found (.onion connections disabled)"}
+{"level":"info","ts":1786081476.2652276,"caller":"webserver/startup.go:194","msg":"🔒 VPN Manager initialized"}
+{"level":"info","ts":1786081476.2666917,"caller":"webserver/ws_handlers.go:178","msg":"💬 Chat Hub initialized"}
+{"level":"info","ts":1786081476.2690523,"caller":"content/endpoints.go:56","msg":"Error EnsureContentTables: ensure content tables: exec \"CREATE INDEX IF NOT EXISTS idx_content_manifests_file_name ON content_manifests(file_name)\": SQL logic error: no such column: file_name (1)"}

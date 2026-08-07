@@ -13,6 +13,7 @@
   })
   import { searchMessages, type SearchResult } from '../lib/search'
   import VpnPanel from './VpnPanel.svelte'
+  const isDevMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1'
 
   let myId = $state(getPubkey() || '')
   let copied = $state(false)
@@ -146,7 +147,9 @@
     {/if}
   </div>
 
-  <VpnPanel />
+  {#if isDevMode}
+    <VpnPanel />
+  {/if}
 </aside>
 
 <style>

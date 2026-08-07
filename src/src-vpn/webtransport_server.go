@@ -8,6 +8,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
@@ -223,15 +224,13 @@ func (s *WTServer) Stop() {
 }
 
 func (s *WTServer) GetCertHash() string {
+	// WebTransport serverCertificateHashes needs SHA-256 of the DER certificate, not serial.
 	if s.tlsConfig == nil || len(s.tlsConfig.Certificates) == 0 {
 		return ""
 	}
-	cert := s.tlsConfig.Certificates[0].Certificate[0]
-	x509cert, err := x509.ParseCertificate(cert)
-	if err != nil {
-		return ""
-	}
-	return hex.EncodeToString(x509cert.SerialNumber.Bytes())
+	der := s.tlsConfig.Certificates[0].Certificate[0]
+	sum := sha256.Sum256(der)
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *WTServer) GetStats() map[string]interface{} {
