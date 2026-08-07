@@ -62,3 +62,8 @@ prototypes/pwa-vpn/tests/api-no-token.test.ts
 
 # built frontend served by Go
 src/src-vpn/dist/
+
+# local runtime
+**/server_crit*.log
+**/data/vpn/private.key
+**/messenger.db
