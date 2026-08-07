@@ -66,6 +66,8 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/vpn/wt/stats", apiChain(srv.handleWTStats))
 	http.HandleFunc("/api/vpn/wt/start", apiChain(srv.handleWTStart))
 	http.HandleFunc("/api/vpn/wt/stop", apiChain(srv.handleWTStop))
+	http.HandleFunc("/api/vpn/turn/config", apiChain(srv.handleTurnConfig))
+	http.HandleFunc("/api/vpn/amnezia", apiChain(srv.handleAmneziaConfig))
 	http.HandleFunc("/api/contacts", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":

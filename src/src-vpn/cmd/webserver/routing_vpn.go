@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 
 	"io"
+	"os"
 
 	"net/http"
 
@@ -193,4 +194,58 @@ func (s *Server) handleWTStop(w http.ResponseWriter, r *http.Request) {
 		wtServer = nil
 	}
 	writeJSON(w, 200, map[string]string{"status": "stopped"})
+}
+
+// ========== TURN Server Config (table 05_Relay_Architecture) ==========
+
+// handleTurnConfig returns TURN server credentials for WebRTC ICE fallback.
+// Reads from env TURN_URL, TURN_USER, TURN_PASS or returns empty (STUN-only mode).
+func (s *Server) handleTurnConfig(w http.ResponseWriter, r *http.Request) {
+	turnURL := getEnv("TURN_URL", "")
+	turnUser := getEnv("TURN_USER", "")
+	turnPass := getEnv("TURN_PASS", "")
+
+	if turnURL == "" {
+		writeJSON(w, 200, map[string]interface{}{
+			"status":  "not_configured",
+			"message": "TURN not configured. STUN-only (works for ~85% of NAT). Set TURN_URL/TURN_USER/TURN_PASS env vars.",
+		})
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"urls":       turnURL,
+		"username":   turnUser,
+		"credential": turnPass,
+	})
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// ========== AmneziaWG DPI Obfuscation (table 02_DPI_Fallback) ==========
+
+func (s *Server) handleAmneziaConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		writeJSON(w, 200, vpn.AmneziaStatus())
+		return
+	}
+	if r.Method == "POST" {
+		var cfg vpn.AmneziaConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			writeError(w, 400, "BAD_REQUEST", err.Error())
+			return
+		}
+		if err := vpn.SetAmneziaConfig(cfg); err != nil {
+			writeError(w, 400, "CONFIG_ERROR", err.Error())
+			return
+		}
+		writeJSON(w, 200, vpn.AmneziaStatus())
+		return
+	}
+	writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET or POST")
 }

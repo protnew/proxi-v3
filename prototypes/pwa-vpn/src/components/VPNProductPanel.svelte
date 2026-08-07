@@ -1,6 +1,7 @@
 <script lang="ts">
   import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
   import { rtcVPN } from '../lib/webrtc-vpn'
+  import { onMount } from 'svelte'
   import { getPubkey, getSeckey } from '../lib/api'
   import * as secp from '@noble/secp256k1'
 
@@ -13,7 +14,28 @@
   let log = $state<string[]>([])
   let lastTunnelIp = $state('')
   let handlingIncoming = $state(false)
+  let turnStatus = $state<string>('checking…')
+  let amneziaStatus = $state<string>('')
   let dismissedFrom = $state<Record<string, number>>({})
+
+  onMount(async () => {
+    try {
+      const token = localStorage.getItem('proxi_token') || ''
+      const r = await fetch('/api/vpn/turn/config', { headers: { Authorization: 'Bearer ' + token } })
+      if (r.ok) {
+        const cfg = await r.json()
+        turnStatus = cfg.urls ? ('TURN: ' + cfg.urls) : 'STUN only (85%)'
+      }
+    } catch { turnStatus = 'STUN only' }
+    try {
+      const token2 = localStorage.getItem('proxi_token') || ''
+      const r2 = await fetch('/api/vpn/amnezia', { headers: { Authorization: 'Bearer ' + token2 } })
+      if (r2.ok) {
+        const am = await r2.json()
+        amneziaStatus = am.enabled ? 'AmneziaWG ON' : ''
+      }
+    } catch {}
+  })
 
   function addLog(msg: string) {
     const t = new Date().toLocaleTimeString()
@@ -158,12 +180,26 @@
     try {
       await rtcVPN.applyAnswer(sdp, ice)
       await rtcVPN.waitForOpen(15000)
-      // Probe tunnel
-      const body = await rtcVPN.fetchThroughTunnel('http://api.ipify.org')
-      const ip = body.trim()
-      if (ip && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
-        lastTunnelIp = ip
-        addLog('WebRTC P2P connected! Exit IP: ' + ip)
+      // Probe tunnel: HTTP first, then HTTPS
+      let tunnelIp = ''
+      try {
+        const httpBody = await rtcVPN.fetchHTTP('http://api.ipify.org')
+        const ip = httpBody.trim()
+        if (ip && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) tunnelIp = ip
+      } catch {}
+      if (!tunnelIp) {
+        try {
+          const httpsBody = await rtcVPN.fetchHTTPS('https://api.ipify.org')
+          const ip2 = httpsBody.trim()
+          if (ip2 && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip2)) {
+            tunnelIp = ip2
+            addLog('HTTPS tunnel OK')
+          }
+        } catch {}
+      }
+      if (tunnelIp) {
+        lastTunnelIp = tunnelIp
+        addLog('WebRTC P2P connected! Exit IP: ' + tunnelIp)
       } else {
         addLog('WebRTC connected (IP probe empty)')
       }
@@ -271,6 +307,12 @@
 </script>
 
 <div class="vpn-product" data-testid="vpn-product">
+  {#if turnStatus}
+    <div class="ice-status">
+      <span class="ice-badge" title="NAT traversal method">🧊 {turnStatus}</span>
+      {#if amneziaStatus}<span class="ice-badge amnezia" title="DPI obfuscation">🛡️ {amneziaStatus}</span>{/if}
+    </div>
+  {/if}
   {#if vpnStatus === 'off'}
     <div class="vpn-buttons">
       <button class="vpn-btn share" data-testid="vpn-give" onclick={() => showInviteModal = true}>
@@ -365,4 +407,7 @@
   .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
   .modal-buttons .cancel { background: #21262d; color: #8b949e; }
   .modal-buttons .confirm { background: #238636; color: #fff; }
+  .ice-status { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ice-badge { font-size: 11px; color: #7dd3fc; background: rgba(125,211,252,0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(125,211,252,0.2); }
+  .ice-badge.amnezia { color: #fbbf24; background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
 </style>
