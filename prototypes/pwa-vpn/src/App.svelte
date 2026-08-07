@@ -49,6 +49,7 @@ if (initialView === 'advanced') {
   import CallOverlay from './components/CallOverlay.svelte'
   import GroupCreate from './components/GroupCreate.svelte'
   import VPNProductPanel from './components/VPNProductPanel.svelte'
+  import VpnPanel from './components/VpnPanel.svelte'
   import DemoPanel from './components/DemoPanel.svelte'
   import type { Message } from './stores/messenger'
 
