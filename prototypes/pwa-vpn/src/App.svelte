@@ -270,12 +270,10 @@ if (initialView === 'advanced') {
   setInterval(() => { stores.saveChats(); stores.saveContacts() }, 30000)
 </script>
 
-{#if loading}
-  <div class="loading" id="loading-overlay">
+<div class="loading-overlay-bg" id="loading-overlay" class:hidden={!loading}>
     <div class="spinner"></div>
     <p>🛡️ {statusText}</p>
   </div>
-{:else}
   <div class="app">
     {#if showSettingsView}
       <div class="settings-mobile-wrapper" class:hidden-mobile={mobileChatOpen}>
@@ -299,7 +297,6 @@ if (initialView === 'advanced') {
     {/if}
     <DemoPanel />
   </div>
-{/if}
 
 <style>
   :global(body) { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; transition: background 0.3s, color 0.3s; }
@@ -349,10 +346,11 @@ if (initialView === 'advanced') {
 
   .app { display: flex; height: 100vh; overflow: hidden; }
 
-  .loading { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; }
+  .loading-overlay-bg { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: var(--bg); }
+  .loading-overlay-bg.hidden { display: none; }
   .spinner { width: 40px; height: 40px; border: 3px solid #2a2a4a; border-top-color: #3a7bd5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading p { color: #7a8a9a; font-size: 14px; }
+  .loading-overlay-bg p { color: #7a8a9a; font-size: 14px; }
 
   /* Mobile wrappers */
   .sidebar-mobile-wrapper { height: 100%; }

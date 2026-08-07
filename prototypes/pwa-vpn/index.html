@@ -14,6 +14,18 @@
   </head>
   <body>
     <div id="app"></div>
+        <script>
+      // DOM-level safety: hide loading overlay after 9s regardless of Svelte state
+      window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+          var el = document.getElementById('loading-overlay');
+          if (el && el.style.display !== 'none') {
+            el.style.display = 'none';
+            console.log('[safety] Loading overlay hidden by DOM timeout');
+          }
+        }, 9000);
+      });
+    </script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
