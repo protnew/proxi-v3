@@ -150,6 +150,26 @@ func run() error {
 	nostrRelay = nostr.NewRelay(50000, db)
 	log.Println("📡 Nostr NIP-01 relay initialized")
 
+	// VPN signaling hook: kind:30090 → in-process VPNSignaling
+	vpnSig := vpn.NewVPNSignaling()
+	nostrRelay.OnEvent = func(ev nostr.Event) {
+		if ev.Kind != vpn.VPNEventKind {
+			return
+		}
+		ve, err := vpn.DeserializeVPNEvent([]byte(ev.Content))
+		if err != nil {
+			log.Printf("[VPN-SIG] bad content on %s: %v", ev.ID[:12], err)
+			return
+		}
+		// Prefer pubkey from event envelope
+		if ve.From == "" {
+			ve.From = ev.PubKey
+		}
+		vpnSig.HandleIncomingEvent(ev.ID, ve)
+		log.Printf("[VPN-SIG] kind:30090 %s from=%s… to=%s…", ve.Type, ve.From, ve.To)
+	}
+
+
 	// Initialize Federation Relay
 	fedRelay = federation.NewFederatedRelay(nostrRelay)
 	// Load persisted federation peers from DB

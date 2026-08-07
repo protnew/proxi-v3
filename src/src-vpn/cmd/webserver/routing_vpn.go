@@ -162,7 +162,9 @@ func (s *Server) handleWTStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if wtServer != nil {
-		writeJSON(w, 200, map[string]interface{}{"status": "already running", "stats": wtServer.GetStats()})
+		stats := wtServer.GetStats()
+		stats["status"] = "already running"
+		writeJSON(w, 200, stats)
 		return
 	}
 

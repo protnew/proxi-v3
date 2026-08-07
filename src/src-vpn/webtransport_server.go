@@ -1,6 +1,6 @@
 // File: webtransport_server.go
-// WebTransport (QUIC) server — per architecture table T2 (winner: 166 pts).
-// PWA VPN transport layer. Replaces WireGuard/SOCKS5 for PWA.
+// Real WebTransport (HTTP/3) exit-node server — architecture table T2.
+// Uses github.com/quic-go/webtransport-go so browser WebTransport API can connect.
 package vpn
 
 import (
@@ -16,279 +16,279 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/http3"
+	"github.com/quic-go/webtransport-go"
 )
 
-// WTServer is a WebTransport server that accepts PWA VPN connections.
+const (
+	wtMsgConnect   = 0x01
+	wtMsgConnectOK = 0x81
+	wtMsgError     = 0xFF
+)
+
+// WTServer is a WebTransport exit-node.
 type WTServer struct {
-	listener  *quic.Listener
-	tlsConfig *tls.Config
 	addr      string
-	stopOnce  sync.Once
-	stopChan  chan struct{}
+	tlsConfig *tls.Config
+	certDER   []byte
+	server    *webtransport.Server
+	udpConn   net.PacketConn
+	cancel    context.CancelFunc
+	started   atomic.Bool
+	startTime time.Time
 	clients   sync.Map
+	bytesIn   atomic.Uint64
+	bytesOut  atomic.Uint64
 	nextID    atomic.Uint64
-	byteIn    atomic.Uint64
-	byteOut   atomic.Uint64
-	startedAt time.Time
+	mu        sync.Mutex
 }
 
-// WTClient represents a connected WebTransport client.
-type WTClient struct {
-	ID          uint64
-	Session     *quic.Conn
-	RemoteAddr  string
-	ConnectedAt time.Time
-}
-
-// NewWTServer creates a new WebTransport server with self-signed TLS cert.
+// NewWTServer creates a WT server on addr (e.g. "127.0.0.1:0" or "0.0.0.0:4433").
 func NewWTServer(addr string) (*WTServer, error) {
-	tlsConfig, err := generateSelfSignedTLS()
+	tlsConf, certDER, err := generateWTCertificate()
 	if err != nil {
-		return nil, fmt.Errorf("wt tls: %w", err)
+		return nil, fmt.Errorf("wt cert: %w", err)
 	}
-	return &WTServer{
-		tlsConfig: tlsConfig,
-		addr:      addr,
-		stopChan:  make(chan struct{}),
-	}, nil
+	return &WTServer{addr: addr, tlsConfig: tlsConf, certDER: certDER}, nil
 }
 
-// Start begins listening for QUIC connections.
+func generateWTCertificate() (*tls.Config, []byte, error) {
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	now := time.Now().UTC()
+	validFrom := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	validFrom = validFrom.AddDate(0, 0, -int((validFrom.Weekday()+6)%7))
+	validUntil := validFrom.Add(13 * 24 * time.Hour)
+
+	tmpl := &x509.Certificate{
+		SerialNumber:          big.NewInt(now.UnixNano()),
+		Subject:               pkix.Name{Organization: []string{"Indestructible VPN"}, CommonName: "wt-exit"},
+		NotBefore:             validFrom,
+		NotAfter:              validUntil,
+		KeyUsage:              x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.IPv4(127, 0, 0, 1), net.ParseIP("::1")},
+	}
+	certDER, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	tlsCert := tls.Certificate{Certificate: [][]byte{certDER}, PrivateKey: key}
+	cfg := &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+		MinVersion:   tls.VersionTLS13,
+	}
+	return cfg, certDER, nil
+}
+
+// Start begins listening for WebTransport sessions on /wt and /webtransport.
 func (s *WTServer) Start() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.started.Load() {
+		return nil
+	}
+
 	udpAddr, err := net.ResolveUDPAddr("udp", s.addr)
 	if err != nil {
-		return fmt.Errorf("wt resolve: %w", err)
+		return err
 	}
-
 	udpConn, err := net.ListenUDP("udp", udpAddr)
 	if err != nil {
 		return fmt.Errorf("wt listen udp: %w", err)
 	}
+	s.udpConn = udpConn
 
-	quicConfig := &quic.Config{
-		MaxIdleTimeout:        30 * time.Second,
-		MaxIncomingStreams:    100,
-		MaxIncomingUniStreams: 100,
-		KeepAlivePeriod:       10 * time.Second,
+	h3 := &http3.Server{
+		TLSConfig: http3.ConfigureTLSConfig(s.tlsConfig),
+		QUICConfig: &quic.Config{
+			EnableDatagrams: true,
+			MaxIdleTimeout:  5 * time.Minute,
+			KeepAlivePeriod: 15 * time.Second,
+		},
 	}
+	webtransport.ConfigureHTTP3Server(h3)
 
-	listener, err := quic.Listen(udpConn, s.tlsConfig, quicConfig)
-	if err != nil {
-		udpConn.Close()
-		return fmt.Errorf("wt quic listen: %w", err)
+	mux := http.NewServeMux()
+	h3.Handler = mux
+
+	wt := &webtransport.Server{
+		H3:          h3,
+		CheckOrigin: func(*http.Request) bool { return true },
 	}
+	s.server = wt
 
-	s.listener = listener
-	s.startedAt = time.Now()
-	fmt.Printf("[WT] WebTransport server listening on %s (QUIC)\n", s.addr)
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		sess, err := wt.Upgrade(w, r)
+		if err != nil {
+			log.Printf("[WT] upgrade failed: %v", err)
+			return
+		}
+		id := s.nextID.Add(1)
+		s.clients.Store(id, r.RemoteAddr)
+		log.Printf("[WT] session %d from %s", id, r.RemoteAddr)
+		go s.handleSession(id, sess)
+	}
+	mux.HandleFunc("/wt", handler)
+	mux.HandleFunc("/webtransport", handler)
 
-	go s.acceptLoop()
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel = cancel
+	s.startTime = time.Now()
+	s.started.Store(true)
+
+	go func() {
+		log.Printf("[WT] WebTransport HTTP/3 listening on %s path=/wt", s.LocalAddr())
+		if err := wt.Serve(udpConn); err != nil && ctx.Err() == nil {
+			log.Printf("[WT] Serve ended: %v", err)
+		}
+	}()
+	time.Sleep(50 * time.Millisecond)
 	return nil
 }
 
-func (s *WTServer) acceptLoop() {
+func (s *WTServer) handleSession(id uint64, sess *webtransport.Session) {
+	defer func() {
+		s.clients.Delete(id)
+		_ = sess.CloseWithError(0, "bye")
+		log.Printf("[WT] session %d closed", id)
+	}()
+	ctx := sess.Context()
 	for {
-		conn, err := s.listener.Accept(context.Background())
-		if err != nil {
-			select {
-			case <-s.stopChan:
-				return
-			default:
-				continue
-			}
-		}
-		go s.handleConnection(conn)
-	}
-}
-
-func (s *WTServer) handleConnection(conn *quic.Conn) {
-	clientID := s.nextID.Add(1)
-	client := &WTClient{
-		ID:          clientID,
-		Session:     conn,
-		RemoteAddr:  conn.RemoteAddr().String(),
-		ConnectedAt: time.Now(),
-	}
-	s.clients.Store(clientID, client)
-	defer s.clients.Delete(clientID)
-
-	fmt.Printf("[WT] Client %d connected from %s\n", clientID, client.RemoteAddr)
-
-	ctx := conn.Context()
-	for {
-		stream, err := conn.AcceptStream(ctx)
+		stream, err := sess.AcceptStream(ctx)
 		if err != nil {
 			return
 		}
-		go s.handleStream(stream, clientID)
+		go s.handleStream(id, stream)
 	}
 }
 
-// Wire protocol: [1 byte type][4 bytes length][payload]
-// Type 0x01 = CONNECT, 0x02 = DATA, 0x03 = CLOSE
-func (s *WTServer) handleStream(stream *quic.Stream, clientID uint64) {
-	defer stream.Close()
+func (s *WTServer) handleStream(sessionID uint64, stream *webtransport.Stream) {
+	defer func() { _ = stream.Close() }()
 
-	for {
-		header := make([]byte, 5)
-		if _, err := io.ReadFull(stream, header); err != nil {
-			return
-		}
-
-		msgType := header[0]
-		bodyLen := binary.BigEndian.Uint32(header[1:5])
-		if bodyLen > 65536 {
-			return
-		}
-
-		body := make([]byte, bodyLen)
-		if _, err := io.ReadFull(stream, body); err != nil {
-			return
-		}
-
-		s.byteIn.Add(uint64(len(body) + 5))
-
-		switch msgType {
-		case 0x01: // CONNECT
-			target := string(body)
-			fmt.Printf("[WT] Client %d CONNECT -> %s\n", clientID, target)
-
-			targetConn, err := net.DialTimeout("tcp", target, 10*time.Second)
-			if err != nil {
-				s.sendError(stream, fmt.Sprintf("connect failed: %v", err))
-				continue
-			}
-
-			s.sendHeader(stream, 0x81, []byte("ok"))
-
-			var wg sync.WaitGroup
-			wg.Add(2)
-
-			go func() {
-				defer wg.Done()
-				io.Copy(targetConn, stream)
-				if tc, ok := targetConn.(*net.TCPConn); ok {
-					tc.CloseWrite()
-				}
-			}()
-
-			go func() {
-				defer wg.Done()
-				n, _ := io.Copy(stream, targetConn)
-				s.byteOut.Add(uint64(n))
-			}()
-
-			wg.Wait()
-			targetConn.Close()
-			return
-
-		case 0x03:
-			return
-
-		default:
-			continue
-		}
+	hdr := make([]byte, 5)
+	if _, err := io.ReadFull(stream, hdr); err != nil {
+		return
 	}
+	if hdr[0] != wtMsgConnect {
+		s.writeFrame(stream, wtMsgError, []byte("unknown type"))
+		return
+	}
+	n := binary.BigEndian.Uint32(hdr[1:5])
+	if n == 0 || n > 512 {
+		s.writeFrame(stream, wtMsgError, []byte("bad target len"))
+		return
+	}
+	target := make([]byte, n)
+	if _, err := io.ReadFull(stream, target); err != nil {
+		return
+	}
+	targetStr := string(target)
+	log.Printf("[WT] session %d CONNECT %s", sessionID, targetStr)
+
+	conn, err := net.DialTimeout("tcp", targetStr, 10*time.Second)
+	if err != nil {
+		s.writeFrame(stream, wtMsgError, []byte(err.Error()))
+		return
+	}
+
+	s.writeFrame(stream, wtMsgConnectOK, []byte("ok"))
+
+	// Half-close aware bidirectional copy
+	errCh := make(chan struct{}, 2)
+	go func() {
+		defer func() { _ = conn.Close() }()
+		copied, _ := io.Copy(conn, stream)
+		s.bytesIn.Add(uint64(copied))
+		errCh <- struct{}{}
+	}()
+	go func() {
+		copied, _ := io.Copy(stream, conn)
+		s.bytesOut.Add(uint64(copied))
+		// Close write side of WT stream if supported
+		_ = stream.Close()
+		errCh <- struct{}{}
+	}()
+	<-errCh
+	<-errCh
 }
 
-func (s *WTServer) sendHeader(stream *quic.Stream, msgType byte, payload []byte) {
-	header := make([]byte, 5)
-	header[0] = msgType
-	binary.BigEndian.PutUint32(header[1:5], uint32(len(payload)))
-	stream.Write(header)
+func (s *WTServer) writeFrame(w io.Writer, typ byte, payload []byte) {
+	hdr := make([]byte, 5)
+	hdr[0] = typ
+	binary.BigEndian.PutUint32(hdr[1:5], uint32(len(payload)))
+	_, _ = w.Write(hdr)
 	if len(payload) > 0 {
-		stream.Write(payload)
+		_, _ = w.Write(payload)
 	}
 }
 
-func (s *WTServer) sendError(stream *quic.Stream, msg string) {
-	s.sendHeader(stream, 0xFF, []byte(msg))
-}
-
+// Stop shuts down the server.
 func (s *WTServer) Stop() {
-	s.stopOnce.Do(func() {
-		close(s.stopChan)
-		if s.listener != nil {
-			l := *s.listener
-			l.Close()
-		}
-		fmt.Println("[WT] Server stopped")
-	})
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.started.Load() {
+		return
+	}
+	if s.cancel != nil {
+		s.cancel()
+	}
+	if s.server != nil {
+		_ = s.server.Close()
+	}
+	if s.udpConn != nil {
+		_ = s.udpConn.Close()
+	}
+	s.started.Store(false)
+	log.Printf("[WT] Server stopped")
 }
 
+// LocalAddr returns the bound UDP address.
+func (s *WTServer) LocalAddr() string {
+	if s.udpConn == nil {
+		return s.addr
+	}
+	return s.udpConn.LocalAddr().String()
+}
+
+// GetCertHash returns hex-encoded SHA-256 of the DER certificate.
 func (s *WTServer) GetCertHash() string {
-	// WebTransport serverCertificateHashes needs SHA-256 of the DER certificate, not serial.
-	if s.tlsConfig == nil || len(s.tlsConfig.Certificates) == 0 {
+	if len(s.certDER) == 0 {
 		return ""
 	}
-	der := s.tlsConfig.Certificates[0].Certificate[0]
-	sum := sha256.Sum256(der)
+	sum := sha256.Sum256(s.certDER)
 	return hex.EncodeToString(sum[:])
 }
 
+// GetStats returns runtime stats for HTTP API.
 func (s *WTServer) GetStats() map[string]interface{} {
-	var clientCount int
-	s.clients.Range(func(_, _ interface{}) bool {
-		clientCount++
-		return true
-	})
+	var n int
+	s.clients.Range(func(_, _ interface{}) bool { n++; return true })
+	uptime := 0.0
+	if s.started.Load() {
+		uptime = time.Since(s.startTime).Seconds()
+	}
 	return map[string]interface{}{
 		"transport": "webtransport",
-		"addr":      s.addr,
-		"clients":   clientCount,
-		"bytesIn":   s.byteIn.Load(),
-		"bytesOut":  s.byteOut.Load(),
-		"uptime":    int(time.Since(s.startedAt).Seconds()),
+		"running":   s.started.Load(),
+		"addr":      s.LocalAddr(),
 		"certHash":  s.GetCertHash(),
+		"clients":   n,
+		"bytesIn":   s.bytesIn.Load(),
+		"bytesOut":  s.bytesOut.Load(),
+		"uptime":    uptime,
 	}
 }
-
-func generateSelfSignedTLS() (*tls.Config, error) {
-	priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("ecdsa key: %w", err)
-	}
-
-	template := x509.Certificate{
-		SerialNumber:          big.NewInt(time.Now().UnixNano()),
-		Subject:               pkix.Name{Organization: []string{"IndestructibleVPN"}},
-		NotBefore:             time.Now(),
-		NotAfter:              time.Now().Add(365 * 24 * time.Hour),
-		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		BasicConstraintsValid: true,
-		IsCA:                  true,
-		DNSNames:              []string{"localhost"},
-		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("0.0.0.0")},
-	}
-
-	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
-	if err != nil {
-		return nil, fmt.Errorf("x509 cert: %w", err)
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{{
-			Certificate: [][]byte{certDER},
-			PrivateKey:  priv,
-		}},
-		MinVersion: tls.VersionTLS13,
-		NextProtos: []string{"h3"},
-	}, nil
-}
-// LocalAddr returns the actual listening address of the server.
-func (s *WTServer) LocalAddr() string {
-	if s.listener == nil {
-		return ""
-	}
-	return s.listener.Addr().String()
-}
-
-

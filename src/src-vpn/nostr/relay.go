@@ -72,6 +72,9 @@ type Relay struct {
 	clients   map[*Client]bool
 	maxEvents int
 	db        DBProvider
+
+	// OnEvent is called after a valid event is accepted (optional).
+	OnEvent func(Event)
 }
 
 // NewRelay creates a new NIP-01 relay.
@@ -199,6 +202,11 @@ func (r *Relay) handleEvent(client *Client, raw []json.RawMessage) {
 
 	// Send OK to sender
 	client.sendOK(event.ID, true, "")
+
+	// Optional app hook (VPN signaling, etc.)
+	if r.OnEvent != nil {
+		go r.OnEvent(event)
+	}
 
 	// Forward to matching subscribers
 	for _, sub := range subs {

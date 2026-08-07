@@ -33,6 +33,7 @@ export default defineConfig({
         ],
       },
       workbox: {
+        importScripts: ['/vpn-tunnel-sw.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,woff2}'],
         navigateFallback: '/',
         navigateFallbackDenylist: [/^\/api\//],
