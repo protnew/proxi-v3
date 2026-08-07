@@ -62,6 +62,13 @@ if (initialView === 'advanced') {
   let showNewChatView = $derived($showNewChat)
 
   onMount(async () => {
+    // Safety timeout: force loading=false after 8s
+    const safetyTimer = setTimeout(() => {
+      if (loading) {
+        console.warn('[app] Init timeout — forcing loading=false')
+        loading = false
+      }
+    }, 8000)
     console.log('[app] onMount started!');
     // 1. Load saved data
     stores.loadProfile()
@@ -151,7 +158,11 @@ if (initialView === 'advanced') {
     })
     let nostrRelays = 0
     try {
-      nostrRelays = await nostrChat.connect()
+      // Timeout external relay connections — don't let them block the UI
+      nostrRelays = await Promise.race([
+        nostrChat.connect(),
+        new Promise<number>((resolve) => setTimeout(() => resolve(0), 4000)),
+      ])
     } catch (e) {
       console.warn('[app] Nostr connect failed:', e)
       nostrRelays = 0
@@ -237,6 +248,7 @@ if (initialView === 'advanced') {
       console.log(`[app] Demo mode: ${isAlice ? 'Alice' : 'Bob'} → chat with ${partnerName} ready`);
     }
 
+    clearTimeout(safetyTimer)
     loading = false
   })
 
@@ -259,7 +271,7 @@ if (initialView === 'advanced') {
 </script>
 
 {#if loading}
-  <div class="loading">
+  <div class="loading" id="loading-overlay">
     <div class="spinner"></div>
     <p>🛡️ {statusText}</p>
   </div>

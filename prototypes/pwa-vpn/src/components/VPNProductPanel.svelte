@@ -60,19 +60,14 @@
     const stats = await start.json()
     const certHash = stats.certHash || ''
     // Prefer LAN host + actual WT port from addr
-    // Prefer page hostname (LAN/localhost). Never publish 0.0.0.0 or bare [::].
+        // Prefer page hostname (LAN/localhost). Never publish 0.0.0.0 or bare [::].
+    // Use window.location.hostname so friends on same LAN can connect.
     let host = window.location.hostname || '127.0.0.1'
-    if (host === '[::]' || host === '::') host = '127.0.0.1'
+    if (host === '[::]' || host === '::' || host === '0.0.0.0') host = '127.0.0.1'
     let port = '4433'
     if (typeof stats.addr === 'string' && stats.addr) {
-      try {
-        // Handles 127.0.0.1:4433 and [::]:4433
-        const u = new URL('http://' + stats.addr.replace(/^\[?::\]?/, '127.0.0.1'))
-        if (u.port) port = u.port
-      } catch {
-        const m = String(stats.addr).match(/:(\d+)$/)
-        if (m) port = m[1]
-      }
+      const m = String(stats.addr).match(/:(\d+)$/)
+      if (m) port = m[1]
     }
     const wtAddr = `${host}:${port}`
     return { wtAddr, certHash }
@@ -138,15 +133,41 @@
           wtAddr: ev.wtAddr,
           certHash: ev.wtCertHash || '',
         })
-        try {
-          let body = (await wtVPN.fetchHTTP('http://api.ipify.org')).trim()
-          if (!body) {
-            body = (await wtVPN.fetchHTTP('http://example.com')).trim().slice(0, 80)
+        // Stable probe: try api.ipify.org, fallback to stats from server
+        let probeOk = false
+        let probeIp = ''
+        for (const probeUrl of ['http://api.ipify.org', 'http://ifconfig.me/ip']) {
+          try {
+            const body = (await wtVPN.fetchHTTP(probeUrl)).trim()
+            if (body && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(body)) {
+              probeOk = true
+              probeIp = body
+              break
+            }
+          } catch {
+            // try next
           }
-          lastTunnelIp = body
-          addLog(body ? 'Туннель OK: ' + body.slice(0, 60) : 'Туннель CONNECT OK (empty body)')
-        } catch (te) {
-          addLog('Туннель probe: ' + (te as Error).message)
+        }
+        if (probeOk) {
+          lastTunnelIp = probeIp
+          addLog('✅ Туннель IP: ' + probeIp)
+        } else {
+          // Fallback: check server-side stats for bytes transferred
+          try {
+            const token = localStorage.getItem('proxi_token')
+            const r = await fetch('/api/vpn/wt/stats', {
+              headers: { Authorization: 'Bearer ' + (token || '') },
+            })
+            const stats = await r.json()
+            if (stats.bytesIn > 0 || stats.bytesOut > 0) {
+              lastTunnelIp = 'туннель активен'
+              addLog(`✅ Туннель активен: ↓${stats.bytesIn}B ↑${stats.bytesOut}B`)
+            } else {
+              addLog('Туннель CONNECT OK (нет данных)')
+            }
+          } catch {
+            addLog('Туннель CONNECT OK')
+          }
         }
         vpnStatus = 'connected'
         statusText = 'Подключён к VPN друга'
@@ -184,6 +205,63 @@
     statusText = 'VPN выключен'
     lastTunnelIp = ''
     addLog('Отключён')
+  }
+
+
+  // ── SW Tunnel Handler ──
+  // SW intercepts external fetches, asks page to route through WT CONNECT tunnel
+  async function handleTunnelFetch(event: MessageEvent) {
+    const data = (event as any).data || {}
+    if (data.type !== 'TUNNEL_FETCH') return
+    const port = (event as any).ports?.[0]
+    if (!port) return
+    const { target, method, path, host, headers } = data
+    try {
+      const { readable, writable } = await wtVPN.openConnect(target)
+      const writer = writable.getWriter()
+      const enc = new TextEncoder()
+      let req = `${method} ${path} HTTP/1.1\r\nHost: ${host}\r\n`
+      for (const [k, v] of Object.entries(headers || {})) {
+        if (k.toLowerCase() === 'host') continue
+        req += `${k}: ${(v as string)}\r\n`
+      }
+      req += 'Connection: close\r\n\r\n'
+      await writer.write(enc.encode(req))
+      try { await writer.close() } catch {}
+      const reader = readable.getReader()
+      const chunks: Uint8Array[] = []
+      let total = 0
+      const deadline = Date.now() + 10000
+      while (Date.now() < deadline) {
+        const { value, done } = await Promise.race([
+          reader.read(),
+          new Promise<{ done: true; value: undefined }>((r) => setTimeout(() => r({ done: true, value: undefined }), 3000)),
+        ]) as any
+        if (done) break
+        if (value) {
+          chunks.push(value)
+          total += value.byteLength
+          if (total > 1048576) break
+        }
+      }
+      try { reader.releaseLock() } catch {}
+      const resp = new Uint8Array(total)
+      let off = 0
+      for (const c of chunks) { resp.set(c, off); off += c.byteLength }
+      port.postMessage({ type: 'COMPLETE', body: resp }, [resp.buffer])
+    } catch (e) {
+      port.postMessage({ type: 'ERROR', error: (e as Error).message })
+    }
+  }
+
+  function registerSWTunnel() {
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker) return
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.addEventListener('message', handleTunnelFetch)
+      const mc = new MessageChannel()
+      navigator.serviceWorker.controller.postMessage({ type: 'VPN_PAGE_READY' }, [mc.port2])
+      console.log('[VPN] SW tunnel provider registered')
+    }
   }
 
   let unsubVPN: (() => void) | null = null

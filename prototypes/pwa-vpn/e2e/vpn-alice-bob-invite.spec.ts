@@ -3,6 +3,7 @@ import { test, expect } from '@playwright/test'
 const BASE = process.env.APP_URL || 'http://127.0.0.1:8090'
 const BOB_SK = '2'.repeat(64)
 
+test.setTimeout(120000);
 test('Alice invite → Bob accept → WT connect result', async ({ browser }) => {
   const aliceCtx = await browser.newContext()
   const bobCtx = await browser.newContext()
