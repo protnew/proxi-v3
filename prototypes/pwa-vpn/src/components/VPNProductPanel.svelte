@@ -19,22 +19,8 @@
   let dismissedFrom = $state<Record<string, number>>({})
 
   onMount(async () => {
-    try {
-      const token = localStorage.getItem('proxi_token') || ''
-      const r = await fetch('/api/vpn/turn/config', { headers: { Authorization: 'Bearer ' + token } })
-      if (r.ok) {
-        const cfg = await r.json()
-        turnStatus = cfg.urls ? ('TURN: ' + cfg.urls) : 'STUN only (85%)'
-      }
-    } catch { turnStatus = 'STUN only' }
-    try {
-      const token2 = localStorage.getItem('proxi_token') || ''
-      const r2 = await fetch('/api/vpn/amnezia', { headers: { Authorization: 'Bearer ' + token2 } })
-      if (r2.ok) {
-        const am = await r2.json()
-        amneziaStatus = am.enabled ? 'AmneziaWG ON' : ''
-      }
-    } catch {}
+    turnStatus = '13 бесплатных ICE (10 STUN + 3 TURN)'
+    amneziaStatus = ''
   })
 
   function addLog(msg: string) {

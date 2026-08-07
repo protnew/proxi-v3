@@ -1,11 +1,16 @@
 /**
- * WebRTC VPN - P2P DataChannel tunnel browser<->browser.
- * Architecture table 01_VPN_Primary_Transport: WebRTC DataChannels (Score 178/220).
+ * WebRTC VPN — P2P DataChannel tunnel browser<->browser.
  *
- * Features:
- * - P2P + NAT traversal (ICE/STUN/TURN) per table 04_Hole_Punching
- * - HTTPS CONNECT method (TLS-in-tunnel) per P2 requirement
- * - TURN fallback for symmetric NAT per table 05_Relay_Architecture
+ * Architecture tables (источник истины):
+ *   01_VPN_Primary_Transport: WebRTC DataChannels (Score 178/220)
+ *   04_Hole_Punching: STUN + public TURN (Score 154)
+ *   26_Signaling: Nostr NIP-44 for SDP/ICE exchange (Score 193)
+ *   57_Global_P2P: libp2p circuit relay (Phase 2 Desktop, Score 191)
+ *
+ * НАШИХ СЕРВЕРОВ НЕТ. Всё работает на бесплатных публичных сервисах:
+ *   - STUN: Google, Cloudflare, Nextcloud (10 серверов) — пробивает 85% NAT
+ *   - TURN: OpenRelay, ExpressTurn (публичные бесплатные) — fallback 15%
+ *   - Signaling: Nostr relays (тысячи публичных, децентрализованные)
  */
 
 export type RTCStatus = "disconnected" | "connecting" | "connected" | "error"
@@ -13,7 +18,29 @@ export type RTCStatus = "disconnected" | "connecting" | "connected" | "error"
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
+  { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
+  { urls: "stun:stun.nextcloud.com:443" },
+  { urls: "stun:stun.sipgate.net:3478" },
+  { urls: "stun:stun.ekiga.net:3478" },
+  { urls: "stun:stun.sonetel.com:3478" },
+  { urls: "stun:stun.voipbuster.com:3478" },
+  { urls: "stun:stun.1und1.de:3478" },
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:openrelay.metered.ca:443",
+    username: "openrelayproject",
+    credential: "openrelayproject",
+  },
+  {
+    urls: "turn:relay1.expressturn.com:3478",
+    username: "ef3KKF",
+    credential: "wMo2lgTNQjZ9",
+  },
 ]
 
 const TYPE_HTTP_GET = 0x01
@@ -37,23 +64,7 @@ interface PendingTunnel {
 }
 
 async function getIceServers(): Promise<RTCIceServer[]> {
-  const base: RTCIceServer[] = [...ICE_SERVERS]
-  try {
-    const token = localStorage.getItem("proxi_token") || ""
-    const r = await fetch("/api/vpn/turn/config", {
-      headers: { Authorization: "Bearer " + token },
-    })
-    if (r.ok) {
-      const cfg = await r.json()
-      if (cfg.urls && cfg.username) {
-        base.push({ urls: cfg.urls, username: cfg.username, credential: cfg.credential })
-        console.log("[WebRTC] TURN server added:", cfg.urls)
-      }
-    }
-  } catch {
-    // TURN not configured yet
-  }
-  return base
+  return ICE_SERVERS
 }
 
 export class WebRTCVPNClient {
@@ -62,9 +73,11 @@ export class WebRTCVPNClient {
   private status: RTCStatus = "disconnected"
   private lastError = ""
   private pending: PendingTunnel | null = null
+  private iceRole = ""
 
   getStatus(): RTCStatus { return this.status }
   getLastError(): string { return this.lastError }
+  getIceRole(): string { return this.iceRole }
   isSupported(): boolean { return typeof RTCPeerConnection !== "undefined" }
 
   async createOffer(): Promise<{ sdp: string; gatherIce: (cb: (c: string) => void) => Promise<void> }> {
@@ -76,6 +89,7 @@ export class WebRTCVPNClient {
     const offer = await this.pc.createOffer()
     await this.pc.setLocalDescription(offer)
     this.status = "connecting"
+    this.iceRole = "caller"
     const gatherIce = async (cb: (c: string) => void) => {
       if (!this.pc) return
       this.pc.onicecandidate = (e) => { if (e.candidate) cb(e.candidate.candidate) }
@@ -100,6 +114,7 @@ export class WebRTCVPNClient {
     const answer = await this.pc.createAnswer()
     await this.pc.setLocalDescription(answer)
     this.status = "connecting"
+    this.iceRole = "callee"
     const myCandidates: string[] = []
     await new Promise<void>((resolve) => {
       if (!this.pc) return resolve()
@@ -142,7 +157,6 @@ export class WebRTCVPNClient {
       const payload = data.slice(5, 5 + len)
       if (type === TYPE_HTTP_GET) {
         const target = new TextDecoder().decode(payload)
-        console.log("[WebRTC-VPN] Exit HTTP GET", target)
         try {
           const url = target.startsWith("http") ? target : "http://" + target
           const resp = await fetch(url)
@@ -151,7 +165,6 @@ export class WebRTCVPNClient {
         } catch (err) { this.sendReply(dc, TYPE_ERR, new TextEncoder().encode((err as Error).message)) }
       } else if (type === TYPE_HTTPS) {
         const target = new TextDecoder().decode(payload)
-        console.log("[WebRTC-VPN] Exit HTTPS", target)
         try {
           const url = target.startsWith("https") ? target : "https://" + target
           const resp = await fetch(url)
