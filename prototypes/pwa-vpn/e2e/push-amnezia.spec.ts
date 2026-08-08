@@ -7,7 +7,7 @@ test.describe('Phase2 Push + Amnezia UI', () => {
     permissions: ['notifications'],
   })
 
-  test('Amnezia status visible + tunnel API up', async ({ page, request }) => {
+  test('In-app VPN engine visible + tunnel API up', async ({ page, request }) => {
     // API tunnel
     const tun = await request.post(BASE + '/api/vpn/amnezia/tunnel', {
       data: {
@@ -29,9 +29,9 @@ test.describe('Phase2 Push + Amnezia UI', () => {
 
     await page.goto(BASE + '/?role=alice', { waitUntil: 'domcontentloaded' })
     await page.waitForTimeout(2500)
-    await expect(page.getByTestId('vpn-amnezia')).toBeVisible()
+    await expect(page.getByTestId('vpn-engine')).toBeVisible()
     await expect(page.getByTestId('vpn-push')).toBeVisible()
-    await expect(page.getByTestId('phase2-status')).toContainText(/Amnezia/i)
+    await expect(page.getByTestId('phase2-status')).toContainText(/Движок|engine|up|userspace|приложении/i)
   })
 
   test('Push subscribe with granted permission', async ({ page, context }) => {

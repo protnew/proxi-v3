@@ -60,7 +60,7 @@ var tunnel = &tunnelRuntime{
 	status: TunnelStatus{
 		State: "stopped",
 		Mode:  "none",
-		Note:  "AmneziaWG/WireGuard driver required for kernel tunnel; conf generation always works",
+		Note:  "In-app userspace VPN is primary. Kernel/AmneziaVPN GUI optional.",
 	},
 }
 
@@ -278,11 +278,11 @@ func StartAmneziaTunnel(req TunnelStartRequest) (TunnelStatus, error) {
 	tunnel.status.State = "up"
 	tunnel.status.Mode = "userspace"
 	if driverClass == "gui" {
-		tunnel.status.Note = fmt.Sprintf("Userspace tunnel UP. Kernel GUI (%s) can import conf: %s", driverName, confPath)
+		tunnel.status.Note = fmt.Sprintf("In-app userspace VPN UP. External %s optional for conf import: %s", driverName, confPath)
 	} else if driverClass == "kernel" {
 		tunnel.status.Note = "Userspace tunnel UP (kernel apply failed earlier). Conf: " + confPath
 	} else {
-		tunnel.status.Note = "Userspace Amnezia-ready tunnel UP; conf saved for kernel import: " + confPath
+		tunnel.status.Note = "In-app userspace VPN UP (no external app). Optional conf: " + confPath
 	}
 	return tunnel.status, nil
 }

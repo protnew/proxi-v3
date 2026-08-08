@@ -70,7 +70,7 @@ func AmneziaStatus() map[string]interface{} {
 		"junkPacketCount":  cfg.JunkPacketCount,
 		"endpoint":         cfg.Endpoint,
 		"phase":            "desktop_only",
-		"note":             "DPI evasion for PWA uses WebRTC (looks like video call). AmneziaWG for desktop (Tauri) Phase 2.",
+		"note":             "Primary VPN is in-app (WebRTC P2P + userspace engine). External AmneziaVPN app is optional import only.",
 	}
 }
 

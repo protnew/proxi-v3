@@ -31,7 +31,8 @@
     amneziaStatus = ''
     try {
       tunnelInfo = await getTunnelStatus()
-      amneziaStatus = `${tunnelInfo.state}/${tunnelInfo.mode || 'none'}`
+      const mode = tunnelInfo.mode === 'userspace' ? 'в приложении' : (tunnelInfo.mode || 'выкл')
+      amneziaStatus = `${tunnelInfo.state}/${mode}`
     } catch { amneziaStatus = 'n/a' }
     try {
       const pc = await fetchPushConfig()
@@ -39,39 +40,51 @@
     } catch { pushInfo = 'push n/a' }
   })
 
-  async function startAmneziaTunnel() {
+  /** In-app VPN engine (userspace). No external AmneziaVPN required. */
+  async function startInAppTunnel() {
     tunnelBusy = true
     try {
-      // Demo peer — replace with real friend WG pubkey/endpoint in product flow
-      const peerPublicKey = (friendId && friendId.length > 20)
+      const peerPublicKey = (friendId && friendId.length > 40)
         ? friendId
         : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-      const endpoint = '203.0.113.10:51820'
+      // Endpoint is placeholder until friend shares real endpoint via invite
+      const endpoint = '127.0.0.1:51820'
       tunnelInfo = await startTunnel({ peerPublicKey, endpoint })
-      amneziaStatus = `${tunnelInfo.state}/${tunnelInfo.mode}`
-      addLog(`Amnezia tunnel: ${tunnelInfo.state} (${tunnelInfo.mode})`)
-      if (tunnelInfo.confPath) addLog(`conf: ${tunnelInfo.confPath}`)
-      // open import helper on host
-      try {
-        await fetch('/api/vpn/amnezia/import', { method: 'POST' })
-      } catch {}
+      const label = tunnelInfo.mode === 'userspace' ? 'в приложении' : (tunnelInfo.mode || '')
+      amneziaStatus = `${tunnelInfo.state}/${label}`
+      addLog(`VPN-движок: ${tunnelInfo.state} (${tunnelInfo.mode || 'n/a'})`)
+      if (tunnelInfo.localPublicKey) addLog('local pub: ' + tunnelInfo.localPublicKey.slice(0, 20) + '…')
     } catch (e: any) {
-      addLog('Amnezia error: ' + (e?.message || e))
+      addLog('VPN-движок: ' + (e?.message || e))
     } finally {
       tunnelBusy = false
     }
   }
 
-  async function stopAmneziaTunnel() {
+  async function stopInAppTunnel() {
     tunnelBusy = true
     try {
       tunnelInfo = await stopTunnel()
-      amneziaStatus = `${tunnelInfo.state}/${tunnelInfo.mode || 'none'}`
-      addLog('Amnezia stopped')
+      amneziaStatus = `${tunnelInfo.state}/выкл`
+      addLog('VPN-движок остановлен')
     } catch (e: any) {
-      addLog('stop error: ' + (e?.message || e))
+      addLog('stop: ' + (e?.message || e))
     } finally {
       tunnelBusy = false
+    }
+  }
+
+  let showAdvanced = $state(false)
+
+  /** Optional: export conf for people who already use AmneziaVPN app — NOT required */
+  async function exportForAmneziaOptional() {
+    try {
+      const r = await fetch('/api/vpn/amnezia/import', { method: 'POST' })
+      const j = await r.json()
+      addLog(j.ok ? 'Conf экспортирован (опционально)' : ('export: ' + (j.note || 'fail')))
+      if (j.userCopyPath) addLog(j.userCopyPath)
+    } catch (e: any) {
+      addLog('export: ' + (e?.message || e))
     }
   }
 
@@ -399,21 +412,26 @@
       <button class="vpn-btn request" data-testid="vpn-request" onclick={() => showRequestModal = true}>
         🤝 Запросить VPN
       </button>
-      <button class="vpn-btn amnezia" data-testid="vpn-amnezia" disabled={tunnelBusy} onclick={startAmneziaTunnel}>
-        🧱 Amnezia tunnel
+      <button class="vpn-btn engine" data-testid="vpn-engine" disabled={tunnelBusy} onclick={startInAppTunnel}>
+        ⚡ VPN в приложении
       </button>
       <button class="vpn-btn push" data-testid="vpn-push" disabled={pushBusy} onclick={enablePush}>
-        🔔 Push
+        🔔 Уведомления
       </button>
     </div>
     <div class="phase2-status" data-testid="phase2-status">
-      <span>Amnezia: {amneziaStatus || '—'}</span>
+      <span>Движок: {amneziaStatus || '—'}</span>
       <span>Push: {pushInfo || '—'}</span>
-      {#if tunnelInfo?.confPath}
-        <span class="conf-path" title={tunnelInfo.confPath}>conf ✓</span>
-        <button class="linkish" data-testid="vpn-amnezia-stop" disabled={tunnelBusy} onclick={stopAmneziaTunnel}>Стоп tunnel</button>
+      {#if tunnelInfo?.state === 'up'}
+        <span class="conf-path">внутри продукта ✓</span>
+        <button class="linkish" data-testid="vpn-engine-stop" disabled={tunnelBusy} onclick={stopInAppTunnel}>Стоп движка</button>
       {/if}
     </div>
+    <details class="advanced" data-testid="vpn-advanced">
+      <summary onclick={() => showAdvanced = !showAdvanced}>Дополнительно (не нужно для обычной работы)</summary>
+      <p class="adv-note">Основной VPN — кнопки «Дать/Запросить VPN» (WebRTC внутри продукта). Ниже только для тех, кто уже пользуется приложением AmneziaVPN отдельно.</p>
+      <button class="linkish" data-testid="vpn-export-amnezia" type="button" onclick={exportForAmneziaOptional}>Экспорт conf в AmneziaVPN (опционально)</button>
+    </details>
   {:else}
     <div class="vpn-status" class:sharing={vpnStatus === 'sharing'} class:connected={vpnStatus === 'connected'}>
       <span class="status-dot"></span>
@@ -503,7 +521,11 @@
   .ice-badge { font-size: 11px; color: #7dd3fc; background: rgba(125,211,252,0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(125,211,252,0.2); }
   .ice-badge.amnezia { color: #fbbf24; background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
 
+  .vpn-btn.engine { background: #1f3d2b; border: 1px solid #3ac47b; }
   .vpn-btn.amnezia { background: #3d2b1f; border: 1px solid #c47b3a; }
+  .advanced { margin: 6px 0; font-size: 12px; opacity: 0.85; }
+  .advanced summary { cursor: pointer; }
+  .adv-note { margin: 6px 0; line-height: 1.35; opacity: 0.9; }
   .vpn-btn.push { background: #1f2a3d; border: 1px solid #4a7bc4; }
   .phase2-status {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
