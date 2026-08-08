@@ -37,7 +37,8 @@ if (initialView === 'advanced') {
   import { onMount } from 'svelte'
   import * as stores from './stores/messenger'
   import { initIdentity, initIdentityAsync, connectRelays, sendPresence, getName, onMessage, onPresence, onTyping, getStatus } from './lib/api'
-  import { sendDM } from './lib/api'
+  import { sendDM, getSeckey } from './lib/api'
+  import { decryptDM, isEncryptedPayload } from './lib/nip-e2e'
   import { startOutboxWatcher } from './lib/offline-outbox'
   import { getIdentity, type Identity } from './lib/identity'
   import { NostrChat, type NostrMessage } from './lib/nostr-chat'
@@ -63,6 +64,19 @@ if (initialView === 'advanced') {
   
   let showSettingsView = $derived($showSettings)
   let showNewChatView = $derived($showNewChat)
+
+
+  async function maybeDecryptText(from: string, text: string): Promise<string> {
+    if (!isEncryptedPayload(text)) return text
+    const sk = getSeckey()
+    if (!sk) return text
+    try {
+      const pt = await decryptDM(text, sk, from)
+      return pt ?? text
+    } catch {
+      return text
+    }
+  }
 
   onMount(async () => {
     const stopOutbox = startOutboxWatcher(async (to, text) => {
@@ -111,18 +125,21 @@ if (initialView === 'advanced') {
       const chatId = msg.to.startsWith('group:') ? msg.to : `dm:${msg.from}`
       const peerName = getName(msg.from)
       stores.ensureDMChat(msg.from, peerName)
-      stores.addMessage(chatId, { ...msg, read: false })
-      playIncoming()
-
-      if (Notification.permission === 'granted' && document.hidden) {
-        try {
-          new Notification('Новое сообщение', {
-            body: `${peerName}: ${msg.text.slice(0, 60)}`,
-            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><text y="32" font-size="32">🛡️</text></svg>'
-          })
-        } catch {}
-      }
-      updateTitle()
+      // HIGH audit fix: decrypt NIP-E2E payloads on receive
+      void (async () => {
+        const text = await maybeDecryptText(msg.from, msg.text || '')
+        stores.addMessage(chatId, { ...msg, text, read: false })
+        playIncoming()
+        if (Notification.permission === 'granted' && document.hidden) {
+          try {
+            new Notification('Новое сообщение', {
+              body: `${peerName}: ${text.slice(0, 60)}`,
+              icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><text y="32" font-size="32">🛡️</text></svg>'
+            })
+          } catch {}
+        }
+        updateTitle()
+      })()
     })
 
     onPresence((pk: string, online: boolean) => {
@@ -167,11 +184,14 @@ if (initialView === 'advanced') {
       console.log('[app] Nostr DM from', msg.from.slice(0, 16), ':', msg.text.slice(0, 50))
       const peerName = getName(msg.from)
       stores.ensureDMChat(msg.from, peerName)
-      stores.addMessage(`dm:${msg.from}`, {
-        id: msg.id, from: msg.from, to: msg.to, text: msg.text,
-        timestamp: msg.timestamp, type: 'text', read: false,
-      })
-      playIncoming()
+      void (async () => {
+        const text = await maybeDecryptText(msg.from, msg.text || '')
+        stores.addMessage(`dm:${msg.from}`, {
+          id: msg.id, from: msg.from, to: msg.to, text,
+          timestamp: msg.timestamp, type: 'text', read: false,
+        })
+        playIncoming()
+      })()
     })
     let nostrRelays = 0
     try {

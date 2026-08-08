@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { webcrypto } from 'crypto';
 if (!globalThis.crypto) (globalThis as any).crypto = webcrypto;
 
-import { createIdentity, loadIdentity, getIdentity, deleteIdentity, signEvent } from '../src/lib/identity';
+import { createIdentity, loadIdentityAsync, getIdentity, deleteIdentity, signEvent } from '../src/lib/identity';
 
 describe('Identity management (full)', () => {
   beforeEach(() => localStorage.clear());
@@ -22,7 +22,7 @@ describe('Identity management (full)', () => {
 
   it('createIdentity stores in localStorage', async () => {
     const id = await createIdentity();
-    const loaded = loadIdentity();
+    const loaded = await loadIdentityAsync();
     expect(loaded).not.toBeNull();
     expect(loaded!.publicKey).toBe(id.publicKey);
   });
@@ -36,7 +36,7 @@ describe('Identity management (full)', () => {
   it('deleteIdentity clears localStorage', async () => {
     await createIdentity();
     deleteIdentity();
-    expect(loadIdentity()).toBeNull();
+    expect(await loadIdentityAsync()).toBeNull();
   });
 
   it('each identity is unique', async () => {

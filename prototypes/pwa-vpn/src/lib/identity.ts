@@ -44,31 +44,95 @@ export async function createIdentity(): Promise<Identity> {
     createdAt: Date.now(),
   }
 
-  // Save encrypted with a derived key (for MVP — just localStorage)
-  // TODO: encrypt with user's password via PBKDF2
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(identity))
-
+  await saveIdentityEncrypted(identity)
   return identity
 }
 
+const DEVICE_KEY = 'indestructible-device-key'
+const STORAGE_ENC = 'indestructible-identity-v2'
+
+async function getDeviceKey(): Promise<CryptoKey> {
+  let raw = localStorage.getItem(DEVICE_KEY)
+  let bytes: Uint8Array
+  if (!raw) {
+    bytes = crypto.getRandomValues(new Uint8Array(32))
+    localStorage.setItem(DEVICE_KEY, Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''))
+  } else {
+    bytes = hexToBytes(raw)
+  }
+  // PBKDF2 stretch device secret → AES key (mitigates casual localStorage dump)
+  const base = await crypto.subtle.importKey('raw', bytes as BufferSource, 'PBKDF2', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: new TextEncoder().encode('indestructible-identity-v2'),
+      iterations: 100_000,
+      hash: 'SHA-256',
+    },
+    base,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt'],
+  )
+}
+
+async function saveIdentityEncrypted(identity: Identity): Promise<void> {
+  try {
+    const key = await getDeviceKey()
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    const pt = new TextEncoder().encode(JSON.stringify(identity))
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt)
+    const pack = {
+      v: 2,
+      iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
+      ct: btoa(String.fromCharCode(...new Uint8Array(ct))),
+    }
+    localStorage.setItem(STORAGE_ENC, JSON.stringify(pack))
+    // Remove plaintext legacy if present
+    localStorage.removeItem(STORAGE_KEY)
+  } catch (e) {
+    console.warn('[identity] encrypt save failed, plaintext fallback', e)
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(identity))
+  }
+}
+
 /**
- * Load existing identity from localStorage
+ * Load existing identity from localStorage (v2 encrypted or legacy plaintext)
  */
 export function loadIdentity(): Identity | null {
-  const raw = localStorage.getItem(STORAGE_KEY)
-  if (!raw) return null
-  try {
-    return JSON.parse(raw) as Identity
-  } catch {
-    return null
+  // Sync path: try legacy plaintext first for sync callers
+  const legacy = localStorage.getItem(STORAGE_KEY)
+  if (legacy) {
+    try { return JSON.parse(legacy) as Identity } catch { /* fallthrough */ }
   }
+  return null
+}
+
+/** Async load — decrypts v2 storage */
+export async function loadIdentityAsync(): Promise<Identity | null> {
+  const enc = localStorage.getItem(STORAGE_ENC)
+  if (enc) {
+    try {
+      const pack = JSON.parse(enc) as { v: number; iv: string; ct: string }
+      const key = await getDeviceKey()
+      const iv = hexToBytes(pack.iv)
+      const ctBin = atob(pack.ct)
+      const ct = new Uint8Array(ctBin.length)
+      for (let i = 0; i < ctBin.length; i++) ct[i] = ctBin.charCodeAt(i)
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+      return JSON.parse(new TextDecoder().decode(pt)) as Identity
+    } catch (e) {
+      console.warn('[identity] decrypt failed', e)
+    }
+  }
+  return loadIdentity()
 }
 
 /**
  * Get or create identity
  */
 export async function getIdentity(): Promise<Identity> {
-  const existing = loadIdentity()
+  const existing = await loadIdentityAsync()
   if (existing) return existing
   return createIdentity()
 }
@@ -78,6 +142,8 @@ export async function getIdentity(): Promise<Identity> {
  */
 export function deleteIdentity(): void {
   localStorage.removeItem(STORAGE_KEY)
+  localStorage.removeItem(STORAGE_ENC)
+  // keep DEVICE_KEY so re-login on same browser can rotate identity cleanly
 }
 
 /**

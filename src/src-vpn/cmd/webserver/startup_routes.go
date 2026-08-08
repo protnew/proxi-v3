@@ -1,3 +1,4 @@
+// LEGACY: /api/vpn/wt/* is LAN-only WebTransport (Table 01 primary = WebRTC). Do not expand.
 // File: startup_routes.go
 // P2-2 RESCUE 20260721: extracted from startup.go run().
 // All HTTP route registrations in one place.
