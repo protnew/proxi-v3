@@ -3,7 +3,9 @@
   const dispatch = createEventDispatcher();
   import "./ChatView.css";
   import * as stores from '../stores/messenger'
-  import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getStatus } from '../lib/api'
+  import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getStatus, getSeckey } from '../lib/api'
+  import { uploadFile, downloadByCID, formatCIDShort, MAX_FILE_BYTES } from '../lib/ipfs-storage'
+  import { enqueue as outboxEnqueue, startOutboxWatcher } from '../lib/offline-outbox'
   import { playOutgoing } from '../lib/sounds'
   import { formatTime, formatDay, getDate, formatSize, extractUrls } from '../lib/chat-utils'
   import { sendFile } from '../lib/peer-manager'
@@ -138,11 +140,18 @@
         }
         if (!sent) {
           const resp: any = await sendDM(peer, text)
-          if (resp?.status >= 400) console.error('[chatview] sendDM fallback failed', resp)
+          if (resp?.status && resp.status < 400) sent = true
+          else console.error('[chatview] sendDM fallback failed', resp)
+        }
+        // SL-053: if all transports failed → offline outbox
+        if (!sent) {
+          outboxEnqueue(peer, text)
+          console.log('[chatview] queued offline (outbox)')
         }
       }
     } catch (e) {
       console.error('[chatview] sendMessage error', e)
+      try { if (!isGroup) outboxEnqueue(peerPubkey, text) } catch {}
     }
   }
 
@@ -233,15 +242,69 @@
     const isImage = file.type.startsWith('image/')
     const msgType = isImage ? 'image' : 'file'
 
-    // Create thumbnail for images
-    let thumbnail = ''
-    if (isImage) {
-      thumbnail = URL.createObjectURL(file)
+    // SL-044: size limit
+    if (file.size > MAX_FILE_BYTES) {
+      console.error('[chatview] file too large', file.size)
+      alert(`Файл слишком большой (макс ${Math.round(MAX_FILE_BYTES/1024/1024)}MB)`)
+      input.value = ''
+      return
     }
 
-    // Small files (<100KB): local blob URL + Nostr manifest
-    if (file.size < 100_000) {
-      const url = thumbnail || URL.createObjectURL(file)
+    uploading = true
+    uploadName = file.name
+    uploadProgress = 0
+
+    try {
+      // SL-041/042/043: content-addressed upload (local pin + Nostr kind:1063)
+      const result = await uploadFile(file, {
+        senderPubkey: currentProfile?.pubkey || '',
+        recipientPubkey: peerPubkey,
+        senderPrivateKey: getSeckey() || undefined,
+        onProgress: (pct) => { uploadProgress = pct },
+      })
+
+      const preview = result.previewUrl || (isImage ? URL.createObjectURL(file) : '')
+      const msg: Message = {
+        id: crypto.randomUUID(),
+        from: currentProfile?.pubkey || '',
+        to: currentChatId,
+        text: isImage ? `🖼️ ${file.name}` : `📎 ${file.name} (${formatCIDShort(result.cid)})`,
+        timestamp: Date.now(),
+        type: msgType,
+        fileName: file.name,
+        fileSize: file.size,
+        fileUrl: preview || undefined,
+        // @ts-ignore cid field for content-addressed download
+        cid: result.cid,
+        read: true,
+      }
+      stores.addMessage(currentChatId, msg)
+      // Notify peer with CID metadata
+      try {
+        await sendFileManifest(peerPubkey, {
+          name: file.name,
+          size: file.size,
+          cid: result.cid,
+          mimeType: result.mimeType,
+        } as any)
+      } catch {
+        try { sendFileManifest(peerPubkey, file.name, file.size, result.cid as any) } catch {}
+      }
+      // Also try P2P for large files (backup path)
+      if (file.size >= 100_000) {
+        try {
+          await sendFile(peerPubkey, file, (sent, total) => {
+            uploadProgress = Math.round(sent / total * 100)
+          })
+        } catch (err) {
+          console.warn('[chatview] P2P file backup failed (CID still local)', err)
+        }
+      }
+      playOutgoing()
+    } catch (err) {
+      console.error('[chatview] IPFS upload failed:', err)
+      // Fallback: local blob only
+      const url = URL.createObjectURL(file)
       const msg: Message = {
         id: crypto.randomUUID(),
         from: currentProfile?.pubkey || '',
@@ -255,52 +318,17 @@
         read: true,
       }
       stores.addMessage(currentChatId, msg)
-      sendFileManifest(peerPubkey, file.name, file.size, url)
-      playOutgoing()
-    } else {
-      // Large files: send via P2P DataChannel
-      uploading = true
-      uploadName = file.name
-      uploadProgress = 0
-      try {
-        await sendFile(peerPubkey, file, (sent, total) => {
-          uploadProgress = Math.round(sent / total * 100)
-        })
-        const msg: Message = {
-          id: crypto.randomUUID(),
-          from: currentProfile?.pubkey || '',
-          to: currentChatId,
-          text: isImage ? '🖼️ Фото' : `📎 ${file.name}`,
-          timestamp: Date.now(),
-          type: msgType,
-          fileName: file.name,
-          fileSize: file.size,
-          fileUrl: thumbnail,
-          read: true,
-        }
-        stores.addMessage(currentChatId, msg)
-        playOutgoing()
-      } catch (err) {
-        console.error('File send failed:', err)
-        const url = thumbnail || URL.createObjectURL(file)
-        const msg: Message = {
-          id: crypto.randomUUID(),
-          from: currentProfile?.pubkey || '',
-          to: currentChatId,
-          text: isImage ? '🖼️ Фото' : `📎 ${file.name}`,
-          timestamp: Date.now(),
-          type: msgType,
-          fileName: file.name,
-          fileSize: file.size,
-          fileUrl: url,
-          read: true,
-        }
-        stores.addMessage(currentChatId, msg)
-      }
-      uploading = false
-      uploadProgress = 0
     }
+
+    uploading = false
+    uploadProgress = 0
     input.value = ''
+  }
+
+  async function openByCID(cid: string) {
+    const got = await downloadByCID(cid)
+    if (got) window.open(got.url, '_blank')
+    else console.warn('[chatview] CID not found locally/gateway', cid)
   }
 
   function downloadFile(msg: Message) {

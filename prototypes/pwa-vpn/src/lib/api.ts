@@ -27,6 +27,8 @@
 
 import type { Message } from '../stores/messenger';
 import { makeChatPayload } from './api-payload';
+import * as secp from '@noble/secp256k1';
+import { encryptDM } from './nip-e2e';
 
 // If VITE_API_URL is empty → same-origin (Go serves both dist + API on one port).
 // This is how "Telegram Web" works: one URL, no separate API host.
@@ -155,36 +157,35 @@ function exposeProxiDebug(): void {
     (window as any).__proxiGetPubkey = () => cachedIdentity?.pubkey || '';
   } catch { /* ignore */ }
 }
-
-/** Async identity initialization — signup first, then fetch identity. */
+/** Async identity initialization — Go signup OPTIONAL (non-blocking). Keys stay local. */
 export async function initIdentityAsync(): Promise<string> {
   if (!cachedIdentity?.pubkey) return '';
 
-  // Step 1: Signup with local pubkey to get JWT token
-  // Generate a proper-looking npub (hex string works for signup)
+  // SL-022: Go signup is optional — only for WS relay JWT. Identity is browser-local.
   const signupNpub = cachedIdentity.pubkey;
-  console.log('[api] initIdentityAsync: signing up with npub=' + signupNpub.slice(0, 16) + '...');
-  const signupResp = await request<{ access_token: string; refresh_token: string; user_id: string }>(
-    '/api/auth/signup',
-    { method: 'POST', body: JSON.stringify({ npub: signupNpub, username: 'user_' + signupNpub.slice(0, 8) }) }
-  );
-  
-  if (signupResp.data?.access_token) {
-    setStoredToken(signupResp.data.access_token);
-    if (cachedIdentity) cachedIdentity.userId = signupResp.data.user_id;
-    console.log('[api] initIdentityAsync: ✅ token stored, user_id=' + signupResp.data.user_id);
-    exposeProxiDebug();
-  } else {
-    console.log('[api] initIdentityAsync: ❌ signup failed! status=' + signupResp.status + ' error=' + (signupResp.error || JSON.stringify(signupResp.data)));
-    return cachedIdentity.pubkey;
+  console.log('[api] initIdentityAsync: local pubkey=' + signupNpub.slice(0, 16) + '...');
+
+  try {
+    const signupResp = await request<{ access_token: string; refresh_token: string; user_id: string }>(
+      '/api/auth/signup',
+      { method: 'POST', body: JSON.stringify({ npub: signupNpub, username: 'user_' + signupNpub.slice(0, 8) }) }
+    );
+
+    if (signupResp.data?.access_token) {
+      setStoredToken(signupResp.data.access_token);
+      if (cachedIdentity) cachedIdentity.userId = signupResp.data.user_id;
+      console.log('[api] initIdentityAsync: Go JWT stored, user_id=' + signupResp.data.user_id);
+      exposeProxiDebug();
+    } else {
+      console.log('[api] initIdentityAsync: Go signup status=' + signupResp.status + ' — local identity only');
+    }
+  } catch (e) {
+    console.log('[api] initIdentityAsync: Go unavailable — decentralized mode (keys stay local)');
   }
 
-  // Step 2: Keep our LOCAL identity — don't overwrite with server's
-  // Each browser/user has a unique random pubkey for DM routing
-  console.log('[api] initIdentityAsync: keeping local pubkey=' + cachedIdentity.pubkey.slice(0, 16) + '...');
-  
   return cachedIdentity.pubkey;
 }
+
 
 // ============================================================
 // WebSocket connection (real Go /ws endpoint)

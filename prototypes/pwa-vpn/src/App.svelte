@@ -37,6 +37,8 @@ if (initialView === 'advanced') {
   import { onMount } from 'svelte'
   import * as stores from './stores/messenger'
   import { initIdentity, initIdentityAsync, connectRelays, sendPresence, getName, onMessage, onPresence, onTyping, getStatus } from './lib/api'
+  import { sendDM } from './lib/api'
+  import { startOutboxWatcher } from './lib/offline-outbox'
   import { getIdentity, type Identity } from './lib/identity'
   import { NostrChat, type NostrMessage } from './lib/nostr-chat'
   import { setOnFileComplete } from './lib/peer-manager'
@@ -63,6 +65,20 @@ if (initialView === 'advanced') {
   let showNewChatView = $derived($showNewChat)
 
   onMount(async () => {
+    const stopOutbox = startOutboxWatcher(async (to, text) => {
+      try {
+        const resp: any = await sendDM(to, text)
+        if (resp?.status && resp.status < 400) return { ok: true, via: resp?.data?.via || 'dm' }
+        const nostr = (window as any).__nostrChat
+        if (nostr?.isConnected && await nostr.sendDM(to, text)) return { ok: true, via: 'nostr' }
+        return { ok: false, error: 'transport down' }
+      } catch (e: any) {
+        return { ok: false, error: e?.message || 'err' }
+      }
+    })
+
+    if (typeof window !== 'undefined') window.addEventListener('beforeunload', () => { try { stopOutbox() } catch {} })
+
     // Safety timeout: force loading=false after 8s
     const safetyTimer = setTimeout(() => {
       if (loading) {
