@@ -310,3 +310,33 @@ func (s *Server) handleAmneziaConfBuild(w http.ResponseWriter, r *http.Request) 
 		"conf":   conf,
 	})
 }
+
+// handleAmneziaTunnel — GET status | POST start | DELETE stop
+func (s *Server) handleAmneziaTunnel(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, 200, vpn.GetTunnelStatus())
+	case http.MethodPost:
+		var req vpn.TunnelStartRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, 400, "BAD_REQUEST", err.Error())
+			return
+		}
+		st, err := vpn.StartAmneziaTunnel(req)
+		if err != nil && st.State != "driver_missing" {
+			writeError(w, 400, "TUNNEL_ERROR", err.Error())
+			return
+		}
+		// driver_missing still 200 — conf written is success for conf path
+		writeJSON(w, 200, st)
+	case http.MethodDelete:
+		writeJSON(w, 200, vpn.StopAmneziaTunnel())
+	default:
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "GET/POST/DELETE")
+	}
+}
+
+// handlePushSend — POST /api/push/send
+func (s *Server) handlePushSend(w http.ResponseWriter, r *http.Request) {
+	vpn.HandlePushSend(w, r)
+}

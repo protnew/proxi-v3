@@ -70,6 +70,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/vpn/turn/config", apiChain(srv.handleTurnConfig))
 	http.HandleFunc("/api/vpn/amnezia", apiChain(srv.handleAmneziaConfig))
 	http.HandleFunc("/api/vpn/amnezia/conf", apiChain(srv.handleAmneziaConfBuild))
+	http.HandleFunc("/api/vpn/amnezia/tunnel", apiChain(srv.handleAmneziaTunnel))
 	http.HandleFunc("/api/vpn/libp2p", apiChain(srv.handleLibp2pConfig))
 	http.HandleFunc("/api/contacts", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -110,6 +111,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/switch/check-in", apiChain(srv.handleSwitchCheckIn))
 	http.HandleFunc("/api/push/config", apiChain(srv.handlePushConfig))
 	http.HandleFunc("/api/push/subscribe", apiChain(srv.handlePushSubscribe))
+	http.HandleFunc("/api/push/send", apiChain(srv.handlePushSend))
 	http.HandleFunc("/api/groups/create", apiChain(srv.handleGroupCreate))
 	http.HandleFunc("/api/groups/list", apiChain(srv.handleGroupList))
 	http.HandleFunc("/api/groups/members", apiChain(srv.handleGroupMembers))

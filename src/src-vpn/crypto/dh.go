@@ -60,3 +60,15 @@ func DeriveChatKey(sharedSecret [32]byte, context string) [32]byte {
 
 	return chatKey
 }
+
+
+// PublicFromPrivate derives X25519 public key from private scalar.
+func PublicFromPrivate(privateKey [32]byte) ([32]byte, error) {
+	pub, err := curve25519.X25519(privateKey[:], curve25519.Basepoint)
+	if err != nil {
+		return [32]byte{}, fmt.Errorf("derive public key: %w", err)
+	}
+	var out [32]byte
+	copy(out[:], pub)
+	return out, nil
+}

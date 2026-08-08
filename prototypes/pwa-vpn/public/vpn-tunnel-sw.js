@@ -154,3 +154,42 @@ async function proxyViaTunnel(request) {
     }, [mc.port2])
   })
 }
+
+
+// --- SL-051 Web Push (production VAPID) ---
+self.addEventListener('push', (event) => {
+  let title = 'Indestructible'
+  let body = 'Новое уведомление'
+  let data = {}
+  try {
+    if (event.data) {
+      const j = event.data.json()
+      title = j.title || title
+      body = j.body || body
+      data = j
+    }
+  } catch (_) {
+    try { body = event.data ? event.data.text() : body } catch (_) {}
+  }
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      data,
+      tag: 'indestructible-push',
+    })
+  )
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ('focus' in c) return c.focus()
+      }
+      if (clients.openWindow) return clients.openWindow('/')
+    })
+  )
+})

@@ -1,7 +1,6 @@
 /**
- * SL-051 Web Push client (Phase 2).
- * Primary offline channel remains NIP-59 gift wrap / Nostr.
- * This module registers browser PushSubscription when VAPID available.
+ * SL-051 Web Push client — production VAPID from /api/push/config.
+ * Primary offline channel remains NIP-59 gift wrap (kind 1059).
  */
 
 export type PushServerConfig = {
@@ -9,6 +8,9 @@ export type PushServerConfig = {
   vapidPublic?: string
   phase: string
   note?: string
+  subject?: string
+  subscribers?: number
+  keysSource?: string
 }
 
 export async function fetchPushConfig(): Promise<PushServerConfig> {
@@ -17,9 +19,10 @@ export async function fetchPushConfig(): Promise<PushServerConfig> {
   return r.json()
 }
 
-export async function enableDevVapid(): Promise<PushServerConfig> {
-  const r = await fetch('/api/push/config?dev=1', { method: 'POST' })
-  if (!r.ok) throw new Error('dev vapid ' + r.status)
+/** Ensure server has persisted VAPID keys (idempotent). */
+export async function ensureVapid(): Promise<PushServerConfig> {
+  const r = await fetch('/api/push/config', { method: 'POST' })
+  if (!r.ok) throw new Error('ensure vapid ' + r.status)
   return r.json()
 }
 
@@ -32,30 +35,45 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return out
 }
 
-/** Best-effort browser subscribe. Fails closed on insecure origin / denied permission. */
-export async function subscribeWebPush(): Promise<{ ok: boolean; reason?: string }> {
+export async function subscribeWebPush(): Promise<{ ok: boolean; reason?: string; endpoint?: string }> {
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     return { ok: false, reason: 'push_unsupported' }
   }
   let cfg = await fetchPushConfig()
-  if (!cfg.vapidPublic) {
-    cfg = await enableDevVapid()
-  }
+  if (!cfg.vapidPublic) cfg = await ensureVapid()
   if (!cfg.vapidPublic) return { ok: false, reason: 'no_vapid' }
 
-  const perm = await Notification.requestPermission()
+  // Secure context required
+  if (!window.isSecureContext && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
+    return { ok: false, reason: 'insecure_context' }
+  }
+
+  let perm = Notification.permission
+  if (perm === 'default') perm = await Notification.requestPermission()
   if (perm !== 'granted') return { ok: false, reason: 'permission_' + perm }
 
   const reg = await navigator.serviceWorker.ready
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(cfg.vapidPublic) as BufferSource,
-  })
+  let sub = await reg.pushManager.getSubscription()
+  if (!sub) {
+    sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(cfg.vapidPublic) as BufferSource,
+    })
+  }
   const r = await fetch('/api/push/subscribe', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sub.toJSON()),
   })
   if (!r.ok) return { ok: false, reason: 'subscribe_http_' + r.status }
-  return { ok: true }
+  return { ok: true, endpoint: sub.endpoint }
+}
+
+export async function sendTestPush(title = 'Indestructible', body = 'Test push'): Promise<unknown> {
+  const r = await fetch('/api/push/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, body }),
+  })
+  return r.json()
 }
