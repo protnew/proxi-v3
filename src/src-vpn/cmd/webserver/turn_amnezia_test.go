@@ -42,3 +42,24 @@ func TestAmneziaConfigGet(t *testing.T) {
 		t.Errorf("expected desktop_only, got %v", resp["phase"])
 	}
 }
+
+func TestLibp2pConfigGet(t *testing.T) {
+	srv := &Server{}
+	req := httptest.NewRequest("GET", "/api/vpn/libp2p", nil)
+	w := httptest.NewRecorder()
+	srv.handleLibp2pConfig(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["phase"] != "desktop_only" {
+		t.Errorf("expected desktop_only, got %v", resp["phase"])
+	}
+	if resp["table"] == nil {
+		t.Error("expected table field")
+	}
+}

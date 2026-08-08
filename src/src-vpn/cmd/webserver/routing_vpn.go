@@ -249,3 +249,26 @@ func (s *Server) handleAmneziaConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET or POST")
 }
+
+// ========== libp2p Circuit Relay (table 57_Global_P2P, Phase 2 Desktop) ==========
+
+func (s *Server) handleLibp2pConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		writeJSON(w, 200, vpn.Libp2pStatus())
+		return
+	}
+	if r.Method == "POST" {
+		var cfg vpn.Libp2pConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			writeError(w, 400, "BAD_REQUEST", err.Error())
+			return
+		}
+		if err := vpn.SetLibp2pConfig(cfg); err != nil {
+			writeError(w, 400, "CONFIG_ERROR", err.Error())
+			return
+		}
+		writeJSON(w, 200, vpn.Libp2pStatus())
+		return
+	}
+	writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET or POST")
+}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
   import { rtcVPN } from '../lib/webrtc-vpn'
+  import { dataRelay } from '../lib/nostr-data-relay'
   import { onMount } from 'svelte'
   import { getPubkey, getSeckey } from '../lib/api'
   import * as secp from '@noble/secp256k1'
@@ -16,10 +17,11 @@
   let handlingIncoming = $state(false)
   let turnStatus = $state<string>('checking…')
   let amneziaStatus = $state<string>('')
+  let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
   let dismissedFrom = $state<Record<string, number>>({})
 
   onMount(async () => {
-    turnStatus = '4 STUN (Google+CF), P2P 85%. Nostr fallback — Phase 1.5'
+    turnStatus = '4 STUN · P2P 85% + Nostr relay 15%'
     amneziaStatus = ''
   })
 
@@ -185,9 +187,26 @@
       }
       if (tunnelIp) {
         lastTunnelIp = tunnelIp
+        transportMode = 'P2P'
         addLog('WebRTC P2P connected! Exit IP: ' + tunnelIp)
       } else {
-        addLog('WebRTC connected (IP probe empty)')
+        // P2P failed or no IP probe — try Nostr relay fallback (table 58 Phase 1.5)
+        addLog('P2P probe empty — Nostr relay fallback...')
+        transportMode = 'Nostr Relay'
+        try {
+          await dataRelay.connect()
+          const relayIp = await dataRelay.fetchThroughRelay('http://api.ipify.org', senderPubkey)
+          const ip = relayIp.trim()
+          if (ip && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
+            lastTunnelIp = ip
+            addLog('Nostr relay connected! Exit IP: ' + ip)
+          } else {
+            addLog('WebRTC connected (IP probe empty)')
+          }
+        } catch (relayErr) {
+          addLog('Nostr relay fallback failed: ' + String(relayErr).slice(0, 50))
+          addLog('WebRTC connected (IP probe empty)')
+        }
       }
       vpnStatus = 'connected'
       statusText = 'VPN подключён (WebRTC P2P)'
@@ -295,7 +314,7 @@
 <div class="vpn-product" data-testid="vpn-product">
   {#if turnStatus}
     <div class="ice-status">
-      <span class="ice-badge" title="NAT traversal method">🧊 {turnStatus}</span>
+      <span class="ice-badge" title="NAT traversal method">🧊 {turnStatus}{#if transportMode} · 📡 {transportMode}{/if}</span>
       {#if amneziaStatus}<span class="ice-badge amnezia" title="DPI obfuscation">🛡️ {amneziaStatus}</span>{/if}
     </div>
   {/if}

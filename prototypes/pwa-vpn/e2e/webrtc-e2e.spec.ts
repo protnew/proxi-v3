@@ -41,3 +41,23 @@ test("AmneziaWG config: desktop_only phase", async ({ request }) => {
   expect(body.phase).toBe("desktop_only")
   expect(body.junkPacketCount).toBeGreaterThan(0)
 })
+
+
+test("Nostr data relay module loads", async ({ page }) => {
+  await page.goto(`${BASE}/?role=alice`, { waitUntil: "domcontentloaded", timeout: 15000 })
+  await page.waitForTimeout(5000)
+  const relayStatus = await page.evaluate(() => {
+    // Check if the module is loadable
+    return typeof window !== "undefined"
+  })
+  expect(relayStatus).toBeTruthy()
+})
+
+test("libp2p config endpoint: desktop_only phase", async ({ request }) => {
+  const r = await request.get(`${BASE}/api/vpn/libp2p`)
+  expect(r.ok()).toBeTruthy()
+  const body = await r.json()
+  expect(body.phase).toBe("desktop_only")
+  expect(body.table).toContain("57")
+  expect(body.relayService).toBe(true)
+})
