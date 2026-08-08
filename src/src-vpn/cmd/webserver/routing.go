@@ -12,7 +12,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -202,15 +201,8 @@ func (s *Server) handleSwitchCheckIn(w http.ResponseWriter, r *http.Request) {
 // handlePushSubscribe — POST /api/push/subscribe
 
 func (s *Server) handlePushSubscribe(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
-		return
-	}
-	body, _ := io.ReadAll(io.LimitReader(r.Body, 4*1024))
-	defer r.Body.Close()
-
-	log.Printf("🔔 Push subscription received: %s", truncate(string(body), 100))
-	writeJSON(w, 200, map[string]interface{}{"status": "subscribed"})
+	// SL-051 Phase 2 — delegate to vpn package memory store
+	vpn.HandlePushSubscribe(w, r)
 }
 
 // handleGroupList — GET /api/groups/list

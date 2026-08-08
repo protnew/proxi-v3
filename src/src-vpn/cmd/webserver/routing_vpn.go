@@ -272,3 +272,41 @@ func (s *Server) handleLibp2pConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET or POST")
 }
+
+// handlePushConfig — GET /api/push/config (SL-051 Phase 2)
+func (s *Server) handlePushConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && r.URL.Query().Get("dev") == "1" {
+		_, _ = vpn.EnsureDevVAPID()
+	}
+	writeJSON(w, 200, vpn.GetPushConfig())
+}
+
+// handleAmneziaConfBuild — POST /api/vpn/amnezia/conf  {privateKey, peerPublicKey, endpoint}
+func (s *Server) handleAmneziaConfBuild(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var body struct {
+		PrivateKey    string `json:"privateKey"`
+		PeerPublicKey string `json:"peerPublicKey"`
+		Endpoint      string `json:"endpoint"`
+		AllowedIPs    string `json:"allowedIPs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := vpn.ValidateAmneziaEndpoint(body.Endpoint); err != nil {
+		writeError(w, 400, "BAD_ENDPOINT", err.Error())
+		return
+	}
+	cfg := vpn.GetAmneziaConfig()
+	cfg.Enabled = true
+	conf := vpn.BuildAmneziaWGConf(body.PrivateKey, body.PeerPublicKey, body.Endpoint, body.AllowedIPs, cfg)
+	writeJSON(w, 200, map[string]interface{}{
+		"phase":  "desktop_only",
+		"format": "amneziawg-conf",
+		"conf":   conf,
+	})
+}

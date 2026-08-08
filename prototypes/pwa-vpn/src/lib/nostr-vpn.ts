@@ -5,6 +5,7 @@
 import * as secp from '@noble/secp256k1'
 import { signEvent } from './identity'
 import { getPubkey, getSeckey } from './api'
+import { wrapVpnInvite, unwrapVpnInvite, publishGiftWrap, type VpnInvitePayload } from './nip59-giftwrap'
 
 function hexToBytes(hex: string): Uint8Array {
   const h = hex.length % 2 ? '0' + hex : hex
@@ -86,6 +87,14 @@ export class NostrVPNSignaling {
         limit: 5,
       }
       this.ws!.send(JSON.stringify(['REQ', this.subId, filter]))
+      // OFF-001: also subscribe to NIP-59 gift wraps (kind 1059) addressed to me
+      const wrapSub = this.subId + '-gw'
+      this.ws!.send(JSON.stringify(['REQ', wrapSub, {
+        kinds: [1059],
+        '#p': [this.myPubkey],
+        since: this.startedAt - 3600,
+        limit: 20,
+      }]))
       console.log('[Nostr-VPN] connected', url, 'sub', this.myPubkey.slice(0, 12))
       this.resolveReady?.()
     }
@@ -96,6 +105,28 @@ export class NostrVPNSignaling {
         if (!Array.isArray(msg)) return
         if (msg[0] === 'EVENT' && msg[2]) {
           const ev = msg[2]
+          if (ev.kind === 1059) {
+            // Gift wrap offline invite
+            try {
+              const sk = getSeckey()
+              if (!sk) return
+              const payload = unwrapVpnInvite(ev, sk.slice(0, 64))
+              if (!payload) return
+              const vpn: VPNEvent = {
+                type: payload.type === 'vpn_request' ? 'vpn-request' : 'vpn-invite',
+                from: payload.from,
+                to: payload.to,
+                timestamp: Math.floor((payload.ts || Date.now()) / 1000),
+                rtcSdp: payload.sdp,
+                iceCandidates: payload.ice ? JSON.parse(payload.ice) : undefined,
+              }
+              console.log('[Nostr-VPN] GIFT-WRAP', vpn.type, 'from', vpn.from.slice(0, 12))
+              this.handlers.forEach(h => h(vpn, ev))
+            } catch (err) {
+              console.warn('[Nostr-VPN] gift unwrap failed', err)
+            }
+            return
+          }
           if (ev.kind !== KIND_VPN) return
           if (ev.id && this.seenIds.has(ev.id)) return
           if (ev.id) this.seenIds.add(ev.id)
@@ -162,11 +193,51 @@ export class NostrVPNSignaling {
   }
 
   async inviteFriend(toPubkey: string, wtAddr: string, wtCertHash: string): Promise<string> {
-    return this.sendVPNEvent('vpn-invite', toPubkey, { wtAddr, wtCertHash })
+    const id = await this.sendVPNEvent('vpn-invite', toPubkey, { wtAddr, wtCertHash })
+    // OFF-001: also gift-wrap for offline pickup (NIP-59)
+    try {
+      const { seckey, pubkey } = signingIdentity()
+      const payload: VpnInvitePayload = {
+        type: 'vpn_invite',
+        from: pubkey,
+        to: toPubkey,
+        note: wtAddr ? `legacy-wt:${wtAddr}` : 'webrtc-ready',
+        ts: Date.now(),
+        v: 1,
+      }
+      const { wrap } = wrapVpnInvite(payload, seckey, toPubkey)
+      // publish on same WS
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(['EVENT', wrap]))
+      }
+      publishGiftWrap(wrap)
+      console.log('[Nostr-VPN] gift-wrap invite published', wrap.id?.slice(0, 12))
+    } catch (e) {
+      console.warn('[Nostr-VPN] gift-wrap invite failed (live invite still sent)', e)
+    }
+    return id
   }
 
   async requestVPN(fromPubkey: string): Promise<string> {
-    return this.sendVPNEvent('vpn-request', fromPubkey)
+    const id = await this.sendVPNEvent('vpn-request', fromPubkey)
+    try {
+      const { seckey, pubkey } = signingIdentity()
+      const payload: VpnInvitePayload = {
+        type: 'vpn_request',
+        from: pubkey,
+        to: fromPubkey,
+        ts: Date.now(),
+        v: 1,
+      }
+      const { wrap } = wrapVpnInvite(payload, seckey, fromPubkey)
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(['EVENT', wrap]))
+      }
+      publishGiftWrap(wrap)
+    } catch (e) {
+      console.warn('[Nostr-VPN] gift-wrap request failed', e)
+    }
+    return id
   }
 
   async acceptVPN(toPubkey: string, wtAddr?: string, wtCertHash?: string): Promise<string> {

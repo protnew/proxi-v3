@@ -1,26 +1,26 @@
 import { describe, it, expect } from 'vitest'
-import { encryptDM, decryptDM, isEncryptedPayload } from '../src/lib/nip-e2e'
+import { encryptDM, decryptDM, isEncryptedPayload, isNip44Payload, NIP44_PREFIX } from '../src/lib/nip-e2e'
 import * as secp from '@noble/secp256k1'
 
 function bytesToHex(b: Uint8Array) {
   return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('')
 }
-
 function genPair() {
   const skBytes = crypto.getRandomValues(new Uint8Array(32))
   const pkBytes = secp.schnorr.getPublicKey(skBytes)
   return { sk: bytesToHex(skBytes), pk: bytesToHex(pkBytes) }
 }
 
-describe('nip-e2e HKDF+AES-GCM', () => {
+describe('NIP-44 v2 (SL-033)', () => {
   it('roundtrip encrypt/decrypt', async () => {
     const a = genPair()
     const b = genPair()
-    const ct = await encryptDM('secret hello', a.sk, b.pk)
+    const ct = await encryptDM('secret hello nip44', a.sk, b.pk)
+    expect(isNip44Payload(ct)).toBe(true)
+    expect(ct.startsWith(NIP44_PREFIX)).toBe(true)
     expect(isEncryptedPayload(ct)).toBe(true)
-    expect(ct.startsWith('v1.')).toBe(true)
     const pt = await decryptDM(ct, b.sk, a.pk)
-    expect(pt).toBe('secret hello')
+    expect(pt).toBe('secret hello nip44')
   })
 
   it('wrong key fails closed', async () => {
@@ -32,8 +32,11 @@ describe('nip-e2e HKDF+AES-GCM', () => {
     expect(pt).toBeNull()
   })
 
-  it('isEncryptedPayload detects format', () => {
-    expect(isEncryptedPayload('v1.abc.def')).toBe(true)
-    expect(isEncryptedPayload('hello')).toBe(false)
+  it('unicode payload', async () => {
+    const a = genPair()
+    const b = genPair()
+    const msg = 'Привет 🌍 VPN'
+    const ct = await encryptDM(msg, a.sk, b.pk)
+    expect(await decryptDM(ct, b.sk, a.pk)).toBe(msg)
   })
 })

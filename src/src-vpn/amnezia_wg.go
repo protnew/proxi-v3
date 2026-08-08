@@ -85,3 +85,40 @@ func (c AmneziaConfig) MarshalJSON() ([]byte, error) {
 		PresharedKey: "",
 	})
 }
+
+// BuildAmneziaWGConf generates an AmneziaWG-compatible config snippet for desktop clients.
+// Phase 2: Tauri/desktop applies this to local AmneziaWG tunnel. PWA still uses WebRTC.
+func BuildAmneziaWGConf(privateKey, peerPublicKey, endpoint, allowedIPs string, cfg AmneziaConfig) string {
+	if allowedIPs == "" {
+		allowedIPs = "0.0.0.0/0, ::/0"
+	}
+	if cfg.JunkPacketCount == 0 {
+		cfg = DefaultAmneziaConfig()
+		cfg.Enabled = true
+	}
+	return fmt.Sprintf(`[Interface]
+PrivateKey = %s
+Address = 10.66.66.2/32
+Jc = %d
+Jmin = %d
+Jmax = %d
+# AmneziaWG DPI obfuscation (table 02)
+
+[Peer]
+PublicKey = %s
+Endpoint = %s
+AllowedIPs = %s
+PersistentKeepalive = 25
+`, privateKey, cfg.JunkPacketCount, cfg.JunkPacketMinSize, cfg.JunkPacketMaxSize, peerPublicKey, endpoint, allowedIPs)
+}
+
+// ValidateAmneziaEndpoint basic sanity for desktop config.
+func ValidateAmneziaEndpoint(endpoint string) error {
+	if endpoint == "" {
+		return fmt.Errorf("endpoint required")
+	}
+	if len(endpoint) > 256 {
+		return fmt.Errorf("endpoint too long")
+	}
+	return nil
+}

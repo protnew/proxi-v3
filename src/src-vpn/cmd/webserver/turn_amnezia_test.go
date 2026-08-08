@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"strings"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -61,5 +62,36 @@ func TestLibp2pConfigGet(t *testing.T) {
 	}
 	if resp["table"] == nil {
 		t.Error("expected table field")
+	}
+}
+
+
+func TestAmneziaConfBuild(t *testing.T) {
+	srv := &Server{}
+	body := `{"privateKey":"AAA","peerPublicKey":"BBB","endpoint":"1.2.3.4:51820"}`
+	req := httptest.NewRequest("POST", "/api/vpn/amnezia/conf", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.handleAmneziaConfBuild(w, req)
+	if w.Code != 200 {
+		t.Fatalf("status %d body %s", w.Code, w.Body.String())
+	}
+	var resp map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	conf, _ := resp["conf"].(string)
+	if conf == "" || !strings.Contains(conf, "Jc =") {
+		t.Fatalf("bad conf: %v", resp)
+	}
+}
+
+func TestPushConfig(t *testing.T) {
+	srv := &Server{}
+	req := httptest.NewRequest("GET", "/api/push/config", nil)
+	w := httptest.NewRecorder()
+	srv.handlePushConfig(w, req)
+	if w.Code != 200 {
+		t.Fatalf("status %d", w.Code)
 	}
 }
