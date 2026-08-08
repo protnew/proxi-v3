@@ -1,28 +1,15 @@
 /**
- * WebRTC VPN — P2P DataChannel tunnel browser<->browser.
+ * WebRTC VPN DataChannel transport (Table 01 winner).
+ * Phase 1: STUN-only ICE (Google + Cloudflare) — P2P ~85% NAT.
+ * Phase 1.5 fallback: Nostr data relay (no third-party TURN).
+ * Table 58: commercial TURN rejected (unknown credentials / metadata).
  *
- * Architecture tables (источник истины):
- *   01_VPN_Primary_Transport: WebRTC DataChannels (Score 178/220)
- *   04_Hole_Punching: STUN + public TURN (Score 154)
- *   26_Signaling: Nostr NIP-44 for SDP/ICE exchange (Score 193)
- *   57_Global_P2P: libp2p circuit relay (Phase 2 Desktop, Score 191)
- *
- * НАШИХ СЕРВЕРОВ НЕТ. Всё работает на бесплатных публичных сервисах:
- *   - STUN: Google, Cloudflare, Nextcloud (10 серверов) — пробивает 85% NAT
- *   - TURN: OpenRelay, ExpressTurn (публичные бесплатные) — fallback 15%
- *   - Signaling: Nostr relays (тысячи публичных, децентрализованные)
+ * STUN is safe (RFC 5389 — answer and forget). TURN would see metadata — forbidden here.
  */
 
 export type RTCStatus = "disconnected" | "connecting" | "connected" | "error"
 
-// Архитектурная таблица 58_TURN_Fallback: STUN only для Phase 1.
-// STUN не видит трафик — это бесплатная справочная (RFC 5389).
-// 4 проверенных провайдера: Google + Cloudflare. Пробивает 85% NAT.
-//
-// Для оставшихся 15% (CGNAT, симметричный NAT):
-//   - Nostr relay data transport (Phase 1.5, таблица 58 winner)
-//   - libp2p circuit relay (Phase 2 Desktop, таблица 57 winner)
-// Никаких сторонних TURN с неизвестными credentials.
+// Table 58: STUN only for Phase 1. No third-party TURN credentials.
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
