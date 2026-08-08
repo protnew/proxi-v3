@@ -4,6 +4,8 @@
   import { dataRelay } from '../lib/nostr-data-relay'
   import { onMount } from 'svelte'
   import { getPubkey, getSeckey } from '../lib/api'
+  import { getTunnelStatus, startTunnel, stopTunnel, type TunnelStatus } from '../lib/amnezia-tunnel'
+  import { subscribeWebPush, fetchPushConfig, sendTestPush, type PushServerConfig } from '../lib/web-push'
   import * as secp from '@noble/secp256k1'
 
   let showInviteModal = $state(false)
@@ -17,13 +19,84 @@
   let handlingIncoming = $state(false)
   let turnStatus = $state<string>('checking…')
   let amneziaStatus = $state<string>('')
+  let tunnelInfo = $state<TunnelStatus | null>(null)
+  let pushInfo = $state<string>('')
+  let pushBusy = $state(false)
+  let tunnelBusy = $state(false)
   let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
   let dismissedFrom = $state<Record<string, number>>({})
 
   onMount(async () => {
     turnStatus = '4 STUN · P2P 85% + Nostr relay 15%'
     amneziaStatus = ''
+    try {
+      tunnelInfo = await getTunnelStatus()
+      amneziaStatus = `${tunnelInfo.state}/${tunnelInfo.mode || 'none'}`
+    } catch { amneziaStatus = 'n/a' }
+    try {
+      const pc = await fetchPushConfig()
+      pushInfo = pc.enabled ? `VAPID ${pc.phase}` : 'push off'
+    } catch { pushInfo = 'push n/a' }
   })
+
+  async function startAmneziaTunnel() {
+    tunnelBusy = true
+    try {
+      // Demo peer — replace with real friend WG pubkey/endpoint in product flow
+      const peerPublicKey = (friendId && friendId.length > 20)
+        ? friendId
+        : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+      const endpoint = '203.0.113.10:51820'
+      tunnelInfo = await startTunnel({ peerPublicKey, endpoint })
+      amneziaStatus = `${tunnelInfo.state}/${tunnelInfo.mode}`
+      addLog(`Amnezia tunnel: ${tunnelInfo.state} (${tunnelInfo.mode})`)
+      if (tunnelInfo.confPath) addLog(`conf: ${tunnelInfo.confPath}`)
+      // open import helper on host
+      try {
+        await fetch('/api/vpn/amnezia/import', { method: 'POST' })
+      } catch {}
+    } catch (e: any) {
+      addLog('Amnezia error: ' + (e?.message || e))
+    } finally {
+      tunnelBusy = false
+    }
+  }
+
+  async function stopAmneziaTunnel() {
+    tunnelBusy = true
+    try {
+      tunnelInfo = await stopTunnel()
+      amneziaStatus = `${tunnelInfo.state}/${tunnelInfo.mode || 'none'}`
+      addLog('Amnezia stopped')
+    } catch (e: any) {
+      addLog('stop error: ' + (e?.message || e))
+    } finally {
+      tunnelBusy = false
+    }
+  }
+
+  async function enablePush() {
+    pushBusy = true
+    try {
+      const res = await subscribeWebPush()
+      if (res.ok) {
+        pushInfo = 'subscribed'
+        addLog('Push OK: ' + (res.endpoint || '').slice(0, 48))
+        try {
+          const r = await sendTestPush('Indestructible', 'Push E2E test')
+          addLog('Push send: ' + JSON.stringify(r).slice(0, 80))
+        } catch {}
+      } else {
+        pushInfo = res.reason || 'fail'
+        addLog('Push: ' + (res.reason || 'fail'))
+      }
+    } catch (e: any) {
+      pushInfo = 'error'
+      addLog('Push error: ' + (e?.message || e))
+    } finally {
+      pushBusy = false
+    }
+  }
 
   function addLog(msg: string) {
     const t = new Date().toLocaleTimeString()
@@ -326,6 +399,20 @@
       <button class="vpn-btn request" data-testid="vpn-request" onclick={() => showRequestModal = true}>
         🤝 Запросить VPN
       </button>
+      <button class="vpn-btn amnezia" data-testid="vpn-amnezia" disabled={tunnelBusy} onclick={startAmneziaTunnel}>
+        🧱 Amnezia tunnel
+      </button>
+      <button class="vpn-btn push" data-testid="vpn-push" disabled={pushBusy} onclick={enablePush}>
+        🔔 Push
+      </button>
+    </div>
+    <div class="phase2-status" data-testid="phase2-status">
+      <span>Amnezia: {amneziaStatus || '—'}</span>
+      <span>Push: {pushInfo || '—'}</span>
+      {#if tunnelInfo?.confPath}
+        <span class="conf-path" title={tunnelInfo.confPath}>conf ✓</span>
+        <button class="linkish" data-testid="vpn-amnezia-stop" disabled={tunnelBusy} onclick={stopAmneziaTunnel}>Стоп tunnel</button>
+      {/if}
     </div>
   {:else}
     <div class="vpn-status" class:sharing={vpnStatus === 'sharing'} class:connected={vpnStatus === 'connected'}>
@@ -415,4 +502,16 @@
   .ice-status { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
   .ice-badge { font-size: 11px; color: #7dd3fc; background: rgba(125,211,252,0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(125,211,252,0.2); }
   .ice-badge.amnezia { color: #fbbf24; background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
+
+  .vpn-btn.amnezia { background: #3d2b1f; border: 1px solid #c47b3a; }
+  .vpn-btn.push { background: #1f2a3d; border: 1px solid #4a7bc4; }
+  .phase2-status {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    font-size: 12px; opacity: 0.9; margin: 6px 0 4px;
+  }
+  .phase2-status .conf-path { color: #8f8; }
+  .phase2-status .linkish {
+    background: transparent; border: 1px solid #666; color: inherit;
+    border-radius: 6px; padding: 2px 8px; cursor: pointer;
+  }
 </style>

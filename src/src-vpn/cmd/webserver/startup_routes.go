@@ -71,6 +71,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/vpn/amnezia", apiChain(srv.handleAmneziaConfig))
 	http.HandleFunc("/api/vpn/amnezia/conf", apiChain(srv.handleAmneziaConfBuild))
 	http.HandleFunc("/api/vpn/amnezia/tunnel", apiChain(srv.handleAmneziaTunnel))
+	http.HandleFunc("/api/vpn/amnezia/import", apiChain(srv.handleAmneziaImport))
 	http.HandleFunc("/api/vpn/libp2p", apiChain(srv.handleLibp2pConfig))
 	http.HandleFunc("/api/contacts", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

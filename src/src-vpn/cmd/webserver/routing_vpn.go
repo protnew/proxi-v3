@@ -340,3 +340,8 @@ func (s *Server) handleAmneziaTunnel(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePushSend(w http.ResponseWriter, r *http.Request) {
 	vpn.HandlePushSend(w, r)
 }
+
+// handleAmneziaImport POST/GET /api/vpn/amnezia/import — copy conf + launch AmneziaVPN GUI
+func (s *Server) handleAmneziaImport(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, vpn.PrepareAmneziaImport())
+}
