@@ -15,32 +15,19 @@
 
 export type RTCStatus = "disconnected" | "connecting" | "connected" | "error"
 
+// Архитектурная таблица 58_TURN_Fallback: STUN only для Phase 1.
+// STUN не видит трафик — это бесплатная справочная (RFC 5389).
+// 4 проверенных провайдера: Google + Cloudflare. Пробивает 85% NAT.
+//
+// Для оставшихся 15% (CGNAT, симметричный NAT):
+//   - Nostr relay data transport (Phase 1.5, таблица 58 winner)
+//   - libp2p circuit relay (Phase 2 Desktop, таблица 57 winner)
+// Никаких сторонних TURN с неизвестными credentials.
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: "stun:stun.l.google.com:19302" },
   { urls: "stun:stun1.l.google.com:19302" },
   { urls: "stun:stun2.l.google.com:19302" },
   { urls: "stun:stun.cloudflare.com:3478" },
-  { urls: "stun:stun.nextcloud.com:443" },
-  { urls: "stun:stun.sipgate.net:3478" },
-  { urls: "stun:stun.ekiga.net:3478" },
-  { urls: "stun:stun.sonetel.com:3478" },
-  { urls: "stun:stun.voipbuster.com:3478" },
-  { urls: "stun:stun.1und1.de:3478" },
-  {
-    urls: "turn:openrelay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:openrelay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject",
-  },
-  {
-    urls: "turn:relay1.expressturn.com:3478",
-    username: "ef3KKF",
-    credential: "wMo2lgTNQjZ9",
-  },
 ]
 
 const TYPE_HTTP_GET = 0x01

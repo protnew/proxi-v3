@@ -19,7 +19,7 @@
   let dismissedFrom = $state<Record<string, number>>({})
 
   onMount(async () => {
-    turnStatus = '13 бесплатных ICE (10 STUN + 3 TURN)'
+    turnStatus = '4 STUN (Google+CF), P2P 85%. Nostr fallback — Phase 1.5'
     amneziaStatus = ''
   })
 
