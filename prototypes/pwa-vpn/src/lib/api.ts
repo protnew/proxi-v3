@@ -117,10 +117,29 @@ export function initIdentity(): string {
     return cachedIdentity.pubkey;
   }
 
-  const bytes = new Uint8Array(32);
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
-  const privateKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
-  cachedIdentity = { pubkey: privateKey.slice(0, 64), privateKey };
+  // SL-020/021/022: Generate real secp256k1 keys in browser via identity.ts
+  // Keys NEVER leave the browser. Go server is optional (for WS relay only).
+  try {
+    // identity.ts uses crypto.getRandomValues + secp.schnorr.getPublicKey
+    // This is synchronous-safe via cached pattern
+    const privBytes = crypto.getRandomValues(new Uint8Array(32));
+    const privateKey = Array.from(privBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    // Derive proper schnorr public key
+    const pubBytes = secp.schnorr.getPublicKey(privBytes);
+    const publicKey = Array.from(pubBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    cachedIdentity = { pubkey: publicKey, privateKey };
+    // Persist to localStorage for survival across reloads
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('indestructible-seckey', privateKey);
+      localStorage.setItem('indestructible-pubkey', publicKey);
+    }
+  } catch {
+    // Fallback: random hex
+    const bytes = new Uint8Array(32);
+    if (typeof crypto !== 'undefined' && crypto.getRandomValues) crypto.getRandomValues(bytes);
+    const privateKey = Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+    cachedIdentity = { pubkey: privateKey.slice(0, 64), privateKey };
+  }
 
   initIdentityAsync();
   exposeProxiDebug();
@@ -373,11 +392,34 @@ export const chatApi = {
       } catch {}
       return { status: 200, data: { ok: true, via: 'ws', encrypted: payload.encrypted } };
     }
-    // WS not open → REST fallback (message persists + delivered on next poll)
+    // SL-031: WS not open → try E2E encrypted Nostr DM (NIP-44 style)
+    try {
+      if (cachedIdentity?.privateKey && to.length >= 64) {
+        const encrypted = await encryptDM(content, cachedIdentity.privateKey, to);
+        console.log('[api] sendDM: encrypted via NIP-E2E, sending through Nostr...');
+        // Send as Nostr kind:4 encrypted DM via local relay
+        const nostrWs = typeof window !== 'undefined' ? (window as any).__nostrWS : null;
+        if (nostrWs && nostrWs.readyState === 1) {
+          // Build Nostr event kind:4
+          const createdAt = Math.floor(Date.now() / 1000);
+          const eventContent = JSON.stringify({ encrypted, from });
+          // Publish to relay
+          nostrWs.send(JSON.stringify([
+            'EVENT',
+            { kind: 4, content: eventContent, created_at: createdAt, tags: [['p', to]], pubkey: from }
+          ]));
+          console.log('[api] sendDM: sent encrypted Nostr DM');
+          return { status: 200, data: { ok: true, via: 'nostr-e2e', encrypted: true } };
+        }
+      }
+    } catch (e) {
+      console.warn('[api] sendDM: Nostr E2E failed:', e);
+    }
+    // WS not open, Nostr failed → REST fallback
     try {
       return await request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content }) });
     } catch {
-      console.warn('[api] sendDM: WS not open, optimistic UI only');
+      console.warn('[api] sendDM: all transports failed, optimistic UI only');
       return { status: 200, data: { ok: true, via: 'optimistic', encrypted: payload.encrypted } };
     }
   },
