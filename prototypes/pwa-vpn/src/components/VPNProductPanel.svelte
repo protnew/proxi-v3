@@ -73,7 +73,9 @@
         ? friendId
         : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
       // Endpoint is placeholder until friend shares real endpoint via invite
-      const endpoint = '127.0.0.1:51820'
+      // VPN-ENG-001: Endpoint from invite, not hardcoded
+        const inviteEndpoint = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_peer_endpoint')) || ''
+        const endpoint = inviteEndpoint || ''
       tunnelInfo = await startTunnel({ peerPublicKey, endpoint })
       const label = tunnelInfo.mode === 'userspace' ? 'в приложении' : (tunnelInfo.mode || '')
       amneziaStatus = `${tunnelInfo.state}/${label}`
