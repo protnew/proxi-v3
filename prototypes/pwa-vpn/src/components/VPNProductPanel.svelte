@@ -12,7 +12,7 @@
   let showRequestModal = $state(false)
   let incomingEvent = $state<VPNEvent | null>(null)
   let friendId = $state('')
-  let vpnStatus = $state<'off' | 'sharing' | 'connected'>('off')
+  let vpnStatus = $state<'off' | 'sharing' | 'connecting' | 'connected'>('off')
   let statusText = $state('VPN выключен')
   let log = $state<string[]>([])
   let lastTunnelIp = $state('')
@@ -26,9 +26,28 @@
   let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
   let dismissedFrom = $state<Record<string, number>>({})
 
+  const DEMO_ALICE = '1'.repeat(64)
+  const DEMO_BOB = '2'.repeat(64)
+  let lanPhoneUrl = $state('')
+  let demoPartnerLabel = $state('')
+
+  function applyDemoPartner() {
+    // Product path for same-WiFi dual-role: no manual pubkey paste
+    const role = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_demo_role')) || ''
+    const my = getPubkey() || ''
+    if (role === 'tester1' || my === DEMO_ALICE) {
+      friendId = DEMO_BOB
+      demoPartnerLabel = 'Bob (demo)'
+    } else if (role === 'tester2' || my === DEMO_BOB) {
+      friendId = DEMO_ALICE
+      demoPartnerLabel = 'Alice (demo)'
+    }
+  }
+
   onMount(async () => {
     turnStatus = '4 STUN · P2P 85% + Nostr relay 15%'
     amneziaStatus = ''
+    applyDemoPartner()
     try {
       tunnelInfo = await getTunnelStatus()
       const mode = tunnelInfo.mode === 'userspace' ? 'в приложении' : (tunnelInfo.mode || 'выкл')
@@ -38,6 +57,12 @@
       const pc = await fetchPushConfig()
       pushInfo = pc.enabled ? `VAPID ${pc.phase}` : 'push off'
     } catch { pushInfo = 'push n/a' }
+    try {
+      const r = await fetch('/api/network/lan')
+      const j = await r.json()
+      if (j.phone_urls && j.phone_urls[0]) lanPhoneUrl = j.phone_urls[0]
+      else if (j.lan_ips && j.lan_ips[0]) lanPhoneUrl = `http://${j.lan_ips[0]}:${j.port || 8090}/?role=bob`
+    } catch { /* offline */ }
   })
 
   /** In-app VPN engine (userspace). No external AmneziaVPN required. */
@@ -175,6 +200,7 @@
 
   // "Give VPN to friend" — Alice becomes exit node, waits for friend's WebRTC offer
   async function giveVPN() {
+    if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
     try {
       await ensureNostr()
@@ -191,6 +217,7 @@
   }
 
   async function requestVPN() {
+    if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
     try {
       await ensureNostr()
@@ -406,10 +433,10 @@
   {/if}
   {#if vpnStatus === 'off'}
     <div class="vpn-buttons">
-      <button class="vpn-btn share" data-testid="vpn-give" onclick={() => showInviteModal = true}>
+      <button class="vpn-btn share" data-testid="vpn-give" onclick={() => { applyDemoPartner(); if (friendId.trim()) giveVPN(); else showInviteModal = true }}>
         📡 Дать VPN другу
       </button>
-      <button class="vpn-btn request" data-testid="vpn-request" onclick={() => showRequestModal = true}>
+      <button class="vpn-btn request" data-testid="vpn-request" onclick={() => { applyDemoPartner(); if (friendId.trim()) requestVPN(); else showRequestModal = true }}>
         🤝 Запросить VPN
       </button>
       <button class="vpn-btn engine" data-testid="vpn-engine" disabled={tunnelBusy} onclick={startInAppTunnel}>
@@ -432,6 +459,12 @@
       <p class="adv-note">Основной VPN — кнопки «Дать/Запросить VPN» (WebRTC внутри продукта). Ниже только для тех, кто уже пользуется приложением AmneziaVPN отдельно.</p>
       <button class="linkish" data-testid="vpn-export-amnezia" type="button" onclick={exportForAmneziaOptional}>Экспорт conf в AmneziaVPN (опционально)</button>
     </details>
+    {#if demoPartnerLabel}
+      <div class="lan-hint" data-testid="demo-partner">Демо-партнёр: {demoPartnerLabel} (ID подставлен)</div>
+    {/if}
+    {#if lanPhoneUrl}
+      <div class="lan-hint" data-testid="lan-url">Телефон (та же Wi‑Fi): <code>{lanPhoneUrl}</code></div>
+    {/if}
   {:else}
     <div class="vpn-status" class:sharing={vpnStatus === 'sharing'} class:connected={vpnStatus === 'connected'}>
       <span class="status-dot"></span>
@@ -526,6 +559,8 @@
   .advanced { margin: 6px 0; font-size: 12px; opacity: 0.85; }
   .advanced summary { cursor: pointer; }
   .adv-note { margin: 6px 0; line-height: 1.35; opacity: 0.9; }
+  .lan-hint { font-size: 11px; opacity: 0.9; margin: 4px 0; word-break: break-all; }
+  .lan-hint code { font-size: 10px; color: #8cf; }
   .vpn-btn.push { background: #1f2a3d; border: 1px solid #4a7bc4; }
   .phase2-status {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;

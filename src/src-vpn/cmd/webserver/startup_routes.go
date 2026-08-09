@@ -41,6 +41,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	// AUTH-009: protectedApiChain used for messages/identity below
 
 	http.HandleFunc("/api/health", publicApiChain(srv.handleHealth))
+	http.HandleFunc("/api/network/lan", publicApiChain(handleLANInfo))
 	http.HandleFunc("/api/status", publicApiChain(srv.handleStatus))
 	// AUTH-009: messages require JWT when auth is enabled
 	http.HandleFunc("/api/messages", protectedApiChain(func(w http.ResponseWriter, r *http.Request) {
