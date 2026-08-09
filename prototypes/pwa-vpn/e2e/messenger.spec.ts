@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
 
-const APP_URL = process.env.APP_URL || 'http://localhost:5173'
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:8090'
 
 async function waitForApp(page: Page) {
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' })
