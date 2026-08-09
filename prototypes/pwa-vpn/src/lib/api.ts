@@ -119,11 +119,19 @@ export function initIdentity(): string {
     return cachedIdentity.pubkey;
   }
 
-  // SL-020/021/022: Generate real secp256k1 keys in browser via identity.ts
+  // SL-020/021/022: Load existing or generate real secp256k1 keys in browser.
   // Keys NEVER leave the browser. Go server is optional (for WS relay only).
   try {
-    // identity.ts uses crypto.getRandomValues + secp.schnorr.getPublicKey
-    // This is synchronous-safe via cached pattern
+    // VPN-PEER-REAL fix: Load existing key from localStorage BEFORE generating new
+    const savedPriv = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-seckey') : null;
+    const savedPub = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-pubkey') : null;
+    if (savedPriv && savedPub && savedPriv.length === 64) {
+      cachedIdentity = { pubkey: savedPub, privateKey: savedPriv };
+      initIdentityAsync();
+      exposeProxiDebug();
+      return cachedIdentity.pubkey;
+    }
+    // No saved key — generate new
     const privBytes = crypto.getRandomValues(new Uint8Array(32));
     const privateKey = Array.from(privBytes).map(b => b.toString(16).padStart(2, '0')).join('');
     // Derive proper schnorr public key

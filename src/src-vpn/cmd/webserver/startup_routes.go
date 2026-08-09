@@ -114,6 +114,15 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/push/config", apiChain(srv.handlePushConfig))
 	http.HandleFunc("/api/push/subscribe", apiChain(srv.handlePushSubscribe))
 	http.HandleFunc("/api/push/send", apiChain(srv.handlePushSend))
+	// N7: PreKey bundle distribution (desktop X3DH)
+	http.HandleFunc("/api/keys/prekey", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			srv.handlePreKeyPublish(w, r)
+		} else {
+			srv.handlePreKeyGet(w, r)
+		}
+	}))
+	http.HandleFunc("/api/keys/prekey/", apiChain(srv.handlePreKeyGet))
 	http.HandleFunc("/api/groups/create", apiChain(srv.handleGroupCreate))
 	http.HandleFunc("/api/groups/list", apiChain(srv.handleGroupList))
 	http.HandleFunc("/api/groups/members", apiChain(srv.handleGroupMembers))
