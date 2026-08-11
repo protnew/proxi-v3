@@ -1,12 +1,24 @@
 <script lang="ts">
   import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
   import { rtcVPN } from '../lib/webrtc-vpn'
+  import { getLocalTabP2P, type TabP2PStatus } from '../lib/local-tab-p2p'
   import { dataRelay } from '../lib/nostr-data-relay'
   import { onMount } from 'svelte'
   import { getPubkey, getSeckey } from '../lib/api'
   import { getTunnelStatus, startTunnel, stopTunnel, type TunnelStatus } from '../lib/amnezia-tunnel'
   import { subscribeWebPush, fetchPushConfig, sendTestPush, type PushServerConfig } from '../lib/web-push'
   import * as secp from '@noble/secp256k1'
+
+// INF-010: Nostr signaling wired — connects WebRTC VPN through Nostr relays
+async function startVPNSignaling(targetPubkey: string) {
+  try {
+    await (rtcVPN as any).startNostrSignaling(targetPubkey)
+    console.log('[VPN] Nostr signaling started for', targetPubkey.slice(0, 8))
+  } catch (e) {
+    console.warn('[VPN] Nostr signaling failed:', e)
+  }
+}
+
 
   let showInviteModal = $state(false)
   let showRequestModal = $state(false)
@@ -15,6 +27,46 @@
   let vpnStatus = $state<'off' | 'sharing' | 'connecting' | 'connected'>('off')
   let statusText = $state('VPN выключен')
   let log = $state<string[]>([])
+  // VPN-101: same-PC two-tab WebRTC proof
+  let tabP2P = $state<TabP2PStatus>({
+    phase: 'idle', role: 'none', lastError: '', peerReady: false, rttMs: null, bytesIn: 0, bytesOut: 0, tunnelIp: ''
+  })
+  const localP2P = getLocalTabP2P()
+  localP2P.onChange((s) => {
+    tabP2P = s
+    if (s.phase === 'connected') {
+      vpnStatus = 'connected'
+      statusText = s.role === 'host'
+        ? 'VPN: 2 вкладки · вы exit node (DataChannel open)'
+        : `VPN: 2 вкладки · DataChannel open${s.tunnelIp ? ' · IP ' + s.tunnelIp : ''}`
+      addLog('VPN-101 P2P connected role=' + s.role + (s.tunnelIp ? ' ip=' + s.tunnelIp : ''))
+    } else if (s.phase === 'negotiating' || s.phase === 'waiting_peer') {
+      vpnStatus = 'connecting'
+      statusText = s.phase === 'waiting_peer' ? 'VPN-101: жду вторую вкладку…' : 'VPN-101: WebRTC negotiating…'
+    } else if (s.phase === 'error') {
+      vpnStatus = 'off'
+      statusText = 'VPN-101 error: ' + s.lastError
+      addLog('VPN-101 error: ' + s.lastError)
+    }
+  })
+  async function startTabP2PHost() {
+    try {
+      await localP2P.startAsHost()
+      addLog('VPN-101: host (exit) — откройте 2-ю вкладку и нажмите «Войти peer»')
+    } catch (e) { addLog('VPN-101 host fail: ' + e) }
+  }
+  async function startTabP2PJoiner() {
+    try {
+      await localP2P.startAsJoiner()
+      addLog('VPN-101: joiner — ищу host-вкладку…')
+    } catch (e) { addLog('VPN-101 joiner fail: ' + e) }
+  }
+  function stopTabP2P() {
+    localP2P.stop()
+    vpnStatus = 'off'
+    statusText = 'VPN выключен'
+    addLog('VPN-101 stopped')
+  }
   let lastTunnelIp = $state('')
   let handlingIncoming = $state(false)
   let turnStatus = $state<string>('checking…')
@@ -427,6 +479,14 @@
 </script>
 
 <div class="vpn-product" data-testid="vpn-product">
+  <div class="tab-p2p-status" data-testid="vpn-tab-p2p-status">
+    VPN-101: {tabP2P.phase} · role={tabP2P.role}
+    {#if tabP2P.tunnelIp} · IP {tabP2P.tunnelIp}{/if}
+    {#if tabP2P.lastError} · err {tabP2P.lastError}{/if}
+    {#if tabP2P.phase !== 'idle'}
+      <button class="linkish" data-testid="vpn-tab-stop" type="button" onclick={stopTabP2P}>Стоп 2-вкладки</button>
+    {/if}
+  </div>
   {#if turnStatus}
     <div class="ice-status">
       <span class="ice-badge" title="NAT traversal method">🧊 {turnStatus}{#if transportMode} · 📡 {transportMode}{/if}</span>
@@ -447,7 +507,14 @@
       <button class="vpn-btn push" data-testid="vpn-push" disabled={pushBusy} onclick={enablePush}>
         🔔 Уведомления
       </button>
+      <button class="vpn-btn engine" data-testid="vpn-tab-host" onclick={startTabP2PHost}>
+        🧪 2 вкладки: я exit
+      </button>
+      <button class="vpn-btn request" data-testid="vpn-tab-join" onclick={startTabP2PJoiner}>
+        🧪 2 вкладки: войти peer
+      </button>
     </div>
+    
     <div class="phase2-status" data-testid="phase2-status">
       <span>Движок: {amneziaStatus || '—'}</span>
       <span>Push: {pushInfo || '—'}</span>
@@ -538,6 +605,7 @@
   .vpn-status { display: flex; align-items: center; gap: 8px; padding: 14px; border-radius: 12px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
   .vpn-status.sharing { background: #0d2818; color: #6ee7b7; border: 1px solid #1a4a2a; }
   .vpn-status.connected { background: #0d1a28; color: #7dd3fc; border: 1px solid #1a3a5a; }
+  .tab-p2p-status { font-size: 0.8rem; opacity: 0.85; margin: 8px 0; padding: 6px 8px; border-radius: 8px; background: #12121a; }
   .status-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
   .ip { font-family: monospace; opacity: 0.9; }
   .disconnect-btn { margin-left: auto; background: rgba(255,107,107,0.2); border: 1px solid #ff6b6b33; color: #ff6b6b; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }

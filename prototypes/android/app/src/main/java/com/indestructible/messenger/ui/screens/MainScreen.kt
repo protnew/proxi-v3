@@ -17,16 +17,21 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.indestructible.messenger.messenger.Chat
 import com.indestructible.messenger.messenger.Message
+import com.indestructible.messenger.messenger.ChatViewModel
 import com.indestructible.messenger.ui.theme.MessengerColors
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun MainScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToNewChat: () -> Unit,
+    chats: List<Chat> = emptyList(),
+    chatVM: ChatViewModel? = null,
+    myPubKey: String = "me",
 ) {
     var selectedChat by remember { mutableStateOf<Chat?>(null) }
     var inputText by remember { mutableStateOf("") }
-    var chats by remember { mutableStateOf(sampleChats()) }
 
     Row(modifier = Modifier.fillMaxSize()) {
         // Sidebar
@@ -39,19 +44,17 @@ fun MainScreen(
             Column {
                 // Header
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TextButton(onClick = onNavigateToSettings) {
-                        Text("☰", color = Color.White, fontSize = 20.sp)
+                        Text("\u2630", color = Color.White, fontSize = 20.sp)
                     }
                     OutlinedTextField(
                         value = "",
                         onValueChange = {},
-                        placeholder = { Text("Поиск", color = Color.Gray) },
+                        placeholder = { Text("\u041F\u043E\u0438\u0441\u043A", color = Color.Gray) },
                         modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
@@ -60,8 +63,24 @@ fun MainScreen(
                         )
                     )
                     TextButton(onClick = onNavigateToNewChat) {
-                        Text("✏️", fontSize = 18.sp)
+                        Text("\u270F\uFE0F", fontSize = 18.sp)
                     }
+                }
+
+                // Connection status
+                chatVM?.let { vm ->
+                    val status = vm.connectionStatus.value
+                    val color = when {
+                        status.startsWith("connected") -> Color(0xFF4CAF50)
+                        status.startsWith("connecting") -> Color(0xFFFFB74D)
+                        else -> Color(0xFFEF5350)
+                    }
+                    Text(
+                        "\u25CF " + status,
+                        color = color,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 2.dp)
+                    )
                 }
 
                 // Chat list
@@ -70,7 +89,10 @@ fun MainScreen(
                         ChatListItem(
                             chat = chat,
                             isSelected = selectedChat?.id == chat.id,
-                            onClick = { selectedChat = chat }
+                            onClick = {
+                                selectedChat = chat
+                                chatVM?.setActiveChat(chat.id)
+                            }
                         )
                     }
                 }
@@ -82,13 +104,17 @@ fun MainScreen(
 
         // Chat area
         if (selectedChat != null) {
+            val vmMessages = chatVM?.messages ?: selectedChat!!.messages
             ChatArea(
                 chat = selectedChat!!,
+                messages = vmMessages,
+                myPubKey = myPubKey,
                 inputText = inputText,
                 onInputTextChange = { inputText = it },
                 onSend = {
                     if (inputText.isNotBlank()) {
-                        // TODO: Send via Nostr
+                        val to = selectedChat!!.id.removePrefix("dm:")
+                        chatVM?.sendMessage(myPubKey, to, inputText)
                         inputText = ""
                     }
                 }
@@ -109,7 +135,6 @@ fun ChatListItem(chat: Chat, isSelected: Boolean, onClick: () -> Unit) {
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Avatar
         Box(
             modifier = Modifier
                 .size(48.dp)
@@ -140,7 +165,7 @@ fun ChatListItem(chat: Chat, isSelected: Boolean, onClick: () -> Unit) {
                 )
             }
             Text(
-                chat.messages.lastOrNull()?.text ?: "Нет сообщений",
+                chat.messages.lastOrNull()?.text ?: "\u041D\u0435\u0442 \u0441\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0439",
                 color = Color.Gray,
                 fontSize = 13.sp,
                 maxLines = 1,
@@ -157,6 +182,8 @@ fun ChatListItem(chat: Chat, isSelected: Boolean, onClick: () -> Unit) {
 @Composable
 fun ChatArea(
     chat: Chat,
+    messages: List<Message>,
+    myPubKey: String,
     inputText: String,
     onInputTextChange: (String) -> Unit,
     onSend: () -> Unit,
@@ -172,14 +199,14 @@ fun ChatArea(
             }
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(chat.name, color = Color.White, fontSize = 14.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
-                Text("был(а) недавно", color = Color.Gray, fontSize = 12.sp)
+                Text("\u0431\u044B\u043B(\u0430) \u043D\u0435\u0434\u0430\u0432\u043D\u043E", color = Color.Gray, fontSize = 12.sp)
             }
         }
 
-        // Messages
+        // Messages from ChatViewModel (live WS messages)
         LazyColumn(modifier = Modifier.weight(1f).padding(horizontal = 16.dp)) {
-            items(chat.messages) { msg ->
-                MessageBubble(msg, isMine = false) // TODO: compare with own pubkey
+            items(messages) { msg ->
+                MessageBubble(msg, isMine = msg.from == myPubKey)
             }
         }
 
@@ -191,7 +218,7 @@ fun ChatArea(
             OutlinedTextField(
                 value = inputText,
                 onValueChange = onInputTextChange,
-                placeholder = { Text("Сообщение", color = Color.Gray) },
+                placeholder = { Text("\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435", color = Color.Gray) },
                 modifier = Modifier.weight(1f),
                 maxLines = 4,
                 colors = OutlinedTextFieldDefaults.colors(
@@ -200,7 +227,7 @@ fun ChatArea(
                 )
             )
             TextButton(onClick = onSend) {
-                Text("➤", color = MessengerColors.Accent, fontSize = 20.sp)
+                Text("\u27A4", color = MessengerColors.Accent, fontSize = 20.sp)
             }
         }
     }
@@ -242,23 +269,59 @@ fun EmptyState() {
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("🛡️", fontSize = 64.sp)
+            Text("\uD83D\uDEE1\uFE0F", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
             Text("Indestructible Messenger", color = Color.White, fontSize = 20.sp)
-            Text("Выберите чат или начните новый", color = Color.Gray, fontSize = 14.sp)
-            Text("P2P • E2E • Неубиваемо", color = Color.DarkGray, fontSize = 13.sp)
+            Text("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0447\u0430\u0442 \u0438\u043B\u0438 \u043D\u0430\u0447\u043D\u0438\u0442\u0435 \u043D\u043E\u0432\u044B\u0439", color = Color.Gray, fontSize = 14.sp)
+            Text("P2P \u2022 E2E \u2022 \u041D\u0435\u0443\u0431\u0438\u0432\u0430\u0435\u043C\u043E", color = Color.DarkGray, fontSize = 13.sp)
         }
     }
 }
 
 @Composable
 fun VpnStatusBar() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var vpnOn by remember { mutableStateOf(false) }
+    var vpnStatus by remember { mutableStateOf("disconnected") }
+
     Row(
         modifier = Modifier.fillMaxWidth().background(MessengerColors.DarkBg).padding(8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("🛡️ VPN", color = Color.White, fontSize = 12.sp)
-        Text("Отключён", color = Color(0xFFFF6B6B), fontSize = 12.sp)
+        Text("\uD83D\uDEE1\uFE0F VPN", color = Color.White, fontSize = 12.sp)
+        val statusColor = if (vpnOn) Color(0xFF4CAF50) else Color(0xFFFF6B6B)
+        Text(
+            if (vpnOn) "\u0412\u043A\u043B\u044E\u0447\u0435\u043D" else "\u041E\u0442\u043A\u043B\u044E\u0447\u0451\u043D",
+            color = statusColor,
+            fontSize = 12.sp
+        )
+        Switch(
+            checked = vpnOn,
+            onCheckedChange = { enabled ->
+                vpnOn = enabled
+                vpnStatus = if (enabled) "connecting" else "disconnected"
+                // MOB-101c: Start/stop VPN via Intent
+                val ctx = context
+                if (enabled) {
+                    val intent = Intent(ctx, com.indestructible.messenger.vpn.VpnService::class.java)
+                    intent.action = "START_VPN"
+                    ctx.startService(intent)
+                    vpnStatus = "connected"
+                } else {
+                    val intent = Intent(ctx, com.indestructible.messenger.vpn.VpnService::class.java)
+                    intent.action = "STOP_VPN"
+                    ctx.startService(intent)
+                    vpnStatus = "disconnected"
+                }
+                // For now: toggle state + visual feedback
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF4CAF50),
+                checkedTrackColor = Color(0xFF2E7D32),
+                uncheckedThumbColor = Color(0xFFEF5350),
+            )
+        )
     }
 }
 
@@ -266,5 +329,3 @@ private fun formatTime(ts: Long): String {
     val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
     return sdf.format(java.util.Date(ts))
 }
-
-private fun sampleChats(): List<Chat> = emptyList()

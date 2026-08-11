@@ -6,6 +6,7 @@
 package main
 
 import (
+	"strconv"
 	vpnroot "github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/auth"
 	"encoding/hex"
@@ -21,7 +22,8 @@ import (
 // Called from run() in startup.go.
 func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port string) {
 	// Middleware chains
-	// apiChain: rate-limited API without JWT (legacy/open until AUTH-009 hardens)
+	// QA-004 (2026-08-11): apiChain теперь требует JWT когда authSvc != nil
+	// Это закрывает rebinding атаку — все API endpoints требуют Bearer token
 	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
@@ -37,6 +39,8 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 		protectedApiChain = func(h http.HandlerFunc) http.HandlerFunc {
 			return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(authMiddleware(authSvc, h))))
 		}
+		// QA-004: Harden apiChain to also require JWT — closes rebinding vulnerability
+		apiChain = protectedApiChain
 	}
 	// AUTH-009: protectedApiChain used for messages/identity below
 
@@ -64,7 +68,10 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
 	}))
-	http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
+		// INF-010: VPN Nostr signaling (kind:30090)
+	http.HandleFunc("/api/vpn/signaling", apiChain(srv.handleVPNSignaling))
+
+http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 	http.HandleFunc("/api/vpn/wt/stats", apiChain(srv.handleWTStats))
 	http.HandleFunc("/api/vpn/wt/start", apiChain(srv.handleWTStart))
 	http.HandleFunc("/api/vpn/wt/stop", apiChain(srv.handleWTStop))
@@ -114,6 +121,15 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/push/config", apiChain(srv.handlePushConfig))
 	http.HandleFunc("/api/push/subscribe", apiChain(srv.handlePushSubscribe))
 	http.HandleFunc("/api/push/send", apiChain(srv.handlePushSend))
+	// CRYP-011: X3DH+DR session establish
+	http.HandleFunc("/api/keys/session", apiChain(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			srv.handleSessionEstablish(w, r)
+			return
+		}
+		srv.handleSessionStatus(w, r)
+	}))
+
 	// N7: PreKey bundle distribution (desktop X3DH)
 	http.HandleFunc("/api/keys/prekey", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -264,25 +280,61 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 
 	initExtraRoutes(srv.db, apiChain)
 
-	// Static files + SPA fallback
-		// Static files + SPA fallback
+	// Static files + SPA fallback (Windows-safe: os.ReadFile avoids http.FileServer Cyrillic issues)
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		// Security headers
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; connect-src 'self' ws: wss:; img-src 'self' data: blob:; manifest-src 'self'; worker-src 'self';")
 
-		// Path traversal protection
 		if strings.Contains(r.URL.Path, "..") {
 			http.Error(w, "Bad Request", http.StatusBadRequest)
 			return
 		}
 
-		// Serve static file or fall back to index.html (SPA)
-		fullPath := filepath.Join(distDir, filepath.Clean(r.URL.Path))
-		if info, err := os.Stat(fullPath); err != nil || info.IsDir() {
-			http.ServeFile(w, r, filepath.Join(distDir, "index.html"))
-			return
+		// Strip leading / so filepath.Join doesn't treat as absolute
+		urlPath := strings.TrimPrefix(r.URL.Path, "/")
+		urlPath = strings.TrimPrefix(urlPath, "\\")
+		if urlPath == "" {
+			urlPath = "index.html"
 		}
-		http.FileServer(http.Dir(distDir)).ServeHTTP(w, r)
+		cleanPath := filepath.Clean(urlPath)
+		fullPath := filepath.Join(distDir, cleanPath)
+
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			data, err = os.ReadFile(filepath.Join(distDir, "index.html"))
+			if err != nil {
+				http.Error(w, "Not Found", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		} else {
+			ext := strings.ToLower(filepath.Ext(fullPath))
+			switch ext {
+			case ".js":
+				w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+			case ".css":
+				w.Header().Set("Content-Type", "text/css; charset=utf-8")
+			case ".json", ".webmanifest":
+				w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			case ".svg":
+				w.Header().Set("Content-Type", "image/svg+xml")
+			case ".png":
+				w.Header().Set("Content-Type", "image/png")
+			case ".ico":
+				w.Header().Set("Content-Type", "image/x-icon")
+			case ".woff2":
+				w.Header().Set("Content-Type", "font/woff2")
+			case ".html":
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			default:
+				w.Header().Set("Content-Type", "application/octet-stream")
+			}
+			if strings.HasPrefix(cleanPath, string(os.PathSeparator)+"assets"+string(os.PathSeparator)) {
+				w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			}
+		}
+		w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+		w.Write(data)
 	})
 }

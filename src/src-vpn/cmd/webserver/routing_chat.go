@@ -67,23 +67,34 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	}
 	msgs = filtered
 
-	// Auto-decrypt messages for the current user
+	// Auto-decrypt messages for the current user (CRYP-010 DR first, then legacy ECDH)
 	currentUserNpub := npub
 	if currentUserNpub != "" {
-		recipientBundle, err := s.db.GetPreKeyBundle(currentUserNpub)
-		if err == nil && recipientBundle != nil {
-			privBundle := &crypto.PreKeyBundle{
-				IdentityKey: recipientBundle.IdentityKey,
+		for i, m := range msgs {
+			if !m.Encrypted || m.To != currentUserNpub {
+				continue
 			}
-			for i, m := range msgs {
-				if m.Encrypted && m.To == currentUserNpub {
-					plaintext, err := chat.DecryptMessageFromSender(m.Text, privBundle.IdentityKey, m.From)
-					if err == nil {
-						msgs[i].Text = plaintext
-						msgs[i].Encrypted = false
-					} else {
-						zap.S().Warnf("Failed to decrypt message %s from %s: %v", m.ID, m.From, err)
-					}
+			// Double Ratchet
+			if s.drSessions != nil && chat.IsDRCiphertext(m.Text) {
+				pt, used, err := s.drSessions.DecryptInbound(currentUserNpub, m.From, m.Text)
+				if err == nil && used {
+					msgs[i].Text = pt
+					msgs[i].Encrypted = false
+					continue
+				}
+				if err != nil {
+					zap.S().Warnf("DR decrypt failed msg %s from %s: %v", m.ID, m.From, err)
+				}
+			}
+			// Legacy ECDH
+			recipientBundle, err := s.db.GetPreKeyBundle(currentUserNpub)
+			if err == nil && recipientBundle != nil {
+				plaintext, err := chat.DecryptMessageFromSender(m.Text, recipientBundle.IdentityKey, m.From)
+				if err == nil {
+					msgs[i].Text = plaintext
+					msgs[i].Encrypted = false
+				} else {
+					zap.S().Warnf("Failed to decrypt message %s from %s: %v", m.ID, m.From, err)
 				}
 			}
 		}
@@ -144,22 +155,35 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		req.From = "anonymous"
 	}
 
-	// Enable E2E Encryption
+	// CRYP-010: Double Ratchet first (when session exists), then legacy ECDH prekey path.
+	// Client-side NIP-44 ciphertext (already encrypted) is stored as-is if marked.
 	encryptedText := req.Text
 	isEncrypted := false
-	if req.To != "broadcast" {
-		// Fetch sender's prekey bundle
-		bundleRow, err := s.db.GetPreKeyBundle(req.From)
-		if err == nil && bundleRow != nil {
-			senderBundle := &crypto.PreKeyBundle{
-				IdentityKey: bundleRow.IdentityKey,
-			}
-			enc, err := chat.EncryptMessageForRecipient(req.Text, senderBundle.IdentityKey, req.To)
-			if err == nil {
-				encryptedText = enc
+	if req.To != "broadcast" && req.To != "" {
+		// Prefer DR session if established (forward secrecy)
+		if s.drSessions != nil {
+			ct, usedDR, derr := s.drSessions.EncryptOutbound(req.From, req.To, req.Text)
+			if derr != nil {
+				log.Printf("WARNING: DR encrypt failed: %v", derr)
+			} else if usedDR {
+				encryptedText = ct
 				isEncrypted = true
-			} else {
-				log.Printf("WARNING: E2E encryption failed: %v", err)
+			}
+		}
+		// Fallback: legacy ECDH via stored prekey bundle
+		if !isEncrypted {
+			bundleRow, err := s.db.GetPreKeyBundle(req.From)
+			if err == nil && bundleRow != nil {
+				senderBundle := &crypto.PreKeyBundle{
+					IdentityKey: bundleRow.IdentityKey,
+				}
+				enc, err := chat.EncryptMessageForRecipient(req.Text, senderBundle.IdentityKey, req.To)
+				if err == nil {
+					encryptedText = enc
+					isEncrypted = true
+				} else {
+					log.Printf("WARNING: E2E encryption failed: %v", err)
+				}
 			}
 		}
 	}
@@ -176,6 +200,36 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	// Persist to SQLite
 	if err := s.db.SaveMessage(msg); err != nil {
 		log.Printf("WARNING: failed to save message to db: %v", err)
+	}
+
+	// MSG-110: push to WebSocket hub so online recipients get real-time delivery
+	// (REST save alone forced Bob to reload — hub.SendTo was never called from HTTP path)
+	if s.hub != nil {
+		wsMsg := &chat.Message{
+			Type:  chat.TypeChat,
+			ID:    msg.ID,
+			From:  msg.From,
+			To:    msg.To,
+			Text:  msg.Text,
+			Ts:    msg.Timestamp,
+			IsE2E: msg.Encrypted,
+		}
+		if encoded, encErr := wsMsg.Encode(); encErr == nil {
+			switch msg.To {
+			case "", chat.BroadcastTarget:
+				s.hub.Broadcast(encoded, msg.From)
+				// multi-device echo to sender
+				s.hub.SendTo(msg.From, encoded)
+			default:
+				delivered := s.hub.SendTo(msg.To, encoded)
+				s.hub.SendTo(msg.From, encoded) // echo to sender devices
+				if !delivered {
+					log.Printf("MSG-110: recipient %s offline — message persisted only", truncate(msg.To, 16))
+				}
+			}
+		} else {
+			log.Printf("MSG-110: encode WS message failed: %v", encErr)
+		}
 	}
 
 	writeJSON(w, http.StatusCreated, msg)

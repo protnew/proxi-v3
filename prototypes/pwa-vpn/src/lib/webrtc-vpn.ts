@@ -1,4 +1,6 @@
 /**
+import { NostrSignaling, type VPNSignal } from './nostr-signaling'
+import { getIdentity } from './identity'
  * WebRTC VPN DataChannel transport (Table 01 winner).
  * Phase 1: STUN-only ICE (Google + Cloudflare) — P2P ~85% NAT.
  * Phase 1.5 fallback: Nostr data relay (no third-party TURN).
@@ -66,8 +68,15 @@ export class WebRTCVPNClient {
     this.iceRole = "caller"
     const gatherIce = async (cb: (c: string) => void) => {
       if (!this.pc) return
-      this.pc.onicecandidate = (e) => { if (e.candidate) cb(e.candidate.candidate) }
-      this.pc.onicegatheringstatechange = () => { if (this.pc?.iceGatheringState === "complete") cb("END") }
+      if (this.pc.iceGatheringState === "complete") { cb("END"); return }
+      await new Promise<void>((resolve) => {
+        let done = false
+        const finish = () => { if (!done) { done = true; cb("END"); resolve() } }
+        this.pc!.onicecandidate = (e) => { if (e.candidate) cb(e.candidate.candidate); else finish() }
+        this.pc!.onicegatheringstatechange = () => { if (this.pc?.iceGatheringState === "complete") finish() }
+        if (this.pc!.iceGatheringState === "complete") finish()
+        setTimeout(finish, 5000)
+      })
     }
     return { sdp: offer.sdp || "", gatherIce }
   }
@@ -85,12 +94,8 @@ export class WebRTCVPNClient {
     this.pc.ondatachannel = (e) => { this.dc = e.channel; this.setupExitDC(this.dc) }
     await this.pc.setRemoteDescription({ type: "offer", sdp: sdpOffer })
     for (const c of iceCandidates) { if (c && c !== "END") { try { await this.pc!.addIceCandidate({ candidate: c, sdpMid: "0", sdpMLineIndex: 0 }) } catch {} } }
-    const answer = await this.pc.createAnswer()
-    await this.pc.setLocalDescription(answer)
-    this.status = "connecting"
-    this.iceRole = "callee"
     const myCandidates: string[] = []
-    await new Promise<void>((resolve) => {
+    const iceDone = new Promise<void>((resolve) => {
       if (!this.pc) return resolve()
       let done = false
       const finish = () => { if (!done) { done = true; resolve() } }
@@ -98,18 +103,34 @@ export class WebRTCVPNClient {
       this.pc.onicegatheringstatechange = () => { if (this.pc?.iceGatheringState === "complete") finish() }
       setTimeout(finish, 5000)
     })
+    const answer = await this.pc.createAnswer()
+    await this.pc.setLocalDescription(answer)
+    this.status = "connecting"
+    this.iceRole = "callee"
+    if (this.pc.iceGatheringState === "complete") {
+      /* already done */
+    } else {
+      await iceDone
+    }
     return { sdp: answer.sdp || "", iceCandidates: myCandidates }
   }
 
   async waitForOpen(timeoutMs = 15000): Promise<void> {
     if (this.dc?.readyState === "open") { this.status = "connected"; return }
-    if (!this.dc) throw new Error("No DataChannel")
+    // Callee: DC arrives via ondatachannel after setRemoteDescription — wait for it.
     await new Promise<void>((resolve, reject) => {
       const t = setTimeout(() => reject(new Error("DataChannel open timeout")), timeoutMs)
-      const interval = setInterval(() => {
-        if (this.dc?.readyState === "open") { clearInterval(interval); clearTimeout(t); this.status = "connected"; resolve() }
-      }, 200)
-      this.dc.onopen = () => { clearInterval(interval); clearTimeout(t); this.status = "connected"; resolve() }
+      const tick = () => {
+        if (this.dc?.readyState === "open") {
+          clearInterval(interval); clearTimeout(t); this.status = "connected"; resolve()
+          return
+        }
+        if (this.dc) {
+          this.dc.onopen = () => { clearInterval(interval); clearTimeout(t); this.status = "connected"; resolve() }
+        }
+      }
+      const interval = setInterval(tick, 100)
+      tick()
     })
   }
 
@@ -198,6 +219,67 @@ export class WebRTCVPNClient {
     try { this.pc?.close() } catch {}
     this.dc = null; this.pc = null; this.status = "disconnected"
   }
+
+  // INF-010: Nostr signaling bridge — connects WebRTC offers/answers via Nostr relays
+  private signaling: NostrSignaling | null = null
+
+  async startNostrSignaling(targetPubkey: string): Promise<void> {
+    const identity = getIdentity()
+    if (!identity) throw new Error('No identity — cannot start Nostr signaling')
+    
+    this.signaling = new NostrSignaling(identity)
+    await this.signaling.start((signal: VPNSignal) => {
+      console.log('[VPN] Received Nostr signal:', signal.type, 'from', signal.from.slice(0, 8))
+      
+      if (signal.type === 'offer' && signal.sdp) {
+        // Incoming offer — create answer and send back
+        this.createAnswer(signal.sdp, []).then(({ sdp, iceCandidates }) => {
+          this.signaling?.sendAnswer(signal.from, sdp)
+          for (const ice of iceCandidates) {
+            this.signaling?.sendIceCandidate(signal.from, { candidate: ice })
+          }
+        })
+      } else if (signal.type === 'answer' && signal.sdp) {
+        // Answer to our offer — apply it
+        this.applyAnswer(signal.sdp, [])
+      } else if (signal.type === 'ice-candidate' && signal.candidate) {
+        // ICE candidate from peer
+        try {
+          this.pc?.addIceCandidate(signal.candidate)
+        } catch (e) {
+          console.warn('[VPN] Failed to add ICE candidate:', e)
+        }
+      }
+    })
+    
+    // Send request to target
+    await this.signaling.sendRequest(targetPubkey)
+    console.log('[VPN] Nostr signaling started, sent request to', targetPubkey.slice(0, 8))
+  }
+
+  // Host: create offer and broadcast via Nostr
+  async createOfferViaNostr(targetPubkey: string): Promise<void> {
+    const { sdp, gatherIce } = await this.createOffer()
+    
+    // Collect ICE candidates and send along with offer
+    const iceCandidates: string[] = []
+    await gatherIce((candidate: string) => {
+      if (candidate !== 'END') iceCandidates.push(candidate)
+    })
+    
+    this.signaling?.sendOffer(targetPubkey, sdp)
+    for (const ice of iceCandidates) {
+      this.signaling?.sendIceCandidate(targetPubkey, { candidate: ice })
+    }
+    console.log('[VPN] Offer sent via Nostr to', targetPubkey.slice(0, 8))
+  }
+
+  stopNostrSignaling(): void {
+    this.signaling?.stop()
+    this.signaling = null
+    console.log('[VPN] Nostr signaling stopped')
+  }
+
 }
 
 export const rtcVPN = new WebRTCVPNClient()

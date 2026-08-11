@@ -38,6 +38,16 @@ function b64decode(s: string): Uint8Array {
   return out
 }
 
+/**
+ * SEC-002: Crypto-erasure — fill a Uint8Array with zeros.
+ * Call after encryption/decryption to wipe plaintext keys from memory.
+ */
+export function zeroBuffer(buf: Uint8Array | null | undefined): void {
+  if (!buf) return
+  buf.fill(0)
+}
+
+
 /** Prefix so receivers can detect NIP-44 without guessing base64 alone */
 export const NIP44_PREFIX = 'nip44:'
 
@@ -71,6 +81,7 @@ export async function encryptDM(
 ): Promise<string> {
   const key = conversationKey(myPrivateHex, theirPublicHex)
   const payload = nip44.encrypt(plaintext, key)
+  zeroBuffer(key) // SEC-002: wipe conversation key
   return NIP44_PREFIX + payload
 }
 
@@ -85,7 +96,9 @@ export async function decryptDM(
   try {
     if (isNip44Payload(payload)) {
       const key = conversationKey(myPrivateHex, theirPublicHex)
-      return nip44.decrypt(payload.slice(NIP44_PREFIX.length), key)
+      const result = nip44.decrypt(payload.slice(NIP44_PREFIX.length), key)
+      zeroBuffer(key) // SEC-002: wipe conversation key
+      return result
     }
     if (isLegacyV1Payload(payload)) {
       return decryptLegacyV1(payload, myPrivateHex, theirPublicHex)

@@ -4,6 +4,9 @@ plugins {
 }
 
 android {
+    testOptions {
+        execution = "ANDROIDX_TEST_ORCHESTRATOR"
+    }
     namespace = "com.indestructible.messenger"
     compileSdk = 34
 
@@ -13,6 +16,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -74,4 +78,11 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
+    // Testing
+    androidTestImplementation(platform("androidx.compose:compose-bom:2024.01.00"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test:runner:1.5.2")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

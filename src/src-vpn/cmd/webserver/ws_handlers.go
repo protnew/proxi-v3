@@ -126,6 +126,9 @@ func (s *Server) handleOnlineUsers(w http.ResponseWriter, r *http.Request) {
 // initHub creates the chat hub
 func (s *Server) initHub() {
 	s.hub = chat.NewChatHub()
+	if s.drSessions == nil {
+		s.drSessions = chat.NewDRSessionStore() // CRYP-010
+	}
 	s.hub.OnMessage = func(msg *chat.Message) {
 		log.Printf("💬 [%s→%s]: %s", msg.From, msg.To, truncate(msg.Text, 50))
 
