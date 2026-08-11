@@ -4,22 +4,22 @@ import android.content.Intent
 import android.net.VpnService as AndroidVpnService
 import android.os.ParcelFileDescriptor
 import android.util.Log
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.net.InetSocketAddress
-import java.nio.ByteBuffer
+import com.wireguard.android.backend.GoBackend
+import com.wireguard.android.backend.Tunnel
+import com.wireguard.config.Config
+import com.wireguard.config.InetEndpoint
+import com.wireguard.config.InetNetwork
+import com.wireguard.config.Peer
+import com.wireguard.config.Interface
+import com.wireguard.crypto.Key
+import com.wireguard.crypto.KeyPair
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * VPN Service — routes traffic through WireGuard tunnel
- * MOB-101b: Packet processing loop — reads from VPN interface,
- * forwards to WireGuard tunnel, writes responses back.
+ * VPN Service — real WireGuard tunnel via com.wireguard.android:tunnel
+ * MOB-101b v2: Uses GoBackend (wireguard-go userspace).
  */
 class VpnService : AndroidVpnService() {
-
-    private var vpnInterface: ParcelFileDescriptor? = null
-    private var tunnelThread: Thread? = null
-    private val isRunning = AtomicBoolean(false)
 
     companion object {
         private const val TAG = "VpnService"
@@ -32,31 +32,65 @@ class VpnService : AndroidVpnService() {
             private set
     }
 
+    private var backend: GoBackend? = null
+    private var tunnel: Tunnel? = null
+    private val isRunning = AtomicBoolean(false)
+
     fun startVpn(config: WireGuardConfig) {
         if (isRunning.get()) return
 
         try {
-            vpnInterface = Builder()
-                .setSession("IndestructibleVPN")
-                .addAddress(config.address, config.prefixLength)
-                .addRoute("0.0.0.0", 0)
-                .addDnsServer(config.dnsServer)
-                .setBlocking(true)
-                .setMtu(1420)
-                .establish()
-
-            if (vpnInterface == null) {
-                status = "error: VPN interface null"
-                onStatusChange?.invoke(status)
-                return
+            if (backend == null) {
+                backend = GoBackend(this)
             }
 
-            isRunning.set(true)
-            status = "connected"
-            onStatusChange?.invoke(status)
+            // Build interface
+            val privKeyStr = config.privateKey.ifEmpty { KeyPair().privateKey.toBase64() }
+            val ifaceBuilder = Interface.Builder()
+            ifaceBuilder.parsePrivateKey(privKeyStr)
+            ifaceBuilder.addAddress(InetNetwork.parse(config.address + "/" + config.prefixLength))
+            ifaceBuilder.parseDnsServers(config.dnsServer)
+            ifaceBuilder.setMtu(1420)
 
-            // MOB-101b: Start packet processing loop
-            startTunnelLoop()
+            val configBuilder = Config.Builder()
+            configBuilder.setInterface(ifaceBuilder.build())
+
+            // Add peer if endpoint configured
+            if (config.endpoint.isNotEmpty() && config.publicKey.isNotEmpty()) {
+                val peerBuilder = Peer.Builder()
+                peerBuilder.parsePublicKey(config.publicKey)
+                peerBuilder.parseEndpoint(config.endpoint)
+                peerBuilder.parseAllowedIPs("0.0.0.0/0")
+                configBuilder.addPeer(peerBuilder.build())
+            }
+
+            val wgConfig = configBuilder.build()
+
+            // Create tunnel
+            tunnel = object : Tunnel {
+                override fun getName(): String = "IndestructibleVPN"
+                override fun onStateChange(state: Tunnel.State) {
+                    Log.i(TAG, "Tunnel state: $state")
+                    if (state == Tunnel.State.UP) {
+                        status = "connected"
+                    } else if (state == Tunnel.State.DOWN) {
+                        status = "disconnected"
+                    }
+                    onStatusChange?.invoke(status)
+                }
+            }
+
+            val state = backend!!.setState(tunnel!!, Tunnel.State.UP, wgConfig)
+
+            if (state == Tunnel.State.UP) {
+                isRunning.set(true)
+                status = "connected"
+                onStatusChange?.invoke(status)
+                Log.i(TAG, "WireGuard tunnel UP")
+            } else {
+                status = "error: state=$state"
+                onStatusChange?.invoke(status)
+            }
 
         } catch (e: Exception) {
             status = "error: ${e.message}"
@@ -65,63 +99,20 @@ class VpnService : AndroidVpnService() {
         }
     }
 
-    /**
-     * Packet processing loop:
-     * Read packets from VPN interface -> process/forward -> write back
-     *
-     * In production this connects to WireGuard Go library (wireguard-android).
-     * For now: simple echo + byte counter to prove packets flow.
-     */
-    private fun startTunnelLoop() {
-        tunnelThread = Thread {
-            val pfd = vpnInterface ?: return@Thread
-            val input = FileInputStream(pfd.fileDescriptor)
-            val output = FileOutputStream(pfd.fileDescriptor)
-            val buffer = ByteBuffer.allocate(32767)
-
-            Log.i(TAG, "Tunnel loop started")
-            while (isRunning.get() && !Thread.interrupted()) {
-                try {
-                    val length = input.read(buffer.array())
-                    if (length > 0) {
-                        tunnelBytesIn += length
-
-                        // TODO: Replace with WireGuard Go library processing
-                        // For now: packet is read and counted.
-                        // Real WireGuard would:
-                        //   1. Decrypt packet with session key
-                        //   2. Send via UDP to peer endpoint
-                        //   3. Receive response
-                        //   4. Write response to output
-
-                        // Simple pass-through for loopback test
-                        buffer.limit(length)
-                        output.write(buffer.array(), 0, length)
-                        tunnelBytesOut += length
-                        buffer.clear()
-                    }
-                } catch (e: Exception) {
-                    if (isRunning.get()) {
-                        Log.e(TAG, "Tunnel loop error", e)
-                    }
-                    break
-                }
-            }
-            Log.i(TAG, "Tunnel loop stopped")
-        }.also { it.start() }
-    }
-
     fun stopVpn() {
-        isRunning.set(false)
-        tunnelThread?.interrupt()
+        if (!isRunning.get()) return
         try {
-            vpnInterface?.close()
-        } catch (_: Exception) {}
-        vpnInterface = null
-        tunnelBytesIn = 0
-        tunnelBytesOut = 0
+            tunnel?.let { t ->
+                backend?.setState(t, Tunnel.State.DOWN, null)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "stopVpn error", e)
+        }
+        isRunning.set(false)
+        tunnel = null
         status = "disconnected"
         onStatusChange?.invoke(status)
+        Log.i(TAG, "WireGuard tunnel DOWN")
     }
 
     override fun onDestroy() {
