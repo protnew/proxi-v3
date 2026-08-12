@@ -4,20 +4,78 @@
   import { getLocalTabP2P, type TabP2PStatus } from '../lib/local-tab-p2p'
   import { dataRelay } from '../lib/nostr-data-relay'
   import { onMount } from 'svelte'
-  import { getPubkey, getSeckey } from '../lib/api'
+  import { getPubkey } from '../lib/api'
   import { getTunnelStatus, startTunnel, stopTunnel, type TunnelStatus } from '../lib/amnezia-tunnel'
-  import { subscribeWebPush, fetchPushConfig, sendTestPush, type PushServerConfig } from '../lib/web-push'
-  import * as secp from '@noble/secp256k1'
-
-import { startVPNSignaling, startTabP2PHost, startTabP2PJoiner, stopTabP2P } from '../lib/vpn-panel-helpers';
-import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders } from '../lib/vpn-utils';
-
+  import { subscribeWebPush, fetchPushConfig, sendTestPush } from '../lib/web-push'
+  import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders, startWTServer } from '../lib/vpn-utils.svelte';
+async function startVPNSignaling(targetPubkey: string) {
+  try {
+    await (rtcVPN as any).startNostrSignaling(targetPubkey)
+    console.log('[VPN] Nostr signaling started for', targetPubkey.slice(0, 8))
+  } catch (e) {
+    console.warn('[VPN] Nostr signaling failed:', e)
+  }
+}
+  let showInviteModal = $state(false)
+  let showRequestModal = $state(false)
+  let incomingEvent = $state<VPNEvent | null>(null)
+  let friendId = $state('')
+  let vpnStatus = $state<'off' | 'sharing' | 'connecting' | 'connected'>('off')
+  let statusText = $state('VPN выключен')
+  let log = $state<string[]>([])
+  let tabP2P = $state<TabP2PStatus>({
+    phase: 'idle', role: 'none', lastError: '', peerReady: false, rttMs: null, bytesIn: 0, bytesOut: 0, tunnelIp: ''
+  })
+  const localP2P = getLocalTabP2P()
+  localP2P.onChange((s) => {
+    tabP2P = s
+    if (s.phase === 'connected') {
+      vpnStatus = 'connected'
+      statusText = s.role === 'host'
+        ? 'VPN: 2 вкладки · вы exit node (DataChannel open)'
+        : `VPN: 2 вкладки · DataChannel open${s.tunnelIp ? ' · IP ' + s.tunnelIp : ''}`
+      addLog('VPN-101 P2P connected role=' + s.role + (s.tunnelIp ? ' ip=' + s.tunnelIp : ''))
+    } else if (s.phase === 'negotiating' || s.phase === 'waiting_peer') {
+      vpnStatus = 'connecting'
+      statusText = s.phase === 'waiting_peer' ? 'VPN-101: жду вторую вкладку…' : 'VPN-101: WebRTC negotiating…'
+    } else if (s.phase === 'error') {
+      vpnStatus = 'off'
+      statusText = 'VPN-101 error: ' + s.lastError
+      addLog('VPN-101 error: ' + s.lastError)
+    }
+  })
+  async function startTabP2PHost() {
+    try {
+      await localP2P.startAsHost()
+      addLog('VPN-101: host (exit) — откройте 2-ю вкладку и нажмите «Войти peer»')
+    } catch (e) { addLog('VPN-101 host fail: ' + e) }
+  }
+  async function startTabP2PJoiner() {
+    try {
+      await localP2P.startAsJoiner()
+      addLog('VPN-101: joiner — ищу host-вкладку…')
+    } catch (e) { addLog('VPN-101 joiner fail: ' + e) }
+  }
+  function stopTabP2P() {
+    localP2P.stop()
+    vpnStatus = 'off'
+    statusText = 'VPN выключен'
+    addLog('VPN-101 stopped')
+  }
+  let lastTunnelIp = $state('')
+  let handlingIncoming = $state(false)
+  let turnStatus = $state<string>('checking…')
+  let amneziaStatus = $state<string>('')
+  let tunnelInfo = $state<TunnelStatus | null>(null)
+  let pushInfo = $state<string>('')
+  let pushBusy = $state(false)
+  let tunnelBusy = $state(false)
+  let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
+  let dismissedFrom = $state<Record<string, number>>({})
   const DEMO_ALICE = '1'.repeat(64)
   const DEMO_BOB = '2'.repeat(64)
   let lanPhoneUrl = $state('')
-  let friendId = $state('')
   let demoPartnerLabel = $state('')
-
   function applyDemoPartner() {
     const role = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_demo_role')) || ''
     const my = getPubkey() || ''
@@ -29,7 +87,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       demoPartnerLabel = 'Alice (demo)'
     }
   }
-
   onMount(async () => {
     turnStatus = '4 STUN · P2P 85% + Nostr relay 15%'
     amneziaStatus = ''
@@ -50,14 +107,12 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       else if (j.lan_ips && j.lan_ips[0]) lanPhoneUrl = `http://${j.lan_ips[0]}:${j.port || 8090}/?role=bob`
     } catch { /* offline */ }
   })
-
   async function startInAppTunnel() {
     tunnelBusy = true
     try {
       const peerPublicKey = (friendId && friendId.length > 40)
         ? friendId
         : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-      // VPN-ENG-001: Endpoint from invite, not hardcoded
         const inviteEndpoint = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_peer_endpoint')) || ''
         const endpoint = inviteEndpoint || ''
       tunnelInfo = await startTunnel({ peerPublicKey, endpoint })
@@ -71,7 +126,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       tunnelBusy = false
     }
   }
-
   async function stopInAppTunnel() {
     tunnelBusy = true
     try {
@@ -84,9 +138,7 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       tunnelBusy = false
     }
   }
-
   let showAdvanced = $state(false)
-
   async function exportForAmneziaOptional() {
     try {
       const r = await fetch('/api/vpn/amnezia/import', { method: 'POST' })
@@ -97,7 +149,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       addLog('export: ' + (e?.message || e))
     }
   }
-
   async function enablePush() {
     pushBusy = true
     try {
@@ -120,37 +171,11 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       pushBusy = false
     }
   }
-
   function addLog(msg: string) {
     const t = new Date().toLocaleTimeString()
     log = [`${t}: ${msg}`, ...log].slice(0, 8)
   }
-
-  async function startWTServer(): Promise<{ wtAddr: string; certHash: string }> {
-    const h = await authHeaders()
-    const start = await fetch('/api/vpn/wt/start', { method: 'POST', headers: h, body: '{}' })
-    if (!start.ok) throw new Error('WT start HTTP ' + start.status)
-    const stats = await start.json()
-    const certHash = stats.certHash || ''
-    // Prefer LAN host + actual WT port from addr
-        // Prefer page hostname (LAN/localhost). Never publish 0.0.0.0 or bare [::].
-    // Use window.location.hostname so friends on same LAN can connect.
-    let host = window.location.hostname || '127.0.0.1'
-    if (host === '[::]' || host === '::' || host === '0.0.0.0') host = '127.0.0.1'
-    let port = '4433'
-    if (typeof stats.addr === 'string' && stats.addr) {
-      const m = String(stats.addr).match(/:(\d+)$/)
-      if (m) port = m[1]
-    }
-    const wtAddr = `${host}:${port}`
-    return { wtAddr, certHash }
-  }
-
-  async function ensureNostr() {
-    await nostrVPN.init(mySigningPubkey())
-  }
-
-  // "Give VPN to friend" — Alice becomes exit node, waits for friend's WebRTC offer
+  async function ensureNostr() { await nostrVPN.init(mySigningPubkey()) }
   async function giveVPN() {
     if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
@@ -167,7 +192,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       addLog('Ошибка: ' + (e as Error).message)
     }
   }
-
   async function requestVPN() {
     if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
@@ -181,7 +205,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       addLog('Ошибка: ' + (e as Error).message)
     }
   }
-
   async function acceptVPN() {
     if (!incomingEvent || handlingIncoming) return
     handlingIncoming = true
@@ -190,13 +213,11 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     try {
       await ensureNostr()
       if (ev.type === 'vpn-request') {
-        // Friend wants VPN from us — we become exit node
         await nostrVPN.acceptVPN(ev.from, '', '')
         vpnStatus = 'sharing'
         statusText = 'Раздаю VPN · жду WebRTC offer'
         addLog('Запрос принят, готов как exit node (WebRTC)')
       } else if (ev.type === 'vpn-invite') {
-        // Friend offers VPN — we are caller, create WebRTC offer
         addLog('WebRTC: создаю offer для exit node ' + ev.from.slice(0, 12) + '…')
         const { sdp, gatherIce } = await rtcVPN.createOffer()
         const iceCandidates: string[] = []
@@ -205,7 +226,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
         addLog('WebRTC offer отправлен (' + iceCandidates.length + ' ICE candidates)')
         vpnStatus = 'connecting'
         statusText = 'WebRTC connecting…'
-        // Wait for answer via Nostr
         const answerTimeout = setTimeout(() => {
           if (vpnStatus === 'connecting') {
             addLog('WebRTC: таймаут ожидания answer')
@@ -226,14 +246,11 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       handlingIncoming = false
     }
   }
-
   let rtcAnswerResolver: ((sdp: string, ice: string[]) => void) | null = null
-
   async function applyRTCAnswer(sdp: string, ice: string[], from: string) {
     try {
       await rtcVPN.applyAnswer(sdp, ice)
       await rtcVPN.waitForOpen(15000)
-      // Probe tunnel: HTTP first, then HTTPS
       let tunnelIp = ''
       try {
         const httpBody = await rtcVPN.fetchHTTP('http://api.ipify.org')
@@ -255,7 +272,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
         transportMode = 'P2P'
         addLog('WebRTC P2P connected! Exit IP: ' + tunnelIp)
       } else {
-        // P2P failed or no IP probe — try Nostr relay fallback (table 58 Phase 1.5)
         addLog('P2P probe empty — Nostr relay fallback...')
         transportMode = 'Nostr Relay'
         try {
@@ -281,7 +297,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       statusText = 'VPN выключен'
     }
   }
-
   async function rejectVPN() {
     if (!incomingEvent) return
     const ev = incomingEvent
@@ -293,7 +308,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     dismissedFrom = { ...dismissedFrom, [ev.from]: Date.now() }
     addLog('Отклонено')
   }
-
   async function disconnectVPN() {
     try { await rtcVPN.disconnect() } catch {}
     navigator.serviceWorker?.controller?.postMessage({ type: 'VPN_OFF' })
@@ -302,8 +316,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     lastTunnelIp = ''
     addLog('WebRTC отключён')
   }
-
-  // SW tunnel handler — routes fetches through WebRTC DataChannel
   async function handleTunnelFetch(event: MessageEvent) {
     const data = (event as any).data || {}
     if (data.type !== 'TUNNEL_FETCH') return
@@ -324,7 +336,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       console.log('[VPN] WebRTC SW tunnel registered')
     }
   }
-
   let unsubVPN: (() => void) | null = null
   $effect(() => {
     const token = localStorage.getItem('proxi_token')
@@ -342,16 +353,13 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
             incomingEvent = event
             addLog('Входящий ' + event.type + ' от ' + event.from.slice(0, 12) + '…')
           } else if (event.type === 'rtc-offer') {
-            // We are exit node — create WebRTC answer
             handleRTCOffer(event)
           } else if (event.type === 'rtc-answer') {
-            // We are caller — apply answer
             if (rtcAnswerResolver) {
               rtcAnswerResolver(event.rtcSdp || '', event.iceCandidates || [])
               rtcAnswerResolver = null
             }
           } else if (event.type === 'rtc-ice') {
-            // Trickle ICE
             if (event.iceCandidates) {
               for (const c of event.iceCandidates) {
                 try { rtcVPN['pc']?.addIceCandidate({ candidate: c, sdpMid: '0', sdpMLineIndex: 0 }) } catch {}
@@ -374,7 +382,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     }
   })
 </script>
-
 <div class="vpn-product" data-testid="vpn-product">
   <div class="tab-p2p-status" data-testid="vpn-tab-p2p-status">
     VPN-101: {tabP2P.phase} · role={tabP2P.role}
@@ -411,7 +418,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
         🧪 2 вкладки: войти peer
       </button>
     </div>
-    
     <div class="phase2-status" data-testid="phase2-status">
       <span>Движок: {amneziaStatus || '—'}</span>
       <span>Push: {pushInfo || '—'}</span>
@@ -439,7 +445,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
       <button class="disconnect-btn" data-testid="vpn-off" onclick={disconnectVPN}>Отключить</button>
     </div>
   {/if}
-
   {#if log.length > 0}
     <div class="vpn-log" data-testid="vpn-log">
       {#each log as entry}
@@ -448,7 +453,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     </div>
   {/if}
 </div>
-
 {#if showInviteModal}
   <div class="modal-overlay" onclick={() => showInviteModal = false}>
     <div class="modal" onclick={(e) => e.stopPropagation()} data-testid="vpn-invite-modal">
@@ -462,7 +466,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     </div>
   </div>
 {/if}
-
 {#if showRequestModal}
   <div class="modal-overlay" onclick={() => showRequestModal = false}>
     <div class="modal" onclick={(e) => e.stopPropagation()}>
@@ -476,7 +479,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     </div>
   </div>
 {/if}
-
 {#if incomingEvent}
   <div class="modal-overlay" data-testid="vpn-incoming-modal">
     <div class="modal">
@@ -492,7 +494,6 @@ import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders }
     </div>
   </div>
 {/if}
-
 <style>
-  @import "./vpn-panel.css";
+@import "./vpn-panel.css";
 </style>

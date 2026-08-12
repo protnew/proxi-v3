@@ -12,8 +12,6 @@
   import { startRecording as startVoiceRecord, stopRecording as stopVoiceRecord } from '../lib/voice'
   import EmojiPicker from './EmojiPicker.svelte'
   import type { Message, ChatView } from '../stores/messenger'
-import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetchUrlPreview } from '../lib/chat-view-utils';
-
   let inputText = $state('')
   let messagesEl: HTMLDivElement | undefined = $state()
   let isRecording = $state(false)
@@ -22,12 +20,9 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
   let replyTo: Message | null = $state(null)
   let editingMsg: Message | null = $state(null)
   let mobileShowChat = $state(false)
-
-  // On mobile, when chat is selected, hide sidebar
   stores.activeChatId.subscribe(v => {
     if (v && window.innerWidth < 768) mobileShowChat = true
   })
-
   function goBack() {
     stores.activeChatId.set(null)
     mobileShowChat = false
@@ -37,15 +32,11 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
   let uploadProgress = $state(0)
   let recordingStartTime = $state(0)
   let voiceStream: MediaStream | null = null
-
   import { activeChat, activeChatId, profile as profileStore } from '../stores/messenger'
   import { chatApi } from '../lib/api'
-
-  // Sync stores → local $state for template reactivity
   let currentChat = $derived($activeChat)
   let currentChatId = $derived($activeChatId)
   let currentProfile = $derived($profileStore)
-
   $effect(() => {
     if (currentChatId) {
       const peerId = currentChatId.replace('dm:', '').replace('group:', '')
@@ -71,8 +62,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       }).catch(() => {})
     }
   })
-
-  // Auto-scroll
   $effect(() => {
     const count = currentChat?.messages?.length
     if (count && messagesEl) {
@@ -81,27 +70,20 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       })
     }
   })
-
-  // Mark read on switch
   $effect(() => {
     if (currentChatId) stores.markRead(currentChatId)
   })
-
   let peerPubkey = $derived(currentChatId?.replace('dm:', '').replace('group:', '') || '')
   let isGroup = $derived(currentChatId?.startsWith('group:') ?? false)
-
   async function sendMessage() {
     let text = inputText.trim()
     if (!text || !currentChatId) return
-
     if (editingMsg) {
       stores.editMessage(currentChatId, editingMsg.id, text)
       editingMsg = null
       inputText = ''
       return
     }
-
-    // Optimistic UI first — never leave text stuck in input
     const myPk = currentProfile?.pubkey || ''
     const ts = Date.now()
     const localId = `local-${ts}-${Math.random().toString(36).slice(2, 8)}`
@@ -121,13 +103,11 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
     replyTo = null
     showEmoji = false
     playOutgoing()
-
     try {
       if (isGroup) {
         const resp: any = await sendGroupMessage(peer, text)
         if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp)
       } else {
-        // Dual: Go first if connected; Nostr optional backup
         const go = getStatus()
         const nostr = (window as any).__nostrChat
         let sent = false
@@ -144,7 +124,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
           if (resp?.status && resp.status < 400) sent = true
           else console.error('[chatview] sendDM fallback failed', resp)
         }
-        // SL-053: if all transports failed → offline outbox
         if (!sent) {
           outboxEnqueue(peer, text)
           console.log('[chatview] queued offline (outbox)')
@@ -155,9 +134,7 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       try { if (!isGroup) outboxEnqueue(peerPubkey, text) } catch {}
     }
   }
-
   let lastTypingTime = 0;
-
   function handleKey(e: KeyboardEvent) {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -170,9 +147,13 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       }
     }
   }
-
+  function isMine(msg: Message): boolean { return msg.from === currentProfile?.pubkey }
+  function getReplyText(msgId: string | undefined): string {
+    if (!msgId || !currentChat) return ''
+    const orig = currentChat.messages.find(m => m.id === msgId)
+    return orig ? orig.text.slice(0, 60) : 'Сообщение'
+  }
   function addEmoji(e: string) { inputText += e; showEmoji = false }
-
   function onContext(e: MouseEvent, msg: Message) {
     e.preventDefault()
     contextMenu = { msgId: msg.id, x: e.clientX, y: e.clientY }
@@ -186,7 +167,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
     if (currentChatId && currentProfile) stores.addReaction(currentChatId, msg.id, emoji, currentProfile.pubkey)
     contextMenu = null
   }
-
   async function startRecording() {
     try {
       voiceStream = await startVoiceRecord()
@@ -194,14 +174,11 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       isRecording = true
     } catch { console.error('Mic denied') }
   }
-
   async function stopRecording() {
     isRecording = false
     if (!voiceStream) return
     const { blob, duration, url } = await stopVoiceRecord()
     if (blob.size === 0 || !currentChatId) return
-
-    // Send as file via P2P for longer voice messages
     if (blob.size > 50000) {
       try {
         const file = new File([blob], `voice_${Date.now()}.webm`, { type: blob.type })
@@ -209,14 +186,12 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
           uploadProgress = Math.round(sent / total * 100)
         })
       } catch {
-        // Fallback to API upload
         try {
           const msg = await sendBinaryVoice(peerPubkey, duration, blob)
           stores.addMessage(currentChatId, msg)
         } catch (e) { console.error('Voice send failed', e) }
       }
     } else {
-      // Short voice: API upload
       try {
         const msg = await sendBinaryVoice(peerPubkey, duration, blob)
         stores.addMessage(currentChatId, msg)
@@ -224,36 +199,28 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
     }
     playOutgoing()
   }
-
   async function handleFileSelect(e: Event) {
     const input = e.target as HTMLInputElement
     const file = input.files?.[0]
     if (!file || !currentChatId) return
-
     const isImage = file.type.startsWith('image/')
     const msgType = isImage ? 'image' : 'file'
-
-    // SL-044: size limit
     if (file.size > MAX_FILE_BYTES) {
       console.error('[chatview] file too large', file.size)
       alert(`Файл слишком большой (макс ${Math.round(MAX_FILE_BYTES/1024/1024)}MB)`)
       input.value = ''
       return
     }
-
     uploading = true
     uploadName = file.name
     uploadProgress = 0
-
     try {
-      // SL-041/042/043: content-addressed upload (local pin + Nostr kind:1063)
       const result = await uploadFile(file, {
         senderPubkey: currentProfile?.pubkey || '',
         recipientPubkey: peerPubkey,
         senderPrivateKey: getSeckey() || undefined,
         onProgress: (pct) => { uploadProgress = pct },
       })
-
       const preview = result.previewUrl || (isImage ? URL.createObjectURL(file) : '')
       const msg: Message = {
         id: crypto.randomUUID(),
@@ -265,12 +232,10 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
         fileName: file.name,
         fileSize: file.size,
         fileUrl: preview || undefined,
-        // @ts-ignore cid field for content-addressed download
         cid: result.cid,
         read: true,
       }
       stores.addMessage(currentChatId, msg)
-      // Notify peer with CID metadata
       try {
         await sendFileManifest(peerPubkey, {
           name: file.name,
@@ -281,7 +246,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       } catch {
         try { sendFileManifest(peerPubkey, file.name, file.size, result.cid as any) } catch {}
       }
-      // Also try P2P for large files (backup path)
       if (file.size >= 100_000) {
         try {
           await sendFile(peerPubkey, file, (sent, total) => {
@@ -294,7 +258,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       playOutgoing()
     } catch (err) {
       console.error('[chatview] IPFS upload failed:', err)
-      // Fallback: local blob only
       const url = URL.createObjectURL(file)
       const msg: Message = {
         id: crypto.randomUUID(),
@@ -310,13 +273,38 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       }
       stores.addMessage(currentChatId, msg)
     }
-
     uploading = false
     uploadProgress = 0
     input.value = ''
   }
-
-
+  async function openByCID(cid: string) {
+    const got = await downloadByCID(cid)
+    if (got) window.open(got.url, '_blank')
+    else console.warn('[chatview] CID not found locally/gateway', cid)
+  }
+  function downloadFile(msg: Message) {
+    if (!msg.fileUrl) return
+    const a = document.createElement('a')
+    a.href = msg.fileUrl
+    a.download = msg.fileName || 'file'
+    a.click()
+  }
+// M-011: URL preview — extract URLs from message text
+let urlPreviews = $state<Record<string, any>>({});
+async function fetchUrlPreview(url: string) {
+  if (urlPreviews[url]) return;
+  try {
+    const resp = await fetch(API_BASE + '/api/url-preview?url=' + encodeURIComponent(url));
+    if (resp.ok) {
+      const data = await resp.json();
+      urlPreviews[url] = data;
+    }
+  } catch (e) { /* ignore */ }
+}
+function processMessageUrls(text: string) {
+  const urls = extractUrls(text);
+  urls.forEach(u => fetchUrlPreview(u));
+}
 </script>
 <svelte:window onclick={closeContext} onkeydown={(e) => e.key === 'Escape' && (contextMenu = null)} onpaste={(e) => {
   const items = e.clipboardData?.items
@@ -329,7 +317,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
     }
   }
 }} />
-
 {#if currentChat}
   <div class="chat-area">
     <div class="chat-header">
@@ -350,7 +337,6 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
       <button class="hbtn">🔍</button>
       <button class="hbtn">⋮</button>
     </div>
-
     <div class="messages" bind:this={messagesEl}
       ondragover={(e) => { e.preventDefault(); e.stopPropagation() }}
       ondrop={(e) => {
@@ -485,4 +471,3 @@ import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetc
     <p class="sub">P2P • E2E • Неубиваемо</p>
   </div>
 {/if}
-
