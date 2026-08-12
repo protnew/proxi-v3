@@ -9,82 +9,16 @@
   import { subscribeWebPush, fetchPushConfig, sendTestPush, type PushServerConfig } from '../lib/web-push'
   import * as secp from '@noble/secp256k1'
 
-// INF-010: Nostr signaling wired — connects WebRTC VPN through Nostr relays
-async function startVPNSignaling(targetPubkey: string) {
-  try {
-    await (rtcVPN as any).startNostrSignaling(targetPubkey)
-    console.log('[VPN] Nostr signaling started for', targetPubkey.slice(0, 8))
-  } catch (e) {
-    console.warn('[VPN] Nostr signaling failed:', e)
-  }
-}
-
-
-  let showInviteModal = $state(false)
-  let showRequestModal = $state(false)
-  let incomingEvent = $state<VPNEvent | null>(null)
-  let friendId = $state('')
-  let vpnStatus = $state<'off' | 'sharing' | 'connecting' | 'connected'>('off')
-  let statusText = $state('VPN выключен')
-  let log = $state<string[]>([])
-  // VPN-101: same-PC two-tab WebRTC proof
-  let tabP2P = $state<TabP2PStatus>({
-    phase: 'idle', role: 'none', lastError: '', peerReady: false, rttMs: null, bytesIn: 0, bytesOut: 0, tunnelIp: ''
-  })
-  const localP2P = getLocalTabP2P()
-  localP2P.onChange((s) => {
-    tabP2P = s
-    if (s.phase === 'connected') {
-      vpnStatus = 'connected'
-      statusText = s.role === 'host'
-        ? 'VPN: 2 вкладки · вы exit node (DataChannel open)'
-        : `VPN: 2 вкладки · DataChannel open${s.tunnelIp ? ' · IP ' + s.tunnelIp : ''}`
-      addLog('VPN-101 P2P connected role=' + s.role + (s.tunnelIp ? ' ip=' + s.tunnelIp : ''))
-    } else if (s.phase === 'negotiating' || s.phase === 'waiting_peer') {
-      vpnStatus = 'connecting'
-      statusText = s.phase === 'waiting_peer' ? 'VPN-101: жду вторую вкладку…' : 'VPN-101: WebRTC negotiating…'
-    } else if (s.phase === 'error') {
-      vpnStatus = 'off'
-      statusText = 'VPN-101 error: ' + s.lastError
-      addLog('VPN-101 error: ' + s.lastError)
-    }
-  })
-  async function startTabP2PHost() {
-    try {
-      await localP2P.startAsHost()
-      addLog('VPN-101: host (exit) — откройте 2-ю вкладку и нажмите «Войти peer»')
-    } catch (e) { addLog('VPN-101 host fail: ' + e) }
-  }
-  async function startTabP2PJoiner() {
-    try {
-      await localP2P.startAsJoiner()
-      addLog('VPN-101: joiner — ищу host-вкладку…')
-    } catch (e) { addLog('VPN-101 joiner fail: ' + e) }
-  }
-  function stopTabP2P() {
-    localP2P.stop()
-    vpnStatus = 'off'
-    statusText = 'VPN выключен'
-    addLog('VPN-101 stopped')
-  }
-  let lastTunnelIp = $state('')
-  let handlingIncoming = $state(false)
-  let turnStatus = $state<string>('checking…')
-  let amneziaStatus = $state<string>('')
-  let tunnelInfo = $state<TunnelStatus | null>(null)
-  let pushInfo = $state<string>('')
-  let pushBusy = $state(false)
-  let tunnelBusy = $state(false)
-  let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
-  let dismissedFrom = $state<Record<string, number>>({})
+import { startVPNSignaling, startTabP2PHost, startTabP2PJoiner, stopTabP2P } from '../lib/vpn-panel-helpers';
+import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders } from '../lib/vpn-utils';
 
   const DEMO_ALICE = '1'.repeat(64)
   const DEMO_BOB = '2'.repeat(64)
   let lanPhoneUrl = $state('')
+  let friendId = $state('')
   let demoPartnerLabel = $state('')
 
   function applyDemoPartner() {
-    // Product path for same-WiFi dual-role: no manual pubkey paste
     const role = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_demo_role')) || ''
     const my = getPubkey() || ''
     if (role === 'tester1' || my === DEMO_ALICE) {
@@ -117,14 +51,12 @@ async function startVPNSignaling(targetPubkey: string) {
     } catch { /* offline */ }
   })
 
-  /** In-app VPN engine (userspace). No external AmneziaVPN required. */
   async function startInAppTunnel() {
     tunnelBusy = true
     try {
       const peerPublicKey = (friendId && friendId.length > 40)
         ? friendId
         : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-      // Endpoint is placeholder until friend shares real endpoint via invite
       // VPN-ENG-001: Endpoint from invite, not hardcoded
         const inviteEndpoint = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_peer_endpoint')) || ''
         const endpoint = inviteEndpoint || ''
@@ -155,7 +87,6 @@ async function startVPNSignaling(targetPubkey: string) {
 
   let showAdvanced = $state(false)
 
-  /** Optional: export conf for people who already use AmneziaVPN app — NOT required */
   async function exportForAmneziaOptional() {
     try {
       const r = await fetch('/api/vpn/amnezia/import', { method: 'POST' })
@@ -193,39 +124,6 @@ async function startVPNSignaling(targetPubkey: string) {
   function addLog(msg: string) {
     const t = new Date().toLocaleTimeString()
     log = [`${t}: ${msg}`, ...log].slice(0, 8)
-  }
-
-  function hexToBytes(hex: string): Uint8Array {
-    const h = hex.length % 2 ? '0' + hex : hex
-    const out = new Uint8Array(h.length / 2)
-    for (let i = 0; i < out.length; i++) out[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16)
-    return out
-  }
-  function bytesToHex(b: Uint8Array): string {
-    return Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('')
-  }
-  function mySigningPubkey(): string {
-    const sk = (getSeckey() || '').slice(0, 64)
-    if (sk.length === 64) return bytesToHex(secp.schnorr.getPublicKey(hexToBytes(sk)))
-    return getPubkey()
-  }
-  /** Accept hex pubkey or demo 1111.../2222... seckey-as-id */
-  function normalizePeerId(raw: string): string {
-    const s = raw.trim().toLowerCase().replace(/^0x/, '')
-    if (/^[0-9a-f]{64}$/.test(s)) {
-      // If it's a demo seckey (111.. or 222..), derive pubkey
-      try {
-        return bytesToHex(secp.schnorr.getPublicKey(hexToBytes(s)))
-      } catch {
-        return s
-      }
-    }
-    return s
-  }
-
-  async function authHeaders(): Promise<Record<string, string>> {
-    const token = localStorage.getItem('proxi_token') || ''
-    return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
   }
 
   async function startWTServer(): Promise<{ wtAddr: string; certHash: string }> {
@@ -404,7 +302,6 @@ async function startVPNSignaling(targetPubkey: string) {
     lastTunnelIp = ''
     addLog('WebRTC отключён')
   }
-
 
   // SW tunnel handler — routes fetches through WebRTC DataChannel
   async function handleTunnelFetch(event: MessageEvent) {
@@ -597,48 +494,5 @@ async function startVPNSignaling(targetPubkey: string) {
 {/if}
 
 <style>
-  .vpn-product { padding: 12px; }
-  .vpn-buttons { display: flex; flex-direction: column; gap: 8px; }
-  .vpn-btn { padding: 14px; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  .vpn-btn.share { background: linear-gradient(135deg, #1e3a5f, #2a6a4a); color: #fff; }
-  .vpn-btn.request { background: linear-gradient(135deg, #2a4a6a, #3b5998); color: #fff; }
-  .vpn-status { display: flex; align-items: center; gap: 8px; padding: 14px; border-radius: 12px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
-  .vpn-status.sharing { background: #0d2818; color: #6ee7b7; border: 1px solid #1a4a2a; }
-  .vpn-status.connected { background: #0d1a28; color: #7dd3fc; border: 1px solid #1a3a5a; }
-  .tab-p2p-status { font-size: 0.8rem; opacity: 0.85; margin: 8px 0; padding: 6px 8px; border-radius: 8px; background: #12121a; }
-  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
-  .ip { font-family: monospace; opacity: 0.9; }
-  .disconnect-btn { margin-left: auto; background: rgba(255,107,107,0.2); border: 1px solid #ff6b6b33; color: #ff6b6b; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
-  .vpn-log { margin-top: 8px; max-height: 110px; overflow-y: auto; }
-  .log-entry { font-size: 11px; color: #6a7a8a; padding: 2px 0; font-family: monospace; }
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
-  .modal { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 24px; max-width: 400px; width: 100%; }
-  .modal h3 { margin: 0 0 8px; font-size: 18px; color: #e0e0e0; }
-  .modal p { font-size: 13px; color: #8b949e; margin: 8px 0; }
-  .modal input { width: 100%; padding: 10px; background: #0d1117; border: 1px solid #30363d; border-radius: 8px; color: #e0e0e0; font-size: 14px; font-family: monospace; box-sizing: border-box; }
-  .modal-buttons { display: flex; gap: 8px; margin-top: 16px; }
-  .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
-  .modal-buttons .cancel { background: #21262d; color: #8b949e; }
-  .modal-buttons .confirm { background: #238636; color: #fff; }
-  .ice-status { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-  .ice-badge { font-size: 11px; color: #7dd3fc; background: rgba(125,211,252,0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(125,211,252,0.2); }
-  .ice-badge.amnezia { color: #fbbf24; background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
-
-  .vpn-btn.engine { background: #1f3d2b; border: 1px solid #3ac47b; }
-  .vpn-btn.amnezia { background: #3d2b1f; border: 1px solid #c47b3a; }
-  .advanced { margin: 6px 0; font-size: 12px; opacity: 0.85; }
-  .advanced summary { cursor: pointer; }
-  .adv-note { margin: 6px 0; line-height: 1.35; opacity: 0.9; }
-  .lan-hint { font-size: 11px; opacity: 0.9; margin: 4px 0; word-break: break-all; }
-  .lan-hint code { font-size: 10px; color: #8cf; }
-  .vpn-btn.push { background: #1f2a3d; border: 1px solid #4a7bc4; }
-  .phase2-status {
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
-    font-size: 12px; opacity: 0.9; margin: 6px 0 4px;
-  }
-  .phase2-status .conf-path { color: #8f8; }
-  .phase2-status .linkish {
-    background: transparent; border: 1px solid #666; color: inherit;
-    border-radius: 6px; padding: 2px 8px; cursor: pointer;
-  }
+  @import "./vpn-panel.css";
 </style>

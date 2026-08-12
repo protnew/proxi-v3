@@ -12,6 +12,7 @@
   import { startRecording as startVoiceRecord, stopRecording as stopVoiceRecord } from '../lib/voice'
   import EmojiPicker from './EmojiPicker.svelte'
   import type { Message, ChatView } from '../stores/messenger'
+import { isMine, getReplyText, downloadFile, openByCID, processMessageUrls, fetchUrlPreview } from '../lib/chat-view-utils';
 
   let inputText = $state('')
   let messagesEl: HTMLDivElement | undefined = $state()
@@ -170,16 +171,6 @@
     }
   }
 
-  function isMine(msg: Message): boolean {
-    return msg.from === currentProfile?.pubkey
-  }
-
-  function getReplyText(msgId: string | undefined): string {
-    if (!msgId || !currentChat) return ''
-    const orig = currentChat.messages.find(m => m.id === msgId)
-    return orig ? orig.text.slice(0, 60) : 'Сообщение'
-  }
-
   function addEmoji(e: string) { inputText += e; showEmoji = false }
 
   function onContext(e: MouseEvent, msg: Message) {
@@ -325,42 +316,8 @@
     input.value = ''
   }
 
-  async function openByCID(cid: string) {
-    const got = await downloadByCID(cid)
-    if (got) window.open(got.url, '_blank')
-    else console.warn('[chatview] CID not found locally/gateway', cid)
-  }
-
-  function downloadFile(msg: Message) {
-    if (!msg.fileUrl) return
-    const a = document.createElement('a')
-    a.href = msg.fileUrl
-    a.download = msg.fileName || 'file'
-    a.click()
-  }
-
-// M-011: URL preview — extract URLs from message text
-
-let urlPreviews = $state<Record<string, any>>({});
-
-async function fetchUrlPreview(url: string) {
-  if (urlPreviews[url]) return;
-  try {
-    const resp = await fetch(API_BASE + '/api/url-preview?url=' + encodeURIComponent(url));
-    if (resp.ok) {
-      const data = await resp.json();
-      urlPreviews[url] = data;
-    }
-  } catch (e) { /* ignore */ }
-}
-
-function processMessageUrls(text: string) {
-  const urls = extractUrls(text);
-  urls.forEach(u => fetchUrlPreview(u));
-}
 
 </script>
-
 <svelte:window onclick={closeContext} onkeydown={(e) => e.key === 'Escape' && (contextMenu = null)} onpaste={(e) => {
   const items = e.clipboardData?.items
   if (!items) return
