@@ -80,9 +80,6 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Testing — JVM unit tests (no emulator) for T42-B control plane
-    testImplementation("junit:junit:4.13.2")
-
     // Testing
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.01.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
