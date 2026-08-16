@@ -1,0 +1,31 @@
+{
+  "verdict": "REJECT",
+  "date": "2026-08-16",
+  "git": "c7c9335c",
+  "go_after_ignore": {
+    "rc": 0,
+    "note": "archive build-tagged ignore"
+  },
+  "vitest": {
+    "pass": 399,
+    "fail": 0
+  },
+  "playwright": {
+    "pass": 13,
+    "fail": 34,
+    "skip": 2,
+    "dnr": 8,
+    "source": "zp-suite-same-session last-run 2026-08-16T06:43:49"
+  },
+  "android_jvm": {
+    "pass": 18,
+    "fail": 0,
+    "source": "same-session 06:19 XML"
+  },
+  "bats": "not_run_no_cli",
+  "maestro": "not_run_no_cli",
+  "readiness_pct": null,
+  "e2e_scenario_pct": null,
+  "product_vpn": false,
+  "screenshot_md5": "305462547b38a004d0e9673bf143bcc9"
+}
