@@ -3,8 +3,8 @@ import { test, expect, Page } from '@playwright/test'
 const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5173'
 
 async function waitForApp(page: Page) {
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('text=Indestructible Messenger', { timeout: 20000 })
+  await page.goto(APP_URL + '?role=alice', { waitUntil: 'domcontentloaded' })
+  await page.getByRole('heading', { name: 'Proxi', level: 2 }).waitFor({ timeout: 20000 })
   await page.waitForTimeout(2500)
 }
 
@@ -39,8 +39,8 @@ async function sendText(page: Page, text: string) {
 
 test.describe('Messenger UI (tests/ orphan modernized)', () => {
   test('loads title', async ({ page }) => {
-    await page.goto(APP_URL)
-    await expect(page.getByText('Indestructible Messenger')).toBeVisible({ timeout: 15000 })
+    await page.goto(APP_URL + '?role=alice')
+    await expect(page.getByRole('heading', { name: 'Proxi', level: 2 })).toBeVisible({ timeout: 15000 })
   })
 
   test('new chat dialog', async ({ page }) => {

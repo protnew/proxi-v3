@@ -466,7 +466,7 @@ function processMessageUrls(text: string) {
 {:else}
   <div class="empty">
     <div class="empty-icon">🛡️</div>
-    <h2>Indestructible Messenger</h2>
+    <h2 data-testid="chat-empty-brand">Proxi</h2>
     <p>Выберите чат или начните новый</p>
     <p class="sub">P2P • E2E • Неубиваемо</p>
   </div>

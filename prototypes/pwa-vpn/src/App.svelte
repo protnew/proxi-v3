@@ -52,6 +52,10 @@ if (initialView === 'advanced') {
   import CallOverlay from './components/CallOverlay.svelte'
   import GroupCreate from './components/GroupCreate.svelte'
   import VPNProductPanel from './components/VPNProductPanel.svelte'
+  import AuthScreen from './components/AuthScreen.svelte'
+  import { initPush } from './lib/push'
+  import { checkForUpdate } from './lib/update-check'
+  import { startPresence, stopPresence } from './lib/nostr-chat'
   import VpnPanel from './components/VpnPanel.svelte'
   import DemoPanel from './components/DemoPanel.svelte'
   import type { Message } from './stores/messenger'
@@ -59,6 +63,7 @@ if (initialView === 'advanced') {
   console.log('[app] App.svelte script execution started');
 
   let loading = $state(true)
+  let needsOnboarding = $state(false)
   let statusText = $state('Загрузка...')
   import { showSettings, showNewChat, activeChatId } from './stores/messenger'
   
@@ -161,16 +166,25 @@ if (initialView === 'advanced') {
     }
 
     // 6. Browser identity (secp256k1 keys in localStorage, no Go server needed)
-    statusText = 'Генерация ключей...'
-    // Demo mode: if initIdentity set demo keys, preserve them
+    statusText = 'Проверка ключей...'
     const demoRole = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_demo_role') : null;
     let browserId: Identity;
     if (demoRole === 'tester1' || demoRole === 'tester2') {
       const demoKey = demoRole === 'tester1' ? '1'.repeat(64) : '2'.repeat(64);
-      browserId = { privateKey: demoKey, publicKey: demoKey, npub: 'npub1demo' + demoKey.slice(0, 16) };
+      browserId = { privateKey: demoKey, publicKey: demoKey, npub: 'npub1demo' + demoKey.slice(0, 16), nsec: 'nsec1demo', createdAt: Date.now() };
       console.log('[app] Demo mode identity:', demoRole);
     } else {
-      browserId = await getIdentity();
+      const { loadIdentityAsync, getIdentity } = await import('./lib/identity')
+      const existing = await loadIdentityAsync()
+      const legacyPriv = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-seckey') : null
+      const legacyPub = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-pubkey') : null
+      if (!existing && !(legacyPriv && legacyPub)) {
+        // ONB-000: first-run product path — do not silent-create keys
+        needsOnboarding = true
+        loading = false
+        return
+      }
+      browserId = existing || await getIdentity()
     }
     stores.profile.update(p => ({ ...p, pubkey: browserId.publicKey }))
     console.log('[app] Identity:', browserId.publicKey.slice(0, 16) + '...')
@@ -286,13 +300,24 @@ if (initialView === 'advanced') {
     }
 
     clearTimeout(safetyTimer)
+
+    // INF-003: Check for PWA updates + listen for update event
+    window.addEventListener('pwa-update-available', () => { updateAvailable = true })
+    checkForUpdate().catch(() => {})
+
+    // PUSH-001/003: Init push notifications
+    initPush().catch(() => {})
+
+    // MSG-105: Start presence broadcasting
+    try { startPresence(browserId) } catch {}
+
     loading = false
   })
 
   function updateTitle() {
     const unsub = stores.chats.subscribe(cs => {
       const unread = cs.reduce((sum, c) => sum + c.unread, 0)
-      document.title = unread > 0 ? `(${unread}) Indestructible Messenger` : 'Indestructible Messenger'
+      document.title = unread > 0 ? `(${unread}) Proxi` : 'Proxi'
     })
     unsub()
   }
@@ -311,6 +336,9 @@ if (initialView === 'advanced') {
     <div class="spinner"></div>
     <p>🛡️ {statusText}</p>
   </div>
+  {#if needsOnboarding}
+    <AuthScreen onDone={() => { needsOnboarding = false; location.reload() }} />
+  {:else}
   <div class="app">
     {#if showSettingsView}
       <div class="settings-mobile-wrapper" class:hidden-mobile={mobileChatOpen}>
@@ -334,6 +362,7 @@ if (initialView === 'advanced') {
     {/if}
     <DemoPanel />
   </div>
+  {/if}
 
 <style>
   :global(body) { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; transition: background 0.3s, color 0.3s; }

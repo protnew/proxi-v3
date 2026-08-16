@@ -1,3 +1,5 @@
+//go:build ignore
+
 package vpn
 
 import (
@@ -7,10 +9,6 @@ import (
 	"sync/atomic"
 	"time"
 )
-
-// Canon SOCKS listen — same number as Android T42BConfig.socksPort (T42B-014).
-const T42BSocksHost = "127.0.0.1"
-const T42BSocksPort = 10808
 
 // T42BConfig is the one-button Android system-VPN control plane (T42-B).
 // DefaultRoute is always 0.0.0.0/0 — partial tunnel is not this product.

@@ -17,7 +17,7 @@ async function waitForApp(page: Page, role: string) {
 test.describe('VPN P2P E2E - give/accept product flow', () => {
   test('Alice give VPN - demo partner Bob prefilled', async ({ page }) => {
     await waitForApp(page, 'alice')
-    await expect(page.locator('body')).toContainText(/Indestructible|VPN|Messenger/i, { timeout: 15000 })
+    await expect(page.locator('body')).toContainText(/Proxi|Indestructible|VPN|Messenger/i, { timeout: 15000 })
     await expect(page.getByText(/Bob.*demo/)).toBeVisible({ timeout: 10000 })
     const giveBtn = page.getByTestId('vpn-give')
     await expect(giveBtn).toBeVisible({ timeout: 5000 })
@@ -29,7 +29,7 @@ test.describe('VPN P2P E2E - give/accept product flow', () => {
 
   test('Bob context shows demo partner Alice', async ({ page }) => {
     await waitForApp(page, 'bob')
-    await expect(page.locator('body')).toContainText(/Indestructible|VPN|Messenger/i, { timeout: 15000 })
+    await expect(page.locator('body')).toContainText(/Proxi|Indestructible|VPN|Messenger/i, { timeout: 15000 })
     await expect(page.getByText(/Alice.*demo/)).toBeVisible({ timeout: 10000 })
     const reqBtn = page.getByTestId('vpn-request')
     await expect(reqBtn).toBeVisible({ timeout: 5000 })
