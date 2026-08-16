@@ -1,51 +1,122 @@
 {
-  "timestamp": "2026-08-04T06:06:26Z",
-  "scan": "auto-test-blanket",
-  "added_tests": {
-    "go_auth_middleware": 10,
-    "go_store_edges": 4,
-    "go_validation_edges": 3,
-    "go_webserver_msg_validation": 6,
-    "vitest_chat_utils_payload_qr_theme": 14,
-    "e2e_orphan_modernized": 4
+  "timestamp": "2026-08-16T03:45:16Z",
+  "scan": "zero-point-physical",
+  "project": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2",
+  "git": {
+    "branch": "dev",
+    "head": "cc8aea91",
+    "note": "HEAD unchanged since 15.08; JNI/economy/locks live on disk, not in this commit"
+  },
+  "honesty": {
+    "do_not_publish": [
+      "e2e_scenario_pct",
+      "readiness_pct"
+    ],
+    "reason": "no checked-in product journey inventory with fixed N; inventory file is suite list only",
+    "pw_pass_source": "playwright line reporter final + .last-run.json failedTests; not json-reporter numPassedTests",
+    "previous_scan": "ZERO_POINT_SCAN-BEFORE-2026-08-16-20260816_061712.json"
   },
   "go": {
-    "packages_pass": 29,
-    "packages_fail": 0,
-    "statement_coverage_pct": 65.3,
-    "auth_pct": 91.2,
-    "webserver_pct": 34.2,
-    "store_pct": 58.1
+    "command": "go test ./... -count=1 -timeout 240s -coverprofile=zp_go_cover_20260816.out -covermode=set",
+    "cwd": ".04-Src\\src\\src-vpn",
+    "env": {
+      "GOMAXPROCS": "1",
+      "CGO_ENABLED": "0"
+    },
+    "packages_ok": 28,
+    "packages_fail": 1,
+    "packages_fail_names": [
+      "github.com/unkillable-messenger/vpn/archive"
+    ],
+    "fail_reason": "archive/bip39_test-v1-20260815.go build failed: undefined Sign/Verify/GenerateKeyPair",
+    "packages_no_test": 1,
+    "packages_no_test_names": [
+      "cmd/bridge 0.0%"
+    ],
+    "statement_coverage_pct": 62.7,
+    "coverage_source": "go tool cover -func zp_go_cover_20260816.out total (statements)",
+    "economy_pct": 58.3,
+    "identity_pct": 60.8,
+    "cmd_webserver_pct": 33.7,
+    "test_funcs_in_source_grep": 865,
+    "test_funcs_note": "grep func Test*, not a run count",
+    "overall": "FAIL (archive package)"
   },
   "vitest": {
-    "pass": 33,
+    "command": "npx vitest run --coverage --reporter=json --reporter=default",
+    "cwd": ".04-Src\\prototypes\\pwa-vpn",
+    "pass": 399,
     "fail": 0,
-    "files": 7,
-    "statements_pct": 9.77
+    "files": 49,
+    "source_pass": "default reporter 'Tests  399 passed (399)' + json numPassedTests=399 numFailedTests=0",
+    "statements_pct": 52.46,
+    "lines_pct": 54.65,
+    "functions_pct": 55.53,
+    "branches_pct": 39.81,
+    "coverage_source": "coverage/coverage-summary.json total",
+    "zero_pct_live_files": [
+      "src/lib/amnezia-tunnel.ts",
+      "src/lib/nostr-data-relay.ts",
+      "src/lib/nostr-vpn.ts",
+      "src/lib/update-check.ts",
+      "src/lib/vpn-utils.svelte.ts",
+      "src/lib/web-push.ts"
+    ]
   },
   "playwright": {
-    "pass": 20,
-    "fail": 0,
-    "total": 20
+    "list_command": "npx playwright test --list",
+    "listed_total": 57,
+    "listed_files": 24,
+    "skip_in_source": 2,
+    "skip_names": [
+      "e2e/vpn-product-crit.spec.ts SOCKS5 panel",
+      "e2e/vpn.spec.ts SOCKS5 dev panel"
+    ],
+    "suite_command": "npx playwright test --reporter=line",
+    "suite_this_scan": "FINISHED 18.9m; vite :5173 + go :8080 up",
+    "pass": 13,
+    "fail": 34,
+    "skipped": 2,
+    "did_not_run": 8,
+    "duration": "18.9m",
+    "pass_source": "line reporter final",
+    "fail_source": "line reporter '34 failed' + test-results/.last-run.json failedTests.length=34",
+    "pass_rate_pct": null,
+    "note": "archived-wt/ is inside testMatch and counts in 57. last-run archived before suite."
   },
-  "scenarios": {
-    "covered": 11,
-    "total": 20,
-    "pct": 55.0
+  "android": {
+    "jvm_unit_this_scan": {
+      "command": "gradlew.bat :app:testDebugUnitTest --rerun-tasks",
+      "pass": 18,
+      "fail": 0,
+      "xml_mtime": "2026-08-16T06:19:39",
+      "classes": [
+        "HevSocks5EngineTest 10",
+        "PacketGateTest 4",
+        "Socks5ClientTest 1",
+        "T42BConfigTest 3"
+      ]
+    },
+    "instrumented": "not run (no adb in PATH)",
+    "maestro": "not run (maestro CLI missing)"
   },
-  "zero_point_metrics": {
-    "unit_logic_coverage_pct": 65.3,
-    "frontend_unit_coverage_pct": 9.77,
-    "user_scenarios_e2e_pct": 55.0,
-    "infra_bats_pct": 15.0,
-    "loc_compliance_pct": 99.4,
-    "overall_test_readiness_pct": 56.2
+  "infra": {
+    "bats": "CLI missing — not run",
+    "files_exist": 5
   },
-  "delta": {
-    "go_pp": 0.1,
-    "auth_pp": 36.8,
-    "readiness_pp": -0.7,
-    "vitest_tests": "19→33",
-    "playwright": "16→20"
-  }
+  "loc": {
+    "active_over_500": 0,
+    "edge_480_500": [
+      {
+        "file": "prototypes/pwa-vpn/src/components/VPNProductPanel.svelte",
+        "loc": 499
+      }
+    ]
+  },
+  "product": {
+    "system_vpn_button": false,
+    "reason": "T42B-003 not done; phone IP != peer-exit; JVM does not load android .so"
+  },
+  "e2e_scenario_pct": null,
+  "readiness_pct": null
 }
