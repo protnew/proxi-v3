@@ -1,5 +1,7 @@
 package com.indestructible.messenger.vpn
 
+import android.app.Notification
+
 import android.content.Intent
 import android.net.VpnService as AndroidVpnService
 import android.os.ParcelFileDescriptor
@@ -21,6 +23,31 @@ import java.util.concurrent.atomic.AtomicLong
  * This is a REAL VPN: all app traffic is captured by the TUN interface.
  */
 class TunVpnService : AndroidVpnService() {
+    private val NOTIF_ID = 42
+    private fun buildNotification(): Notification {
+        val channelId = "proxi_vpn"
+        val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            nm.createNotificationChannel(
+                android.app.NotificationChannel(channelId, "Proxi VPN", android.app.NotificationManager.IMPORTANCE_LOW)
+            )
+        }
+        return Notification.Builder(this, channelId)
+            .setContentTitle("Proxi VPN активен")
+            .setContentText("Туннель работает в фоне")
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .build()
+    }
+
+    // MOB-005: promote to foreground so Android keeps VPN + WS alive in background
+    fun enterForeground() {
+        startForeground(NOTIF_ID, buildNotification())
+    }
+
+    fun leaveForeground() {
+        stopForeground(STOP_FOREGROUND_REMOVE)
+    }
+
 
     companion object {
         private const val TAG = "TunVpnService"
@@ -103,6 +130,7 @@ class TunVpnService : AndroidVpnService() {
             onStatusChange?.invoke(status)
             Log.e(TAG, "startVpn error", e)
         }
+        enterForeground() // MOB-005
     }
 
     /**

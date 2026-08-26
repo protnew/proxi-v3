@@ -61,3 +61,21 @@ export async function toggleVPN(enabled: boolean): Promise<ApiResponse> {
 export async function getVPNStatus(): Promise<ApiResponse> {
   return request('/api/vpn/rpc?query=status');
 }
+
+
+// T42B-016: Capacitor bridge — startVpn/stopVpn from JS (Android shell)
+export async function nativeStartVpn(): Promise<{ ok: boolean; running: boolean }> {
+  const bridge = (window as any).ProxiVpn; // Android WebView @JavascriptInterface (T42B-016)
+  if (bridge?.startVpn) {
+    return JSON.parse(bridge.startVpn());
+  }
+  return { ok: false, running: false }; // PWA browser: native VPN unavailable
+}
+
+export async function nativeStopVpn(): Promise<{ ok: boolean; running: boolean }> {
+  const bridge = (window as any).ProxiVpn;
+  if (bridge?.stopVpn) {
+    return JSON.parse(bridge.stopVpn());
+  }
+  return { ok: false, running: false };
+}
