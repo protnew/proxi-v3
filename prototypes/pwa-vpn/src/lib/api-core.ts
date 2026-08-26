@@ -39,7 +39,7 @@ function deriveWsBase(): string {
   if (typeof location !== 'undefined') {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}`;
   }
-  return 'ws://localhost:8080'; // Node.js test fallback
+  return 'ws://localhost:8090'; // Node.js test fallback
 }
 const WS_BASE = deriveWsBase();
 

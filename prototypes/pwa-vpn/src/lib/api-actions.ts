@@ -24,7 +24,7 @@ import {
 
 export function connectWebSocket(token: string, onMessage: (msg: any) => void): WebSocket {
   const WS_BASE = (import.meta as any).env?.VITE_API_URL?.replace(/^http/, 'ws') || 
-    (typeof location !== 'undefined' ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}` : 'ws://localhost:8080');
+    (typeof location !== 'undefined' ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}` : 'ws://localhost:8090');
   const wsUrl = `${WS_BASE}/ws?token=${encodeURIComponent(token)}`;
   const ws = new WebSocket(wsUrl);
   ws.onmessage = (event) => {
@@ -46,9 +46,8 @@ export const chatApi = {
     const payload = makeChatPayload(from, to, content, isE2EEnabled());
     const sent = sendRaw(payload);
     if (sent) {
-      try {
-        request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content }) });
-      } catch {}
+      // FIX double-save: Go hub persists WS chat messages itself (ws_handlers.go SaveMessage).
+      // The extra REST POST /api/messages caused every DM to be stored twice.
       return { status: 200, data: { ok: true, via: 'ws', encrypted: payload.encrypted } };
     }
     try {

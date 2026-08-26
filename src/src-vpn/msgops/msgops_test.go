@@ -1,6 +1,7 @@
 package msgops
 
 import (
+	"sync"
 	"testing"
 	"time"
 )
@@ -150,18 +151,30 @@ func TestCancelScheduled(t *testing.T) {
 
 func TestEventSubscribe(t *testing.T) {
 	m := NewManager()
+	var mu sync.Mutex
 	received := make([]string, 0)
 
 	m.OnSubscribe(func(eventType string, payload []byte) {
+		mu.Lock()
 		received = append(received, eventType)
+		mu.Unlock()
 	})
 
 	m.DeleteMessage("msg1", "user1")
 	m.SetTyping("user1", "room1")
 
-	// Give goroutines time
-	time.Sleep(50 * time.Millisecond)
-	if len(received) < 2 {
-		t.Fatalf("events: got %d", len(received))
+	// Subscribers run in goroutines — poll up to 2s instead of fixed sleep
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(received)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("events: got %d", n)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
