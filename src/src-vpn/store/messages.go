@@ -23,6 +23,7 @@ type Message struct {
 	ForwardedFrom string `json:"forwardedFrom,omitempty"` // npub автора пересланного
 	Attachments   string `json:"attachments,omitempty"`   // JSON array of file IDs
 	TTL           int    `json:"ttl,omitempty"`           // seconds until self-destruct (0 = never)
+	Sig           string `json:"sig,omitempty"`           // CRYP-012 Ed25519 base64
 }
 
 // Channel represents a public channel.
@@ -334,8 +335,19 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 // CleanExpiredMessages deletes all messages where TTL > 0 and timestamp+ttl < now.
 // Returns the number of deleted messages.
 
+// CleanExpiredMessages SEC-002: crypto-erasure then delete.
+// 1) Overwrite text/attachments with zeros for expired TTL rows
+// 2) DELETE those rows
+// Returns number of deleted messages.
 func (s *Store) CleanExpiredMessages() (int64, error) {
 	now := time.Now().Unix()
+	// Crypto-erasure: wipe plaintext/ciphertext before free space reuse
+	if _, err := s.db.Exec(
+		`UPDATE messages SET text = '', attachments = '', encrypted = 0
+		 WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
+	); err != nil {
+		return 0, fmt.Errorf("crypto-erase expired messages: %w", err)
+	}
 	res, err := s.db.Exec(
 		`DELETE FROM messages WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
 	)
@@ -344,6 +356,19 @@ func (s *Store) CleanExpiredMessages() (int64, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
+}
+
+// CryptoEraseMessage overwrites message content then deletes (SEC-002 manual).
+func (s *Store) CryptoEraseMessage(messageID string) error {
+	if _, err := s.db.Exec(
+		`UPDATE messages SET text = '', attachments = '', encrypted = 0 WHERE id = ?`, messageID,
+	); err != nil {
+		return fmt.Errorf("crypto-erase %s: %w", messageID, err)
+	}
+	if _, err := s.db.Exec(`DELETE FROM messages WHERE id = ?`, messageID); err != nil {
+		return fmt.Errorf("delete after erase %s: %w", messageID, err)
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------

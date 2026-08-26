@@ -387,3 +387,44 @@ func (r *Relay) GetStats() map[string]interface{} {
 		"uptime":     fmt.Sprintf("%d", time.Now().Unix()),
 	}
 }
+
+
+// InjectLocalEvent publishes a server-side event into the relay pipeline (INF-010).
+// Used for VPN signaling without a remote WS client. Skips ID/sig crypto verification
+// (local trust boundary). Still persists, broadcasts to subscribers, fires OnEvent.
+func (r *Relay) InjectLocalEvent(event Event) {
+	if event.CreatedAt == 0 {
+		event.CreatedAt = time.Now().Unix()
+	}
+	if event.ID == "" {
+		event.ID = ComputeEventID(&event)
+	}
+	if r.db != nil {
+		if err := r.db.SaveNostrEvent(store.NostrEvent{
+			ID: event.ID, PubKey: event.PubKey, Kind: event.Kind,
+			Tags: event.Tags, Content: event.Content, Sig: event.Sig, CreatedAt: event.CreatedAt,
+		}); err != nil {
+			log.Printf("[nostr] InjectLocalEvent save: %v", err)
+		}
+	}
+	r.mu.Lock()
+	r.events = append(r.events, event)
+	if len(r.events) > r.maxEvents {
+		r.events = r.events[len(r.events)-r.maxEvents:]
+	}
+	subs := make([]*Subscription, 0)
+	for c := range r.clients {
+		for _, sub := range c.subscriptions {
+			if matchFilter(&event, &sub.Filter) {
+				subs = append(subs, sub)
+			}
+		}
+	}
+	r.mu.Unlock()
+	if r.OnEvent != nil {
+		go r.OnEvent(event)
+	}
+	for _, sub := range subs {
+		sub.Client.send([]interface{}{"EVENT", sub.ID, event})
+	}
+}

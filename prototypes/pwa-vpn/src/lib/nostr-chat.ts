@@ -169,3 +169,63 @@ export class NostrChat {
     this.connectedCount = 0
   }
 }
+
+
+// MSG-105: Presence via Nostr (kind 10002 relay list + periodic ping)
+const PRESENCE_KIND = 34000
+type PresenceCallback = (pubkey: string, online: boolean) => void
+const presenceCallbacks: PresenceCallback[] = []
+const presenceMap = new Map<string, number>()
+
+export function onPresence(cb: PresenceCallback) {
+  presenceCallbacks.push(cb)
+}
+
+function emitPresence(pubkey: string, online: boolean) {
+  presenceCallbacks.forEach(cb => cb(pubkey, online))
+}
+
+export async function broadcastPresence(identity: Identity): Promise<void> {
+  try {
+    const event = {
+      kind: PRESENCE_KIND,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [],
+      content: 'online',
+    }
+    const signed = await signEvent(event, identity.privateKey)
+    for (const ws of relays.values()) {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(['EVENT', signed]))
+      }
+    }
+  } catch {}
+}
+
+export function checkPresenceTimeout() {
+  const now = Date.now()
+  for (const [pk, lastSeen] of presenceMap) {
+    if (now - lastSeen > 120000) { // 2 min
+      presenceMap.delete(pk)
+      emitPresence(pk, false)
+    }
+  }
+}
+
+// Start presence loop
+let presenceInterval: ReturnType<typeof setInterval> | null = null
+export function startPresence(identity: Identity) {
+  if (presenceInterval) clearInterval(presenceInterval)
+  broadcastPresence(identity)
+  presenceInterval = setInterval(() => {
+    broadcastPresence(identity)
+    checkPresenceTimeout()
+  }, 60000) // every 60s
+}
+
+export function stopPresence() {
+  if (presenceInterval) {
+    clearInterval(presenceInterval)
+    presenceInterval = null
+  }
+}

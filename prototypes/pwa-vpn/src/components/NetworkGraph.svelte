@@ -2,12 +2,12 @@
   T104: Network Graph view — visualizes P2P mesh connections.
 -->
 <script lang="ts">
-  export let peers: { id: string; addr: string; connected: boolean; latency?: number }[] = [];
+  let { peers = [] }: { peers?: { id: string; addr: string; connected: boolean; latency?: number }[] } = $props();
 
-  $: onlinePeers = peers.filter(p => p.connected);
-  $: avgLatency = onlinePeers.length > 0
+  let onlinePeers = $derived(peers.filter(p => p.connected));
+  let avgLatency = $derived(onlinePeers.length > 0
     ? Math.round(onlinePeers.reduce((sum, p) => sum + (p.latency || 0), 0) / onlinePeers.length)
-    : 0;
+    : 0);
 </script>
 
 <div class="network-graph">

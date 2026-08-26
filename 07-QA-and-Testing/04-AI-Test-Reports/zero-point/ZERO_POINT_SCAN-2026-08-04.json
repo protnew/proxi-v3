@@ -1,0 +1,51 @@
+{
+  "timestamp": "2026-08-04T06:06:26Z",
+  "scan": "auto-test-blanket",
+  "added_tests": {
+    "go_auth_middleware": 10,
+    "go_store_edges": 4,
+    "go_validation_edges": 3,
+    "go_webserver_msg_validation": 6,
+    "vitest_chat_utils_payload_qr_theme": 14,
+    "e2e_orphan_modernized": 4
+  },
+  "go": {
+    "packages_pass": 29,
+    "packages_fail": 0,
+    "statement_coverage_pct": 65.3,
+    "auth_pct": 91.2,
+    "webserver_pct": 34.2,
+    "store_pct": 58.1
+  },
+  "vitest": {
+    "pass": 33,
+    "fail": 0,
+    "files": 7,
+    "statements_pct": 9.77
+  },
+  "playwright": {
+    "pass": 20,
+    "fail": 0,
+    "total": 20
+  },
+  "scenarios": {
+    "covered": 11,
+    "total": 20,
+    "pct": 55.0
+  },
+  "zero_point_metrics": {
+    "unit_logic_coverage_pct": 65.3,
+    "frontend_unit_coverage_pct": 9.77,
+    "user_scenarios_e2e_pct": 55.0,
+    "infra_bats_pct": 15.0,
+    "loc_compliance_pct": 99.4,
+    "overall_test_readiness_pct": 56.2
+  },
+  "delta": {
+    "go_pp": 0.1,
+    "auth_pp": 36.8,
+    "readiness_pp": -0.7,
+    "vitest_tests": "19→33",
+    "playwright": "16→20"
+  }
+}

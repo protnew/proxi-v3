@@ -1,12 +1,15 @@
 <!-- T87: UI Button component -->
 <script lang="ts">
-  export let variant: 'primary' | 'secondary' | 'danger' | 'ghost' = 'primary';
-  export let size: 'sm' | 'md' | 'lg' = 'md';
-  export let disabled = false;
-  export let loading = false;
+  let { variant = 'primary', size = 'md', disabled = false, loading = false, onclick }: {
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost';
+    size?: 'sm' | 'md' | 'lg';
+    disabled?: boolean;
+    loading?: boolean;
+    onclick?: () => void;
+  } = $props();
 </script>
 
-<button class="btn {variant} {size}" {disabled} on:click>
+<button class="btn {variant} {size}" {disabled} onclick>
   {#if loading}<span class="spinner"></span>{/if}
   <slot />
 </button>

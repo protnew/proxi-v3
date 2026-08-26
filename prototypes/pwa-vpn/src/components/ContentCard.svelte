@@ -2,7 +2,7 @@
   T105: Content card component for content vault.
 -->
 <script lang="ts">
-  export let content: { id: string; title: string; type: string; size?: number; date?: string };
+  let { content }: { content: { id: string; title: string; type: string; size?: number; date?: string } } = $props();
 </script>
 
 <div class="content-card">

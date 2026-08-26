@@ -6,8 +6,10 @@
     { name: 'Разное', emojis: ['🔥','⭐','🌟','✨','💫','🌈','☀️','🌙','⚡','💧','🌊','❄️','🌸','🍀','🌍','💯','🏆','🎉','🎊','🎈','🎁','💬','🔒','🔑','💡','🎯','✅','❌'] },
   ]
 
-  export let onSelect: (emoji: string) => void
-  export let showEmoji: boolean = false
+  let { onSelect, showEmoji = false }: {
+    onSelect: (emoji: string) => void;
+    showEmoji?: boolean;
+  } = $props();
 
   function pick(e: string) { onSelect(e); showEmoji = false }
 </script>

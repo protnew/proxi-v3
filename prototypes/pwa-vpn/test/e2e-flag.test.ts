@@ -18,7 +18,7 @@ describe('MSG-009 isE2EEnabled on send path', () => {
 
   it('buildChatPayload.encrypted true by default', async () => {
     const api = await import('../src/lib/api.ts');
-    api.initIdentity();
+    api.setIdentity('a'.repeat(64), 'b'.repeat(64)); // ONB-000: seed identity explicitly
     api.setE2EEnabledLocal(true);
     const p = api.buildChatPayload('bobpk', 'hi');
     expect(p.encrypted).toBe(true);
@@ -30,7 +30,7 @@ describe('MSG-009 isE2EEnabled on send path', () => {
 
   it('buildChatPayload.encrypted false when E2E disabled', async () => {
     const api = await import('../src/lib/api.ts');
-    api.initIdentity();
+    api.setIdentity('a'.repeat(64), 'b'.repeat(64));
     api.setE2EEnabledLocal(false);
     const p = api.buildChatPayload('bobpk', 'plain');
     expect(p.encrypted).toBe(false);
@@ -39,7 +39,7 @@ describe('MSG-009 isE2EEnabled on send path', () => {
 
   it('toggling E2E flips subsequent payloads', async () => {
     const api = await import('../src/lib/api.ts');
-    api.initIdentity();
+    api.setIdentity('a'.repeat(64), 'b'.repeat(64));
     api.setE2EEnabledLocal(true);
     expect(api.buildChatPayload('x', 'a').encrypted).toBe(true);
     api.setE2EEnabledLocal(false);

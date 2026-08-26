@@ -1,0 +1,70 @@
+package com.indestructible.messenger.vpn
+
+import java.io.File
+
+/**
+ * T42-B tun2socks control plane (table winner B).
+ * Official names match heiher/hev-socks5-tunnel Java API:
+ *   TProxyStartService(config_path, fd), TProxyStopService(), TProxyIsRunning().
+ * Release "android bins" are PIE tun2socks (linker64), NOT JNI.
+ * JNI .so is a separate NDK build. Do not System.loadLibrary a PIE binary.
+ */
+object HevSocks5Engine {
+    const val LIB_NAME = "hev-socks5-tunnel"
+    const val VERSION = "2.17.1"
+    const val FILE_NAME = "libhev-socks5-tunnel.so"
+
+    fun expectedAbis(): List<String> = listOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+
+    fun officialJniNames(): List<String> = listOf(
+        "TProxyStartService",
+        "TProxyStopService",
+        "TProxyIsRunning",
+    )
+
+    fun yamlConfig(cfg: T42BConfig): String {
+        val host = cfg.socksHost
+        val port = cfg.socksPort
+        return """
+            |tunnel:
+            |  name: ${cfg.session}
+            |  mtu: 1500
+            |  ipv4: ${cfg.tunAddress}
+            |socks5:
+            |  port: $port
+            |  address: $host
+            |  udp: 'udp'
+            |misc:
+            |  log-level: warn
+            |""".trimMargin()
+    }
+
+    fun artifactFile(abi: String): File {
+        val rel = "src/main/jniLibs/$abi/$FILE_NAME"
+        val candidates = listOf(File(rel), File("app/$rel"), File("../$rel"))
+        return candidates.firstOrNull { it.isFile } ?: File(rel)
+    }
+
+    /** JNI .so exports Java_* / JNI_OnLoad. PIE android bin does not. */
+    fun isJniLibrary(file: File): Boolean {
+        if (!file.isFile || file.length() < 16) return false
+        val bytes = file.readBytes()
+        if (bytes.size < 4 || bytes[0] != 0x7F.toByte() || bytes[1] != 'E'.code.toByte()) return false
+        val hay = bytes
+        return indexOf(hay, "JNI_OnLoad".toByteArray()) >= 0 ||
+            indexOf(hay, "Java_".toByteArray()) >= 0 ||
+            indexOf(hay, "TProxyStartService".toByteArray()) >= 0
+    }
+
+    fun canStartNative(abi: String): Boolean = isJniLibrary(artifactFile(abi))
+
+    private fun indexOf(hay: ByteArray, needle: ByteArray): Int {
+        outer@ for (i in 0..hay.size - needle.size) {
+            for (j in needle.indices) {
+                if (hay[i + j] != needle[j]) continue@outer
+            }
+            return i
+        }
+        return -1
+    }
+}

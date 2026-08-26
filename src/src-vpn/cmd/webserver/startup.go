@@ -150,23 +150,26 @@ func run() error {
 	nostrRelay = nostr.NewRelay(50000, db)
 	log.Println("📡 Nostr NIP-01 relay initialized")
 
-	// VPN signaling hook: kind:30090 → in-process VPNSignaling
-	vpnSig := vpn.NewVPNSignaling()
+	// INF-010: VPN signaling hook kind:30090 → global VPNSignaling (was local dead var)
+	vpnSignaling = vpn.NewVPNSignaling()
 	nostrRelay.OnEvent = func(ev nostr.Event) {
 		if ev.Kind != vpn.VPNEventKind {
 			return
 		}
 		ve, err := vpn.DeserializeVPNEvent([]byte(ev.Content))
 		if err != nil {
-			log.Printf("[VPN-SIG] bad content on %s: %v", ev.ID[:12], err)
+			id := ev.ID
+			if len(id) > 12 {
+				id = id[:12]
+			}
+			log.Printf("[VPN-SIG] bad content on %s: %v", id, err)
 			return
 		}
-		// Prefer pubkey from event envelope
 		if ve.From == "" {
 			ve.From = ev.PubKey
 		}
-		vpnSig.HandleIncomingEvent(ev.ID, ve)
-		log.Printf("[VPN-SIG] kind:30090 %s from=%s… to=%s…", ve.Type, ve.From, ve.To)
+		vpnSignaling.HandleIncomingEvent(ev.ID, ve)
+		log.Printf("[VPN-SIG] kind:30090 %s from=%s to=%s", ve.Type, ve.From, ve.To)
 	}
 
 
@@ -275,7 +278,7 @@ func run() error {
 
 	// Create HTTP server
 	httpSrv := &http.Server{
-		Addr:              ":" + port,
+		Addr:              "127.0.0.1:" + port,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

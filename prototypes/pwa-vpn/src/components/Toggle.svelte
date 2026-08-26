@@ -3,10 +3,12 @@
   Used for VPN toggle, dark mode, settings.
 -->
 <script lang="ts">
-  export let checked = false;
-  export let onChange: (value: boolean) => void = () => {};
-  export let label = '';
-  export let disabled = false;
+  let { checked = false, onChange = () => {}, label = '', disabled = false }: {
+    checked?: boolean;
+    onChange?: (value: boolean) => void;
+    label?: string;
+    disabled?: boolean;
+  } = $props();
 
   function toggle() {
     if (disabled) return;
@@ -20,7 +22,7 @@
   <button
     class="toggle"
     class:checked
-    on:click={toggle}
+    onclick={toggle}
     disabled={disabled}
     role="switch"
     aria-checked={checked}

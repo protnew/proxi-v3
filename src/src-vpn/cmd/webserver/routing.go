@@ -40,6 +40,7 @@ var storageProvider storage.StorageProvider
 var vpnMgr *vpn.Manager
 
 var nostrRelay *nostr.Relay
+var vpnSignaling *vpn.VPNSignaling // INF-010 global signaling
 
 var fedRelay *federation.FederatedRelay
 

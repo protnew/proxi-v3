@@ -26,6 +26,22 @@ func securityHeadersMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// SEC-001: CSP — block inline script exfil of nsec/localStorage keys.
+		// 'unsafe-inline' kept for styles (UnoCSS runtime); scripts: self only.
+		// connect-src allows same-origin API + WS + public STUN/Nostr relays.
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self'; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data: blob:; "+
+				"font-src 'self' data:; "+
+				"connect-src 'self' ws: wss: http://127.0.0.1:* http://localhost:* http://10.*:* http://192.168.*:* https://*; "+
+				"media-src 'self' blob:; "+
+				"worker-src 'self' blob:; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'self'; "+
+				"form-action 'self'; "+
+				"object-src 'none'")
 		next(w, r)
 	}
 }

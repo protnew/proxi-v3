@@ -4,7 +4,7 @@ const APP_URL = process.env.APP_URL || 'http://127.0.0.1:8090'
 const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
 async function waitForApp(page: Page) {
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' })
+  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' }) // role set by callers
   await page.waitForFunction(() => {
     try {
       return !!(localStorage.getItem('proxi_token') || '') && !!(window as any).__proxiPubkey
@@ -55,6 +55,8 @@ test.describe('Alice → Bob DM', () => {
     const bob = await bobCtx.newPage()
 
     try {
+      await alice.goto(APP_URL + '?role=alice', { waitUntil: 'domcontentloaded' })
+      await bob.goto(APP_URL + '?role=bob', { waitUntil: 'domcontentloaded' })
       await waitForApp(alice)
       await waitForApp(bob)
       const alicePk = await pubkeyOf(alice)

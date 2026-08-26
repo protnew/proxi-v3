@@ -1,9 +1,5 @@
 /** @type {import("@sveltejs/vite-plugin-svelte").SvelteConfig} */
 export default {
-  compilerOptions: {
-    // Enable store reactivity ($store syntax) in Svelte 5
-    compatibility: {
-      componentApi: 4,
-    },
-  },
+  // Svelte 5 runes mode ($state, $props, $effect, $derived)
+  // No compatibility mode — pure Svelte 5
 }

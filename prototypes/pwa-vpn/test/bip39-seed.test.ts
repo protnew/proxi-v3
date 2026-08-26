@@ -48,4 +48,18 @@ describe('BIP39 Seed Phrase', () => {
   it('rejects invalid mnemonic (wrong word count)', () => {
     expect(() => recoverFromPhrase('apple banana cherry')).toThrow();
   });
+
+  it('own phrase (25th word) changes the key; same phrase restores it', () => {
+    const id = createSeedIdentity();
+    const a = deriveFromMnemonic(id.mnemonic, 'моя осмысленная фраза');
+    const b = deriveFromMnemonic(id.mnemonic, 'моя осмысленная фраза');
+    const c = deriveFromMnemonic(id.mnemonic, 'другая фраза');
+    expect(a.privateKey).toBe(b.privateKey);
+    expect(a.privateKey).not.toBe(c.privateKey);
+    expect(a.privateKey).not.toBe(id.privateKey);
+  });
+
+  it('plain sentence is not a mnemonic (brainwallet rejected)', () => {
+    expect(() => recoverFromPhrase('моя осмысленная фраза для входа')).toThrow();
+  });
 });

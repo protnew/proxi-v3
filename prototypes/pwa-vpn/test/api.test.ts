@@ -28,23 +28,23 @@ describe('API client', () => {
     expect(typeof api.API_BASE).toBe('string');
   });
 
-  it('should initIdentity synchronously returning a hex string', async () => {
+  it('should initIdentity returns empty string when no identity (ONB-000: no silent create)', async () => {
     const api = await import('../src/lib/api.ts');
     const pk = api.initIdentity();
     expect(typeof pk).toBe('string');
-    expect(pk.length).toBe(64); // 32 bytes hex
+    expect(pk).toBe(''); // ONB-000: AuthScreen owns first-run, no silent keygen
   });
 
-  it('should getPubkey returns cached identity', async () => {
+  it('should getPubkey returns cached identity after setIdentity', async () => {
     const api = await import('../src/lib/api.ts');
-    api.initIdentity();
+    api.setIdentity('a'.repeat(64), 'b'.repeat(64));
     const pk = api.getPubkey();
     expect(pk.length).toBe(64);
   });
 
-  it('should getSeckey returns cached private key', async () => {
+  it('should getSeckey returns cached private key after setIdentity', async () => {
     const api = await import('../src/lib/api.ts');
-    api.initIdentity();
+    api.setIdentity('a'.repeat(64), 'b'.repeat(64));
     const sk = api.getSeckey();
     expect(sk.length).toBe(64);
   });

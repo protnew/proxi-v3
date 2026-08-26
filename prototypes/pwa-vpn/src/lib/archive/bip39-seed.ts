@@ -23,11 +23,11 @@ export function createSeedIdentity(): SeedIdentity {
 }
 
 /** Derive keypair from existing mnemonic */
-export function deriveFromMnemonic(mnemonic: string): SeedIdentity {
+export function deriveFromMnemonic(mnemonic: string, passphrase = ''): SeedIdentity {
   if (!validateMnemonic(mnemonic, wordlist)) {
     throw new Error('Invalid mnemonic');
   }
-  const seed = mnemonicToSeedSync(mnemonic);
+  const seed = mnemonicToSeedSync(mnemonic, passphrase);
   // Take first 32 bytes as private key
   const privKey = seed.slice(0, 32);
   const privateKey = Array.from(privKey).map(b => b.toString(16).padStart(2, '0')).join('');
@@ -48,9 +48,9 @@ export function loadMnemonic(): string | null {
 }
 
 /** Recover identity from 12-word phrase */
-export function recoverFromPhrase(phrase: string): SeedIdentity {
+export function recoverFromPhrase(phrase: string, passphrase = ''): SeedIdentity {
   const clean = phrase.trim().toLowerCase().replace(/\s+/g, ' ');
-  return deriveFromMnemonic(clean);
+  return deriveFromMnemonic(clean, passphrase);
 }
 
 // Bech32 encoder (npub/nsec)

@@ -1,5 +1,13 @@
 # Architecture Decisions
 
+> **КАНОН 2026-08-09:** См. DECISION_TREE.md (09-Docs/) для финального стэка.
+> D-ARCH-001 (WebTransport) — SUPERSEDED D-ARCH-2026-08-08 (WebRTC).
+> D-ARCH-005 канон обновлён: WebRTC = primary, WebTransport = legacy LAN-only.
+
+---
+
+
+
 ## D-ARCH-001 — Транспорт PWA VPN: WebTransport (QUIC), НЕ WireGuard
 
 **Дата:** 2026-08-06

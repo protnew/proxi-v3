@@ -79,17 +79,24 @@ class TunVpnService : AndroidVpnService() {
             tunInput = FileInputStream(tunFd!!.fileDescriptor)
             tunOutput = FileOutputStream(tunFd!!.fileDescriptor)
 
+            // T42-B: TUN fd → hev JNI tun2socks → SOCKS5. No Kotlin TCP/IP.
+            val yaml = HevSocks5Engine.writeYaml(cacheDir, t42)
+            val fd = tunFd!!.fd
+            val hevOk = HevSocks5Engine.start(yaml.absolutePath, fd)
+            if (!hevOk) {
+                status = "error: hev JNI start failed (${HevSocks5Engine.lastLoadError})"
+                onStatusChange?.invoke(status)
+                Log.e(TAG, status)
+                try { tunFd?.close() } catch (_: Exception) {}
+                tunFd = null
+                return
+            }
+
             isRunning.set(true)
             gate.setChannel(true)
             status = "connected"
             onStatusChange?.invoke(status)
-            Log.i(TAG, "TUN established: $TUN_ADDRESS/$TUN_PREFIX, MTU=$TUN_MTU")
-
-            // 2. Start packet reader thread
-            readerThread = Thread({ readPackets() }, "TUN-Reader").apply {
-                isDaemon = true
-                start()
-            }
+            Log.i(TAG, "TUN+hev: $TUN_ADDRESS/$TUN_PREFIX fd=$fd yaml=${yaml.absolutePath}")
 
         } catch (e: Exception) {
             status = "error: ${e.message}"
@@ -261,6 +268,7 @@ class TunVpnService : AndroidVpnService() {
         if (!isRunning.get()) return
         isRunning.set(false)
         gate.setChannel(false)
+        HevSocks5Engine.stop()
 
         // Close all connections
         for ((_, conn) in connections) {

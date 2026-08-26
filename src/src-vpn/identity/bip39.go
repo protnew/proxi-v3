@@ -21,9 +21,20 @@ func GenerateMnemonic() (string, error) {
 	return mnemonic, nil
 }
 
-// MnemonicToSeed converts a BIP39 mnemonic to a 64-byte seed.
+// MnemonicToSeed converts a BIP39 mnemonic to a 64-byte seed (empty passphrase).
 func MnemonicToSeed(mnemonic string) []byte {
-	return bip39.NewSeed(mnemonic, "")
+	return MnemonicToSeedWithPhrase(mnemonic, "")
+}
+
+// MnemonicToSeedWithPhrase is table #59: 12 BIP39 words + optional own phrase.
+// The phrase is the BIP39 passphrase ("25th word"), not a brainwallet.
+func MnemonicToSeedWithPhrase(mnemonic, phrase string) []byte {
+	return bip39.NewSeed(mnemonic, phrase)
+}
+
+// IsMnemonicValid reports whether s is a BIP39 word list mnemonic.
+func IsMnemonicValid(s string) bool {
+	return bip39.IsMnemonicValid(s)
 }
 
 // SeedToPrivKey derives a secp256k1 private key from a BIP39 seed.

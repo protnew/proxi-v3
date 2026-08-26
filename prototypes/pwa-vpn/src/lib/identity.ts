@@ -45,6 +45,11 @@ export async function createIdentity(): Promise<Identity> {
   }
 
   await saveIdentityEncrypted(identity)
+  // Keep legacy keys used by api.ts / WS signup path
+  try {
+    localStorage.setItem('indestructible-seckey', identity.privateKey)
+    localStorage.setItem('indestructible-pubkey', identity.publicKey)
+  } catch { /* */ }
   return identity
 }
 
@@ -141,8 +146,11 @@ export async function getIdentity(): Promise<Identity> {
  * Delete identity (logout)
  */
 export function deleteIdentity(): void {
-  localStorage.removeItem(STORAGE_KEY)
-  localStorage.removeItem(STORAGE_ENC)
+  try {
+    if (typeof localStorage === 'undefined') return
+    localStorage.removeItem(STORAGE_KEY)
+    localStorage.removeItem(STORAGE_ENC)
+  } catch { /* SSR */ }
   // keep DEVICE_KEY so re-login on same browser can rotate identity cleanly
 }
 
@@ -228,4 +236,65 @@ function encodeBech32(hrp: string, data: Uint8Array): string {
   for (const w of words) result += BECH32_CHARSET[w]
   for (const c of checksum) result += BECH32_CHARSET[c]
   return result
+}
+
+
+/** Decode bech32 npub/nsec → bytes */
+function decodeBech32(bech: string): { hrp: string; data: Uint8Array } {
+  const lower = bech.trim().toLowerCase()
+  const pos = lower.lastIndexOf('1')
+  if (pos < 1) throw new Error('invalid bech32')
+  const hrp = lower.slice(0, pos)
+  const dataPart = lower.slice(pos + 1)
+  const words: number[] = []
+  for (const ch of dataPart) {
+    const v = BECH32_CHARSET.indexOf(ch)
+    if (v < 0) throw new Error('invalid bech32 char')
+    words.push(v)
+  }
+  if (words.length < 7) throw new Error('bech32 too short')
+  // drop checksum 6
+  const dataWords = words.slice(0, -6)
+  // convert 5→8
+  let acc = 0, bits = 0
+  const bytes: number[] = []
+  const maxv = 255
+  for (const w of dataWords) {
+    acc = (acc << 5) | w
+    bits += 5
+    while (bits >= 8) {
+      bits -= 8
+      bytes.push((acc >> bits) & maxv)
+    }
+  }
+  return { hrp, data: new Uint8Array(bytes) }
+}
+
+/**
+ * ONB-000: Import identity from nsec1… hex private key.
+ */
+export async function importIdentity(input: string): Promise<Identity> {
+  const raw = input.trim()
+  let privateKeyHex: string
+  if (raw.startsWith('nsec1') || raw.startsWith('NSEC1')) {
+    const { hrp, data } = decodeBech32(raw)
+    if (hrp !== 'nsec') throw new Error('expected nsec')
+    if (data.length < 32) throw new Error('nsec payload too short')
+    privateKeyHex = bytesToHex(data.slice(0, 32))
+  } else if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    privateKeyHex = raw.toLowerCase()
+  } else {
+    throw new Error('unsupported key format (use nsec1… or 64-hex)')
+  }
+  const privateKeyBytes = hexToBytes(privateKeyHex)
+  const publicKey = bytesToHex(secp.schnorr.getPublicKey(privateKeyBytes))
+  const identity: Identity = {
+    privateKey: privateKeyHex,
+    publicKey,
+    npub: encodeBech32('npub', hexToBytes(publicKey)),
+    nsec: encodeBech32('nsec', privateKeyBytes),
+    createdAt: Date.now(),
+  }
+  await saveIdentityEncrypted(identity)
+  return identity
 }

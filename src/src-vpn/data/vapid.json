@@ -1,0 +1,6 @@
+{
+  "publicKey": "BPuUruWixfo9DhpiLYDnIlqCViwLqmS4_hEVinMp2NoI_6vK9SO-POP7mIwFy9jcXNeoWlmlMaCPBOk6Cwm9RW4",
+  "privateKeyPEM": "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEICMYMuTa3xvAP2AKFE1wcKboIDY3mxz7QkaqsbaUYq+ioAoGCCqGSM49\nAwEHoUQDQgAE+5Su5aLF+j0OGmItgOciWoJWLAuqZLj+ERWKcynY2gj/q8r1I748\n4/uYjAXL2Nxc16haWaUxoI8E6ToLCb1Fbg==\n-----END EC PRIVATE KEY-----\n",
+  "subject": "mailto:push@indestructible.local",
+  "createdAt": "2026-08-11T09:18:31Z"
+}

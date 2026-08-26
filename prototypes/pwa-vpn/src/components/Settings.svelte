@@ -4,6 +4,8 @@
   import { updateProfile } from '../lib/api'
   import { getTheme, toggleTheme, onThemeChange, type Theme } from '../lib/theme'
   import { generateContactQR } from '../lib/qr'
+  import { loadIdentityAsync, deleteIdentity } from '../lib/identity'
+  import { initPush, getPushPermission, hasPushSubscription } from '../lib/push'
 
   let tab = $state<'profile' | 'contacts' | 'chats' | 'advanced'>('profile')
   let e2eOn = $state(true)
@@ -17,6 +19,43 @@
   stores.chats.subscribe(v => { chatList = v })
 
   let theme = $state<Theme>('dark')
+  let identity = $state<{ npub: string; nsec: string } | null>(null)
+  let seedVisible = $state(false)
+  let showSeed = $state(false)
+  let pushEnabled = $state(false)
+  let killSwitch = $state(false)
+  let relayList = $state('wss://relay.damus.io\nwss://nos.lol\nwss://relay.nostr.band')
+
+  async function loadSeed() {
+    identity = await loadIdentityAsync() as any
+  }
+  loadSeed()
+
+  function toggleSeed() {
+    seedVisible = !seedVisible
+    showSeed = true
+  }
+
+  async function exportSeed() {
+    if (!identity) await loadSeed()
+    if (!identity) return
+    const blob = new Blob([JSON.stringify(identity, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'proxi-identity-backup.json'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function enablePush() {
+    pushEnabled = await initPush()
+  }
+
+  function toggleKillSwitch() {
+    killSwitch = !killSwitch
+    try { localStorage.setItem('proxi-kill-switch', killSwitch ? '1' : '0') } catch {}
+  }
 
   getTheme() // ensure initialized
   onThemeChange(t => { theme = t })
@@ -172,7 +211,51 @@
       <p class="hint">Это удалит ключи, чаты, контакты. Без восстановления.</p>
     </div>
   {/if}
-</div>
+
+    <!-- ONB-002: Seed backup -->
+    <div class="settings-section" data-testid="settings-seed">
+      <h4>🔑 Аккаунт и ключи</h4>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button data-testid="settings-show-seed" onclick={toggleSeed}>
+          {showSeed ? '👁️ Скрыть ключи' : '🔑 Показать nsec'}
+        </button>
+        <button data-testid="settings-export-seed" onclick={exportSeed}>💾 Экспорт JSON</button>
+      </div>
+      {#if showSeed && identity}
+        <div style="margin-top:8px;font-family:monospace;font-size:11px;word-break:break-all;background:#0f172a;padding:8px;border-radius:6px">
+          <label style="color:#94a3b8">npub:</label>
+          <div data-testid="settings-npub">{identity.npub}</div>
+          {#if seedVisible}
+            <label style="color:#fbbf24;margin-top:8px;display:block">⚠️ nsec (никому не показывайте):</label>
+            <div data-testid="settings-nsec" style="color:#fbbf24">{identity.nsec}</div>
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- ONB-002: Push notifications -->
+    <div class="settings-section">
+      <h4>🔔 Уведомления</h4>
+      <button data-testid="settings-push-toggle" onclick={enablePush}>
+        {pushEnabled ? '✅ Push включены' : 'Включить push'}
+      </button>
+    </div>
+
+    <!-- ONB-002: Kill switch -->
+    <div class="settings-section">
+      <h4>🛡️ VPN Kill Switch</h4>
+      <button data-testid="settings-kill-switch" onclick={toggleKillSwitch}>
+        {killSwitch ? '✅ Вкл (блокировать без VPN)' : '❌ Выкл'}
+      </button>
+    </div>
+
+    <!-- ONB-002: Relay list -->
+    <div class="settings-section">
+      <h4>📡 Nostr Relay</h4>
+      <textarea data-testid="settings-relays" bind:value={relayList} rows="4" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px;font-family:monospace;font-size:12px"></textarea>
+    </div>
+
+  </div>
 
 <style>
   .settings { width: 360px; background: #17212b; height: 100vh; overflow-y: auto; border-right: 1px solid #0e1621; }
