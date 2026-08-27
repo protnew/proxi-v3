@@ -34,6 +34,7 @@
 </div>
 
 <style>
+  /* data-viz, не UI */
   .network-graph { padding: 16px; }
   .stats { display: flex; gap: 24px; margin: 16px 0; }
   .stat { display: flex; flex-direction: column; }

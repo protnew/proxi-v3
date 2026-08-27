@@ -65,17 +65,17 @@
 
 <style>
   .call-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 300; display: flex; align-items: center; justify-content: center; }
-  .call-card { background: #1e2c3a; border-radius: 16px; padding: 32px; text-align: center; min-width: 300px; }
+  .call-card { background: var(--bg-tertiary); border-radius: 16px; padding: 32px; text-align: center; min-width: 300px; }
   h3 { margin: 12px 0 8px; }
-  .peer { font-size: 12px; color: #7a8a9a; }
+  .peer { font-size: 12px; color: var(--text-muted); }
   .ring-anim { font-size: 48px; animation: pulse 1s infinite; }
   @keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
   .spinner-c { font-size: 48px; animation: spin 2s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .connected-icon { font-size: 48px; }
-  .duration { color: #4fae4e; font-size: 18px; font-family: monospace; }
+  .duration { color: var(--success); font-size: 18px; font-family: monospace; }
   .call-btns { display: flex; gap: 16px; justify-content: center; margin-top: 16px; }
   button { padding: 12px 24px; border: none; border-radius: 8px; font-size: 14px; cursor: pointer; }
-  .accept { background: #2a5a3a; color: #4fae4e; }
-  .reject { background: #3a1a1a; color: #ff6b6b; margin-top: 12px; }
+  .accept { background: color-mix(in srgb, var(--success) 22%, var(--bg)); color: var(--success); }
+  .reject { background: color-mix(in srgb, var(--danger) 22%, var(--bg)); color: var(--danger); margin-top: 12px; }
 </style>

@@ -111,7 +111,7 @@
     {:else}
       {#each filtered as chat (chat.id)}
       <button class="chat-item" class:active={currentActiveId === chat.id} onclick={() => selectChat(chat.id)}>
-        <div class="avatar" style="background:{chat.type === 'group' ? '#2a4a6a' : '#3a5a3a'}">
+        <div class="avatar" class:group-av={chat.type === 'group'}>
           {chat.avatar}
         </div>
         <div class="info">
@@ -168,37 +168,45 @@
   .info { flex: 1; min-width: 0; }
   .top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
   .name { font-size: 15px; font-weight: 600; color: var(--text); }
-  .time { font-size: 11px; color: var(--text-muted); }
+  .time { font-size: 12px; color: var(--text-muted); }
   .bottom-row { display: flex; justify-content: space-between; align-items: center; }
   .last-msg { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
   .last-msg em { color: var(--accent); font-style: normal; }
-  .badge { background: linear-gradient(135deg, var(--accent), var(--accent-light)); color: white; font-size: 11px; font-weight: 700; border-radius: 50%; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0 5px; box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4); }
+  .badge { background: linear-gradient(135deg, var(--accent), var(--accent-light)); color: var(--text-on-accent); font-size: 12px; font-weight: 700; border-radius: 50%; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; padding: 0 5px; box-shadow: 0 2px 6px rgba(59, 130, 246, 0.4); }
   .empty { padding: 40px 20px; text-align: center; color: var(--text-dim); font-size: 13px; }
 
   @media (max-width: 768px) {
     .sidebar { width: 100%; min-width: 100%; }
   }
   .search-results { padding: 4px 0; }
-  .search-header { padding: 8px 12px; font-size: 12px; color: #7a8a9a; }
+  .search-header { padding: 8px 12px; font-size: 12px; color: var(--text-muted); }
   .search-item { display: block; width: 100%; text-align: left; background: none; border: none; color: inherit; font-family: inherit; padding: 8px 12px; cursor: pointer; }
-  .search-item:hover { background: #202b36; }
-  .si-chat { font-size: 12px; font-weight: 600; color: #e0e0e0; }
-  .si-text { font-size: 11px; color: #7a8a9a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .search-item:hover { background: var(--bg-hover); }
+  .si-chat { font-size: 12px; font-weight: 600; color: var(--text); }
+  .si-text { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .c-name.online::before {
     content: '';
     display: inline-block;
     width: 8px;
     height: 8px;
-    background: #4ade80;
+    background: var(--success);
     border-radius: 50%;
     margin-right: 6px;
   }
 
   .my-id-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--bg-tertiary); }
-  .my-id-label { font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
-  .my-id-val { flex: 1; font-size: 11px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .my-id-label { font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+  .my-id-val { flex: 1; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .copy-id { background: none; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; padding: 2px 8px; color: var(--text); }
   .copy-id:hover { background: var(--bg-hover); }
   .copy-id:disabled { opacity: 0.4; cursor: default; }
+
+  input:focus-visible, button:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .avatar { background: color-mix(in srgb, var(--success) 22%, var(--bg)); }
+  .avatar.group-av { background: color-mix(in srgb, var(--accent) 35%, var(--bg)); }
 </style>

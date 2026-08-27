@@ -30,9 +30,9 @@
 {/if}
 
 <style>
-  .emoji-picker { position: absolute; bottom: 60px; left: 60px; width: 300px; max-height: 280px; overflow-y: auto; background: #1e2c3a; border: 1px solid #2a3a4a; border-radius: 12px; padding: 8px; z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
-  .gn { font-size: 11px; color: #667; padding: 4px 8px; }
+  .emoji-picker { position: absolute; bottom: 60px; left: 60px; width: 300px; max-height: 280px; overflow-y: auto; background: var(--bg-tertiary); border: 1px solid var(--bg-hover); border-radius: 12px; padding: 8px; z-index: 100; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+  .gn { font-size: 12px; color: var(--text-muted); padding: 4px 8px; }
   .eg { display: flex; flex-wrap: wrap; }
   .eb { width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; font-size: 18px; background: none; border: none; cursor: pointer; border-radius: 6px; padding: 0; }
-  .eb:hover { background: #2a3a4a; }
+  .eb:hover { background: var(--bg-hover); }
 </style>

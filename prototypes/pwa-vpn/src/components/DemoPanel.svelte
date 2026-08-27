@@ -178,15 +178,15 @@
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
     z-index: 1000;
-    color: #e2e8f0;
+    color: var(--text);
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 13px;
   }
 
   .demo-header {
-    background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+    background: linear-gradient(90deg, var(--accent), var(--accent));
     padding: 8px 16px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -202,36 +202,36 @@
   }
 
   .info-label {
-    font-size: 10px;
+    font-size: 12px;
     text-transform: uppercase;
-    color: #64748b;
+    color: var(--text-muted);
     margin-bottom: 3px;
   }
 
   .info-value {
     font-family: 'JetBrains Mono', monospace;
     font-size: 13px;
-    color: #f1f5f9;
+    color: var(--text);
   }
   .info-sub {
-    font-size: 10px;
-    color: #475569;
+    font-size: 12px;
+    color: var(--border);
     margin-top: 2px;
   }
 
-  .ws-ok { color: #4ade80; }
-  .ws-fail { color: #f87171; }
+  .ws-ok { color: var(--success); }
+  .ws-fail { color: var(--danger); }
 
   .id-row {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
   }
   .id-value {
     flex: 1;
     font-family: monospace;
     font-size: 12px;
-    color: #94a3b8;
+    color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
   }
@@ -241,15 +241,15 @@
     border-radius: 6px;
     padding: 2px 8px;
     cursor: pointer;
-    color: #e2e8f0;
+    color: var(--text);
     font-size: 12px;
   }
   .copy-btn:hover { background: rgba(255,255,255,0.1); }
 
   .role-section { margin-top: 8px; }
   .section-title {
-    font-size: 11px;
-    color: #64748b;
+    font-size: 12px;
+    color: var(--text-muted);
     margin-bottom: 6px;
   }
 
@@ -262,7 +262,7 @@
     flex: 1;
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
-    color: #e2e8f0;
+    color: var(--text);
     padding: 8px 12px;
     border-radius: 8px;
     font-size: 13px;
@@ -274,21 +274,21 @@
   }
   .role-btn.active.t1 {
     background: rgba(59, 130, 246, 0.25);
-    border-color: #3b82f6;
-    color: #60a5fa;
+    border-color: var(--accent);
+    color: var(--accent-light);
   }
   .role-btn.active.t2 {
     background: rgba(139, 92, 246, 0.25);
-    border-color: #8b5cf6;
-    color: #a78bfa;
+    border-color: var(--accent);
+    color: var(--accent-light);
   }
 
   .dm-section { margin-top: 10px; }
   .dm-btn {
     width: 100%;
-    background: linear-gradient(135deg, #10b981, #059669);
+    background: linear-gradient(135deg, var(--success), var(--success));
     border: none;
-    color: white;
+    color: var(--text-on-accent);
     font-weight: 600;
     padding: 10px;
     border-radius: 8px;
@@ -302,8 +302,8 @@
   }
 
   .hint {
-    font-size: 11px;
-    color: #475569;
+    font-size: 12px;
+    color: var(--border);
     margin-top: 4px;
     text-align: center;
   }

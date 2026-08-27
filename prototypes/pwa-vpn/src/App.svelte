@@ -18,21 +18,7 @@ const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width:
 
   // Dev mode: show raw SOCKS5/WG settings (hidden in product mode)
   const isDevMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1';
-if (initialView === 'settings') {
-  setTimeout(() => { stores.showSettings.set(true); }, 500);
-}
-if (initialView === 'newchat') {
-  setTimeout(() => { stores.showNewChat.update(() => true); }, 500);
-}
-if (initialView === 'advanced') {
-  setTimeout(() => {
-    stores.showSettings.set(true);
-    setTimeout(() => {
-      const gearBtn = document.querySelector('button:last-child');
-      if (gearBtn) (gearBtn as HTMLElement).click();
-    }, 300);
-  }, 500);
-}
+/* deep-link applied after stores import */
 
   import { onMount } from 'svelte'
   import * as stores from './stores/messenger'
@@ -66,6 +52,13 @@ if (initialView === 'advanced') {
   let needsOnboarding = $state(false)
   let statusText = $state('Загрузка...')
   import { showSettings, showNewChat, activeChatId } from './stores/messenger'
+if (initialView === 'settings' || initialView === 'advanced') {
+  stores.showSettings.set(true);
+}
+if (initialView === 'newchat') {
+  stores.showNewChat.update(() => true);
+}
+
   
   let showSettingsView = $derived($showSettings)
   let showNewChatView = $derived($showNewChat)
@@ -332,14 +325,23 @@ if (initialView === 'advanced') {
   setInterval(() => { stores.saveChats(); stores.saveContacts() }, 30000)
 </script>
 
-<div class="loading-overlay-bg" id="loading-overlay" class:hidden={!loading}>
-    <div class="spinner"></div>
-    <p>🛡️ {statusText}</p>
-  </div>
-  {#if needsOnboarding}
+{#if needsOnboarding}
     <AuthScreen onDone={() => { needsOnboarding = false; location.reload() }} />
   {:else}
   <div class="app">
+    {#if loading}
+    <div class="loading-overlay-bg" id="loading-overlay">
+      <div class="skeleton-col" aria-hidden="true">
+        <div class="skeleton-chat"></div>
+        <div class="skeleton-chat"></div>
+        <div class="skeleton-chat"></div>
+      </div>
+      <div class="loading-status">
+        <div class="spinner"></div>
+        <p>🛡️ {statusText}</p>
+      </div>
+    </div>
+    {/if}
     {#if showSettingsView}
       <div class="settings-mobile-wrapper" class:hidden-mobile={mobileChatOpen}>
         <Settings />
@@ -365,10 +367,10 @@ if (initialView === 'advanced') {
   {/if}
 
 <style>
-  :global(body) { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; transition: background 0.3s, color 0.3s; }
+  :global(body) { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; transition: background 180ms ease-in-out, color 180ms ease-in-out; }
   :global(*) { box-sizing: border-box; }
 
-  /* Dark theme (Premium Glassmorphism) */
+  /* Dark theme — HEX only here */
   :global(:root), :global(:root[data-theme="dark"]) {
     --bg: #0f172a;
     --bg-secondary: rgba(30, 41, 59, 0.7);
@@ -377,46 +379,63 @@ if (initialView === 'advanced') {
     --bg-active: rgba(56, 189, 248, 0.2);
     --text: #f8fafc;
     --text-muted: #94a3b8;
-    --text-dim: #64748b;
-    --border: rgba(255, 255, 255, 0.1);
-    --accent: #3b82f6;
+    --text-dim: #94a3b8;
+    --border: #475569;
+    --accent: #1d4ed8;
     --accent-light: #60a5fa;
+    --text-on-accent: #f8fafc;
     --success: #10b981;
     --danger: #ef4444;
+    --warn: #fbbf24;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.24);
     --bubble: rgba(30, 41, 59, 0.8);
-    --bubble-mine: linear-gradient(135deg, #3b82f6, #6366f1);
+    --bubble-mine: linear-gradient(135deg, #1d4ed8, #1e40af);
   }
 
-  /* Light theme */
   :global(:root[data-theme="light"]) {
     --bg: #f8fafc;
-    --bg-secondary: rgba(255, 255, 255, 0.8);
-    --bg-tertiary: rgba(241, 245, 249, 0.7);
-    --bg-hover: rgba(226, 232, 240, 0.6);
-    --bg-active: rgba(59, 130, 246, 0.1);
+    --bg-secondary: rgba(255, 255, 255, 0.92);
+    --bg-tertiary: rgba(241, 245, 249, 0.9);
+    --bg-hover: rgba(226, 232, 240, 0.8);
+    --bg-active: rgba(29, 78, 216, 0.12);
     --text: #0f172a;
-    --text-muted: #64748b;
-    --text-dim: #94a3b8;
-    --border: rgba(0, 0, 0, 0.05);
-    --accent: #2563eb;
-    --accent-light: #3b82f6;
+    --text-muted: #374151;
+    --text-dim: #374151;
+    --border: #64748b;
+    --accent: #1e40af;
+    --accent-light: #2563eb;
+    --text-on-accent: #ffffff;
     --success: #059669;
     --danger: #dc2626;
+    --warn: #b45309;
+    --shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
     --bubble: rgba(255, 255, 255, 0.9);
-    --bubble-mine: linear-gradient(135deg, #3b82f6, #4f46e5);
+    --bubble-mine: linear-gradient(135deg, #1e40af, #1d4ed8);
   }
-  :global(::-webkit-scrollbar) { width: 6px; }
+  :global(::-webkit-scrollbar) { width: 8px; }
   :global(::-webkit-scrollbar-track) { background: transparent; }
-  :global(::-webkit-scrollbar-thumb) { background: #333; border-radius: 3px; }
+  :global(::-webkit-scrollbar-thumb) { background: var(--border); border-radius: 8px; }
   :global(button) { font-family: inherit; }
 
-  .app { display: flex; height: 100vh; overflow: hidden; }
+  .app { display: flex; height: 100vh; overflow: hidden; position: relative; }
 
-  .loading-overlay-bg { position: fixed; inset: 0; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: var(--bg); }
-  .loading-overlay-bg.hidden { display: none; }
-  .spinner { width: 40px; height: 40px; border: 3px solid #2a2a4a; border-top-color: #3a7bd5; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
+  .loading-overlay-bg {
+    position: absolute; inset: 0; z-index: 20;
+    display: flex; align-items: stretch;
+    background: color-mix(in srgb, var(--bg) 72%, transparent);
+  }
+  .skeleton-col { width: 280px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+  .skeleton-chat {
+    min-height: 64px; border-radius: 12px;
+    background: linear-gradient(90deg, var(--bg-secondary) 0%, var(--bg-hover) 50%, var(--bg-secondary) 100%);
+    background-size: 200% 100%;
+  }
+  .loading-status {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .spinner { width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 16px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading-overlay-bg p { color: #7a8a9a; font-size: 14px; }
+  .loading-overlay-bg p { color: var(--text-muted); font-size: 16px; }
 
   /* Mobile wrappers */
   .sidebar-mobile-wrapper { height: 100%; }

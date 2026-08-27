@@ -157,25 +157,25 @@
   {:else if tab === 'advanced'}
     <div class="sec">
       <h4>🔐 Шифрование</h4>
-      <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+      <div class="row row-between">
         <span>E2E шифрование</span>
-        <button style="background:{e2eOn ? '#3b82f6' : '#333'};color:white;border:none;padding:6px 16px;border-radius:8px;cursor:pointer"
+        <button class="toggle-btn" class:on={e2eOn}
           onclick={() => { e2eOn = !e2eOn; setE2EEnabled(e2eOn); }}>
           {e2eOn ? 'ON ✅' : 'OFF ❌'}
         </button>
       </div>
-      <p style="font-size:11px;color:#666;margin-top:4px">XChaCha20-Poly1305 AEAD шифрование сообщений</p>
+      <p class="hint">XChaCha20-Poly1305 AEAD шифрование сообщений</p>
     </div>
     <div class="sec">
       <h4>🌐 VPN</h4>
-      <div class="row" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+      <div class="row row-between">
         <span>WebRTC Proxy</span>
-        <button style="background:{vpnOn ? '#3b82f6' : '#333'};color:white;border:none;padding:6px 16px;border-radius:8px;cursor:pointer"
+        <button class="toggle-btn" class:on={vpnOn}
           onclick={async () => { vpnOn = !vpnOn; await toggleVPN(vpnOn); }}>
           {vpnOn ? 'ON ✅' : 'OFF ❌'}
         </button>
       </div>
-      <p style="font-size:11px;color:#666;margin-top:4px">Маршрутизация трафика через peer SOCKS5</p>
+      <p class="hint">Маршрутизация трафика через peer SOCKS5</p>
     </div>
   {:else if tab === 'contacts'}
     <div class="sec">
@@ -215,19 +215,19 @@
     <!-- ONB-002: Seed backup -->
     <div class="settings-section" data-testid="settings-seed">
       <h4>🔑 Аккаунт и ключи</h4>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <div class="btn-row">
         <button data-testid="settings-show-seed" onclick={toggleSeed}>
           {showSeed ? '👁️ Скрыть ключи' : '🔑 Показать nsec'}
         </button>
         <button data-testid="settings-export-seed" onclick={exportSeed}>💾 Экспорт JSON</button>
       </div>
       {#if showSeed && identity}
-        <div style="margin-top:8px;font-family:monospace;font-size:11px;word-break:break-all;background:#0f172a;padding:8px;border-radius:6px">
-          <label style="color:#94a3b8">npub:</label>
+        <div class="seed-box">
+          <label>npub:</label>
           <div data-testid="settings-npub">{identity.npub}</div>
           {#if seedVisible}
-            <label style="color:#fbbf24;margin-top:8px;display:block">⚠️ nsec (никому не показывайте):</label>
-            <div data-testid="settings-nsec" style="color:#fbbf24">{identity.nsec}</div>
+            <label class="warn-label">nsec (никому не показывайте):</label>
+            <div data-testid="settings-nsec" class="nsec">{identity.nsec}</div>
           {/if}
         </div>
       {/if}
@@ -252,38 +252,56 @@
     <!-- ONB-002: Relay list -->
     <div class="settings-section">
       <h4>📡 Nostr Relay</h4>
-      <textarea data-testid="settings-relays" bind:value={relayList} rows="4" style="width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:6px;padding:8px;font-family:monospace;font-size:12px"></textarea>
+      <textarea data-testid="settings-relays" bind:value={relayList} rows="4" class="relay-ta"></textarea>
     </div>
 
   </div>
 
 <style>
-  .settings { width: 360px; background: #17212b; height: 100vh; overflow-y: auto; border-right: 1px solid #0e1621; }
-  .sh { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #0e1621; }
-  h3,h4 { margin: 0; } h4 { color: #7a8a9a; font-size: 13px; margin: 16px 0 8px; }
-  .back { background: none; border: none; color: #aaa; font-size: 18px; cursor: pointer; width: auto; padding: 4px 8px; }
-  .tabs { display: flex; border-bottom: 1px solid #0e1621; }
-  .tabs button { flex: 1; background: none; border: none; color: #7a8a9a; padding: 12px; cursor: pointer; font-size: 16px; }
-  .tabs button.active { color: #3a9aff; border-bottom: 2px solid #3a9aff; }
+  .settings { width: 360px; background: var(--bg-secondary); height: 100vh; overflow-y: auto; border-right: 1px solid var(--border); }
+  .sh { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  h3,h4 { margin: 0; } h4 { color: var(--text-muted); font-size: 13px; margin: 16px 0 8px; }
+  .back { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; width: auto; padding: 4px 8px; }
+  .tabs { display: flex; border-bottom: 1px solid var(--border); }
+  .tabs button { flex: 1; background: none; border: none; color: var(--text-muted); padding: 12px; cursor: pointer; font-size: 16px; }
+  .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
   .sec { padding: 16px; }
-  label { display: block; font-size: 12px; color: #7a8a9a; margin: 8px 0 4px; }
-  input,textarea { width: 100%; background: #242f3d; border: none; color: #e0e0e0; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; box-sizing: border-box; font-family: inherit; }
+  label { display: block; font-size: 12px; color: var(--text-muted); margin: 8px 0 4px; }
+  input,textarea { width: 100%; background: var(--bg-tertiary); border: none; color: var(--text); padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; box-sizing: border-box; font-family: inherit; }
   .av-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-  .av { width: 36px; height: 36px; border-radius: 50%; background: #242f3d; border: 2px solid transparent; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-  .av.sel { border-color: #3a9aff; }
+  .av { width: 36px; height: 36px; border-radius: 50%; background: var(--bg-tertiary); border: 2px solid transparent; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .av.sel { border-color: var(--accent); }
   .kr { display: flex; gap: 6px; align-items: center; }
-  .kr code { flex: 1; background: #242f3d; padding: 8px; border-radius: 6px; font-size: 11px; word-break: break-all; }
-  .kr button { background: #242f3d; border: none; color: #aaa; padding: 6px 10px; border-radius: 6px; cursor: pointer; width: auto; }
-  .save { width: 100%; padding: 12px; background: #3a7bd5; border: none; color: white; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
-  .danger { width: 100%; padding: 10px; background: #3a1a1a; border: none; color: #ff6b6b; border-radius: 8px; cursor: pointer; }
-  .theme-btn { width: 100%; padding: 10px; background: #242f3d; border: none; color: #e0e0e0; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: inherit; }
-  .hint { font-size: 11px; color: #555; margin-top: 6px; }
+  .kr code { flex: 1; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 12px; word-break: break-all; }
+  .kr button { background: var(--bg-tertiary); border: none; color: var(--text-muted); padding: 6px 10px; border-radius: 6px; cursor: pointer; width: auto; }
+  .save { width: 100%; padding: 12px; background: var(--accent); border: none; color: var(--text-on-accent); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .danger { width: 100%; padding: 10px; background: color-mix(in srgb, var(--danger) 22%, var(--bg)); border: none; color: var(--danger); border-radius: 8px; cursor: pointer; }
+  .theme-btn { width: 100%; padding: 10px; background: var(--bg-tertiary); border: none; color: var(--text); border-radius: 8px; cursor: pointer; font-size: 14px; font-family: inherit; }
+  .hint { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
   .ci { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: 8px; }
-  .ca { font-size: 20px; width: 36px; height: 36px; background: #3a5a3a; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .cn { font-size: 14px; } .cs { font-size: 10px; } .cp { font-size: 10px; color: #555; }
-  .emp { color: #555; text-align: center; padding: 20px; font-size: 13px; }
-  .qr-btn { width: 100%; padding: 10px; background: #242f3d; border: none; color: #3a9aff; border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px; font-family: inherit; }
+  .ca { font-size: 20px; width: 36px; height: 36px; background: color-mix(in srgb, var(--success) 22%, var(--bg)); border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .cn { font-size: 14px; } .cs { font-size: 12px; } .cp { font-size: 12px; color: var(--text-muted); }
+  .emp { color: var(--text-muted); text-align: center; padding: 20px; font-size: 13px; }
+  .qr-btn { width: 100%; padding: 10px; background: var(--bg-tertiary); border: none; color: var(--accent); border-radius: 8px; cursor: pointer; font-size: 14px; margin-top: 8px; font-family: inherit; }
   .qr-box { text-align: center; margin-top: 12px; }
   .qr-box img { width: 200px; height: 200px; border-radius: 12px; }
-  .qr-box p { font-size: 11px; color: #7a8a9a; margin-top: 8px; }
+  .qr-box p { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+
+  .row-between { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; }
+  .toggle-btn { background: var(--bg-tertiary); color: var(--text-on-accent); border: none; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: all 180ms ease-in-out; }
+  .toggle-btn.on { background: var(--accent); }
+  .toggle-btn:hover:not(:disabled) { filter: brightness(1.08); }
+  .toggle-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .seed-box { margin-top: 8px; font-family: monospace; font-size: 12px; word-break: break-all; background: var(--bg); padding: 8px; border-radius: 8px; }
+  .warn-label { color: var(--warn); margin-top: 8px; display: block; }
+  .nsec { color: var(--warn); }
+  .relay-ta { width: 100%; background: var(--bg-secondary); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px; font-family: monospace; font-size: 12px; }
+  .save:hover:not(:disabled), .danger:hover:not(:disabled), .theme-btn:hover:not(:disabled), .qr-btn:hover:not(:disabled), .back:hover { filter: brightness(1.08); }
+  .save:focus-visible, .danger:focus-visible, .theme-btn:focus-visible, .qr-btn:focus-visible, .back:focus-visible, .tabs button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px;
+  }
+  button, input, textarea { transition: all 180ms ease-in-out; }
+  .hint { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .cs, .cp { font-size: 12px; }
 </style>

@@ -17,10 +17,10 @@
 </div>
 
 <style>
-  .content-card { display: flex; gap: 12px; padding: 12px; border-radius: 8px; background: #f5f5f5; cursor: pointer; }
-  .content-card:hover { background: #e0e0e0; }
+  .content-card { display: flex; gap: 12px; padding: 12px; border-radius: 8px; background: var(--bg-tertiary); cursor: pointer; }
+  .content-card:hover { background: var(--text); }
   .icon { font-size: 2rem; }
   .info { flex: 1; }
   h4 { margin: 0; font-size: 0.9rem; }
-  .meta { display: flex; gap: 12px; font-size: 0.75rem; color: #666; margin-top: 4px; }
+  .meta { display: flex; gap: 12px; font-size: 0.75rem; color: var(--text-muted); margin-top: 4px; }
 </style>

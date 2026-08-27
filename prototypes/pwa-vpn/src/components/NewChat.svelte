@@ -112,28 +112,28 @@
 
 <style>
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: center; justify-content: center; }
-  .dialog { background: #1e2c3a; border-radius: 12px; width: 420px; max-height: 80vh; overflow-y: auto; }
-  .dialog-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid #0e1621; }
+  .dialog { background: var(--bg-tertiary); border-radius: 12px; width: 420px; max-height: 80vh; overflow-y: auto; }
+  .dialog-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--bg); }
   h3 { margin: 0; font-size: 16px; }
-  .dialog-header button { background: none; border: none; color: #aaa; font-size: 18px; cursor: pointer; width: auto; }
-  .tabs { display: flex; border-bottom: 1px solid #0e1621; }
-  .tabs button { flex: 1; background: none; border: none; color: #7a8a9a; padding: 10px; cursor: pointer; font-size: 13px; }
-  .tabs button.active { color: #3a9aff; border-bottom: 2px solid #3a9aff; }
+  .dialog-header button { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; width: auto; }
+  .tabs { display: flex; border-bottom: 1px solid var(--bg); }
+  .tabs button { flex: 1; background: none; border: none; color: var(--text-muted); padding: 10px; cursor: pointer; font-size: 13px; }
+  .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
   .form { padding: 16px; }
-  label { display: block; font-size: 12px; color: #7a8a9a; margin: 8px 0 4px; }
-  textarea, input { width: 100%; background: #242f3d; border: none; color: #e0e0e0; padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; font-family: monospace; box-sizing: border-box; }
-  .start-btn { width: 100%; padding: 12px; background: #3a7bd5; border: none; color: white; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  label { display: block; font-size: 12px; color: var(--text-muted); margin: 8px 0 4px; }
+  textarea, input { width: 100%; background: var(--bg-tertiary); border: none; color: var(--text); padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; font-family: monospace; box-sizing: border-box; }
+  .start-btn { width: 100%; padding: 12px; background: var(--accent); border: none; color: var(--text-on-accent); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .start-btn:disabled { opacity: 0.4; }
-  .share-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid #2a3a4a; }
-  .share-section p { font-size: 12px; color: #7a8a9a; margin-bottom: 6px; }
-  .key-box { display: flex; gap: 6px; align-items: center; }
-  .key-box code { flex: 1; background: #242f3d; padding: 8px; border-radius: 6px; font-size: 11px; word-break: break-all; }
-  .key-box button { background: #242f3d; border: none; color: #aaa; padding: 6px 10px; border-radius: 6px; cursor: pointer; width: auto; }
+  .share-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bg-hover); }
+  .share-section p { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }
+  .key-box { display: flex; gap: 8px; align-items: center; }
+  .key-box code { flex: 1; background: var(--bg-tertiary); padding: 8px; border-radius: 6px; font-size: 12px; word-break: break-all; }
+  .key-box button { background: var(--bg-tertiary); border: none; color: var(--text-muted); padding: 6px 10px; border-radius: 6px; cursor: pointer; width: auto; }
   .contact-list { padding: 8px; }
   .contact { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; cursor: pointer; width: 100%; text-align: left; background: none; border: none; color: inherit; font-family: inherit; }
-  .contact:hover { background: #242f3d; }
-  .c-av { font-size: 20px; width: 36px; height: 36px; background: #3a5a3a; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .contact:hover { background: var(--bg-tertiary); }
+  .c-av { font-size: 20px; width: 36px; height: 36px; background: color-mix(in srgb, var(--success) 22%, var(--bg)); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
   .c-name { flex: 1; font-size: 14px; }
-  .c-pk { font-size: 10px; color: #555; }
-  .empty { text-align: center; color: #555; padding: 30px; font-size: 13px; }
+  .c-pk { font-size: 12px; color: var(--text-muted); }
+  .empty { text-align: center; color: var(--text-muted); padding: 30px; font-size: 13px; }
 </style>
