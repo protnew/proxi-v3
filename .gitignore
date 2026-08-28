@@ -67,3 +67,5 @@ src/src-vpn/dist/
 **/server_crit*.log
 **/data/vpn/private.key
 **/messenger.db
+# local Nostr identity (nsec) — never commit
+src/src-vpn/data/identity.json
