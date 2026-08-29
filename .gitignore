@@ -69,3 +69,6 @@ src/src-vpn/dist/
 **/messenger.db
 # local Nostr identity (nsec) — never commit
 src/src-vpn/data/identity.json
+# local VAPID keys — never commit
+src/src-vpn/data/vapid.json
+src/src-vpn/data/uploads/
