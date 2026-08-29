@@ -18,7 +18,7 @@ function Test-Port([int]$Port) {
 Write-Host "=== Proxi Messenger DEV (native) ===" -ForegroundColor Cyan
 Write-Host "Code: $Root"
 
-if (-not (Test-Port 8080)) {
+if (-not (Test-Port 8090)) {
   Write-Host "Building Go server..." -ForegroundColor Yellow
   Push-Location $Vpn
   try {
@@ -26,12 +26,12 @@ if (-not (Test-Port 8080)) {
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
     $data = Join-Path $Vpn "data-dev"
     New-Item -ItemType Directory -Force -Path $data | Out-Null
-    $env:PORT = "8080"
+    $env:PORT = "8090"
     $env:DATA_DIR = $data
     Start-Process -FilePath (Join-Path $Vpn "messenger-server-dev.exe") -WorkingDirectory $Vpn -WindowStyle Minimized
   } finally { Pop-Location }
   Start-Sleep -Seconds 1
-} else { Write-Host "API :8080 already up" -ForegroundColor Green }
+} else { Write-Host "API :8090 already up" -ForegroundColor Green }
 
 if (-not (Test-Port 5173)) {
   Write-Host "Starting Vite :5173..." -ForegroundColor Yellow
@@ -44,5 +44,5 @@ if (-not (Test-Port 5173)) {
 } else { Write-Host "UI :5173 already up" -ForegroundColor Green }
 
 Write-Host "UI:  http://127.0.0.1:5173/" -ForegroundColor Green
-Write-Host "API: http://127.0.0.1:8080/api/health" -ForegroundColor Green
+Write-Host "API: http://127.0.0.1:8090/api/health" -ForegroundColor Green
 Write-Host "2 users: Chrome + Incognito, copy User ID in New Chat"
