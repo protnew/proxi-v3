@@ -5,7 +5,7 @@
   import { dataRelay } from '../lib/nostr-data-relay'
   import { onMount } from 'svelte'
   import { getPubkey } from '../lib/api'
-  import { getTunnelStatus, startTunnel, stopTunnel, type TunnelStatus } from '../lib/amnezia-tunnel'
+  import { getTunnelStatus, stopTunnel, type TunnelStatus } from '../lib/amnezia-tunnel'
   import { subscribeWebPush, fetchPushConfig, sendTestPush } from '../lib/web-push'
   import { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders, startWTServer } from '../lib/vpn-utils.svelte';
 async function startVPNSignaling(targetPubkey: string) {
@@ -108,18 +108,11 @@ async function startVPNSignaling(targetPubkey: string) {
     } catch { /* offline */ }
   })
   async function startInAppTunnel() {
+    // Product path: in-app WebRTC DataChannel (VPN-101). Amnezia kernel is Advanced.
     tunnelBusy = true
     try {
-      const peerPublicKey = (friendId && friendId.length > 40)
-        ? friendId
-        : 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-        const inviteEndpoint = (typeof localStorage !== 'undefined' && localStorage.getItem('proxi_peer_endpoint')) || ''
-        const endpoint = inviteEndpoint || ''
-      tunnelInfo = await startTunnel({ peerPublicKey, endpoint })
-      const label = tunnelInfo.mode === 'userspace' ? 'в приложении' : (tunnelInfo.mode || '')
-      amneziaStatus = `${tunnelInfo.state}/${label}`
-      addLog(`VPN-движок: ${tunnelInfo.state} (${tunnelInfo.mode || 'n/a'})`)
-      if (tunnelInfo.localPublicKey) addLog('local pub: ' + tunnelInfo.localPublicKey.slice(0, 20) + '…')
+      await localP2P.startAsHost()
+      addLog('VPN в приложении: эта вкладка — exit. Вторая вкладка — «войти peer»')
     } catch (e: any) {
       addLog('VPN-движок: ' + (e?.message || e))
     } finally {
@@ -129,8 +122,11 @@ async function startVPNSignaling(targetPubkey: string) {
   async function stopInAppTunnel() {
     tunnelBusy = true
     try {
-      tunnelInfo = await stopTunnel()
-      amneziaStatus = `${tunnelInfo.state}/выкл`
+      stopTabP2P()
+      try {
+        tunnelInfo = await stopTunnel()
+        amneziaStatus = `${tunnelInfo.state}/выкл`
+      } catch { /* Amnezia optional */ }
       addLog('VPN-движок остановлен')
     } catch (e: any) {
       addLog('stop: ' + (e?.message || e))
