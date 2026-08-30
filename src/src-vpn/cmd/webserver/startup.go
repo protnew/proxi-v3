@@ -256,10 +256,9 @@ func run() error {
 	// Start dead man's switch checker (every hour)
 	go srv.deadMansSwitchLoop()
 
-	// Initialize auth service (JWT)
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "dev-secret-change-me"
+	jwtSecret, err := requireJWTSecret()
+	if err != nil {
+		return err
 	}
 	authSvc := auth.NewAuthService(jwtSecret)
 	srv.authService = authSvc
