@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path"
 	"path/filepath"
 	"time"
 	"os/signal"
@@ -105,15 +104,10 @@ func run() error {
 		defer ipfsNode.Stop()
 	}
 
-	// Initialize SQLite store
-	dbPath := os.Getenv("DB_PATH")
-	dataDir := os.Getenv("DATA_DIR")
-	if dataDir == "" {
-		dataDir = "."
-	}
-	if dbPath == "" {
-		os.MkdirAll(dataDir, 0755)
-		dbPath = path.Join(dataDir, "messenger.db")
+	// Initialize SQLite store — one path, not process cwd
+	dbPath, dataDir := resolveDBPath()
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		return fmt.Errorf("data dir %s: %w", dataDir, err)
 	}
 	db, err := store.NewStore(dbPath)
 	if err != nil {

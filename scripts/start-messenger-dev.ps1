@@ -24,10 +24,11 @@ if (-not (Test-Port 8090)) {
   try {
     & $Go build -o messenger-server-dev.exe ./cmd/webserver/
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
-    $data = Join-Path $Vpn "data-dev"
+    $data = Join-Path $Vpn "data"
     New-Item -ItemType Directory -Force -Path $data | Out-Null
     $env:PORT = "8090"
     $env:DATA_DIR = $data
+    $env:DB_PATH = Join-Path $data "messenger.db"
     Start-Process -FilePath (Join-Path $Vpn "messenger-server-dev.exe") -WorkingDirectory $Vpn -WindowStyle Minimized
   } finally { Pop-Location }
   Start-Sleep -Seconds 1
