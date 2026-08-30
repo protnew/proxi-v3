@@ -84,10 +84,7 @@ func run() error {
 		distDir = "/app/dist"
 	}
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
+	port := resolvePort()
 
 	// Check dist dir exists
 	if info, err := os.Stat(distDir); err != nil || !info.IsDir() {
