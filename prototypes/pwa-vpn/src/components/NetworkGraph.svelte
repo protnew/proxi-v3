@@ -39,10 +39,10 @@
   .stats { display: flex; gap: 24px; margin: 16px 0; }
   .stat { display: flex; flex-direction: column; }
   .value { font-size: 1.5rem; font-weight: bold; }
-  .label { font-size: 0.8rem; color: #666; }
+  .label { font-size: 0.8rem; color: var(--text-muted); }
   .peer { display: flex; align-items: center; gap: 8px; padding: 8px; border-radius: 4px; }
-  .peer.online .dot { background: #4caf50; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; }
+  .peer.online .dot { background: var(--success); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
   .id { font-family: monospace; font-size: 0.85rem; }
-  .latency { margin-left: auto; color: #666; font-size: 0.8rem; }
+  .latency { margin-left: auto; color: var(--text-muted); font-size: 0.8rem; }
 </style>
