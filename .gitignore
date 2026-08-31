@@ -71,4 +71,5 @@ src/src-vpn/dist/
 src/src-vpn/data/identity.json
 # local VAPID keys — never commit
 src/src-vpn/data/vapid.json
+src/src-vpn/cmd/webserver/data/vapid.json
 src/src-vpn/data/uploads/
