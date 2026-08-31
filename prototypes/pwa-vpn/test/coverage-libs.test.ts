@@ -202,13 +202,17 @@ describe('ipfs-storage helpers', () => {
 describe('amnezia-tunnel', () => {
   it('getTunnelStatus / start / stop / buildConf via fetch mock', async () => {
     const { getTunnelStatus, startTunnel, stopTunnel, buildConf } = await import('../src/lib/amnezia-tunnel')
+    const jsonResp = (obj: unknown, status = 200) => {
+      const body = JSON.stringify(obj)
+      return { ok: status >= 200 && status < 300, status, json: async () => obj, text: async () => body }
+    }
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       const method = (init?.method || 'GET').toUpperCase()
-      if (method === 'GET') return { ok: true, status: 200, json: async () => ({ state: 'down', mode: 'off' }) }
-      if (method === 'POST' && String(url).includes('/conf')) return { ok: true, status: 200, json: async () => ({ conf: '[Interface]', phase: 'ok' }) }
-      if (method === 'POST') return { ok: true, status: 200, json: async () => ({ state: 'up', mode: 'amnezia' }) }
-      if (method === 'DELETE') return { ok: true, status: 200, json: async () => ({ state: 'down', mode: 'off' }) }
-      return { ok: false, status: 500, json: async () => ({ error: 'x' }) }
+      if (method === 'GET') return jsonResp({ state: 'down', mode: 'off' })
+      if (method === 'POST' && String(url).includes('/conf')) return jsonResp({ conf: '[Interface]', phase: 'ok' })
+      if (method === 'POST') return jsonResp({ state: 'up', mode: 'amnezia' })
+      if (method === 'DELETE') return jsonResp({ state: 'down', mode: 'off' })
+      return jsonResp({ error: 'x' }, 500)
     })
     vi.stubGlobal('fetch', fetchMock)
     expect((await getTunnelStatus()).state).toBe('down')

@@ -7,6 +7,7 @@ export default defineConfig({
     environment: 'node',
     globals: true,
     include: ['test/**/*.test.ts'],
+    exclude: ['test/archive/**'],
     setupFiles: ['test/_setup.ts'],
     coverage: {
       provider: 'v8',
