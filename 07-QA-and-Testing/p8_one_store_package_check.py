@@ -1,4 +1,4 @@
-"""P8: one UI store package = effector. nanostores gone from package.json and live src."""
+"""P8: one UI store package = effector in package.json. Live modules archived (P2). Live UI = messenger.ts."""
 import json, sys
 from pathlib import Path
 
@@ -41,11 +41,18 @@ for name in ["chats.ts", "profile.ts", "vpn.ts"]:
     else:
         print("PASS archived", name)
 
+# P2: live lib/effector.ts archived; Winner package stays. Do not require the file back.
 eff = PWA / "src" / "lib" / "effector.ts"
-if not eff.exists():
-    print("FAIL effector.ts missing"); fail += 1
+if eff.exists():
+    print("FAIL live effector.ts still present"); fail += 1
 else:
-    print("PASS effector.ts present")
+    print("PASS live effector.ts archived")
+
+msg = PWA / "src" / "stores" / "messenger.ts"
+if not msg.exists():
+    print("FAIL messenger.ts missing"); fail += 1
+else:
+    print("PASS live UI store messenger.ts")
 
 nm_nano = PWA / "node_modules" / "nanostores"
 if nm_nano.exists():

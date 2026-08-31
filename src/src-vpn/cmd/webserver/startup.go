@@ -268,7 +268,7 @@ func run() error {
 
 	// Create HTTP server
 	httpSrv := &http.Server{
-		Addr:              "127.0.0.1:" + port,
+		Addr:              httpBindAddr(port),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
