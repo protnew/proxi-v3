@@ -15,8 +15,30 @@ function Test-Port([int]$Port) {
   } catch { return $false }
 }
 
+function Import-DotEnv([string]$Path) {
+  if (-not (Test-Path $Path)) { return }
+  Get-Content -LiteralPath $Path | ForEach-Object {
+    $line = $_.Trim()
+    if ($line -eq "" -or $line.StartsWith("#")) { return }
+    $eq = $line.IndexOf("=")
+    if ($eq -lt 1) { return }
+    $k = $line.Substring(0, $eq).Trim()
+    $v = $line.Substring($eq + 1).Trim()
+    if ($v.Length -ge 2 -and $v.StartsWith('"') -and $v.EndsWith('"')) {
+      $v = $v.Substring(1, $v.Length - 2)
+    }
+    Set-Item -Path ("Env:" + $k) -Value $v
+  }
+}
+
 Write-Host "=== Proxi Messenger DEV (native) ===" -ForegroundColor Cyan
 Write-Host "Code: $Root"
+
+Import-DotEnv (Join-Path $Vpn ".env")
+if (-not $env:JWT_SECRET -or -not $env:JWT_SECRET.Trim()) {
+  Write-Host "JWT_SECRET is required (set env or gitignored src-vpn/.env). Refusing to start." -ForegroundColor Red
+  exit 1
+}
 
 if (-not (Test-Port 8090)) {
   Write-Host "Building Go server..." -ForegroundColor Yellow
