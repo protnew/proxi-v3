@@ -104,7 +104,7 @@ async function startVPNSignaling(targetPubkey: string) {
       const r = await fetch('/api/network/lan')
       const j = await r.json()
       if (j.phone_urls && j.phone_urls[0]) lanPhoneUrl = j.phone_urls[0]
-      else if (j.lan_ips && j.lan_ips[0]) lanPhoneUrl = `http://${j.lan_ips[0]}:${j.port || 8090}/?role=bob`
+      else if (j.reachable_from_lan && j.lan_ips && j.lan_ips[0]) lanPhoneUrl = `http://${j.lan_ips[0]}:${j.port || 8090}/?role=bob`
     } catch { /* offline */ }
   })
   async function startInAppTunnel() {
