@@ -13,6 +13,12 @@ func TestIsPrivateLANOrigin(t *testing.T) {
 		"http://localhost:8090":   true,
 		"http://localhost:5173":   true,
 		"http://127.0.0.1:5173":   true,
+		"http://localhost:5174":   true,
+		"http://localhost:4173":   true,
+		// loopback wrong port — default listener is 8090, not 8080
+		"http://localhost:8080":   false,
+		"http://127.0.0.1:8080":   false,
+		"http://localhost:3000":   false,
 		// private Class C
 		"http://192.168.1.5:8090": true,
 		"http://192.168.0.1:8090": true,
@@ -88,6 +94,19 @@ func TestCORSMiddlewareBlocksPublic(t *testing.T) {
 		acao := w.Header().Get("Access-Control-Allow-Origin")
 		if acao != "" {
 			t.Errorf("Public origin %s: ACAC header should be empty, got %q", origin, acao)
+		}
+	}
+}
+
+func TestCORSMiddlewareBlocksLocalhost8080(t *testing.T) {
+	for _, origin := range []string{"http://localhost:8080", "http://127.0.0.1:8080"} {
+		req := httptest.NewRequest("OPTIONS", "/api/health", nil)
+		req.Header.Set("Origin", origin)
+		w := httptest.NewRecorder()
+		applyCORSHeaders(w, req, true)
+		acao := w.Header().Get("Access-Control-Allow-Origin")
+		if acao != "" {
+			t.Errorf("origin %s: ACAC should be empty, got %q", origin, acao)
 		}
 	}
 }

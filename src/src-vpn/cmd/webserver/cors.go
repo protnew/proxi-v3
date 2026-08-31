@@ -49,7 +49,12 @@ func isPrivateLANOrigin(origin string) bool {
 	}
 	host := u.Hostname()
 	if host == "localhost" || host == "127.0.0.1" || host == "::1" {
-		return true
+		switch u.Port() {
+		case "5173", "5174", "4173", "8090":
+			return true
+		default:
+			return false
+		}
 	}
 	ip := net.ParseIP(host)
 	if ip == nil {
