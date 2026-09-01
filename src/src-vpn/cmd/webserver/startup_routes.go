@@ -46,7 +46,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 
 	http.HandleFunc("/api/health", publicApiChain(srv.handleHealth))
 	http.HandleFunc("/api/network/lan", publicApiChain(handleLANInfo))
-	http.HandleFunc("/api/status", publicApiChain(srv.handleStatus))
+	http.HandleFunc("/api/status", protectedApiChain(srv.handleStatus))
 	// AUTH-009: messages require JWT when auth is enabled
 	http.HandleFunc("/api/messages", protectedApiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -100,7 +100,9 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 
 	// File upload/download
 	http.HandleFunc("/api/files/upload", apiChain(srv.handleFileUpload))
-	http.HandleFunc("/api/files/", srv.handleFileGet) // no rate limit for downloads
+	// S1 (2026-09-01): file listing and management behind JWT. Downloads stay direct
+	// by ID inside the same handler after auth; rate limit intentionally skipped.
+	http.HandleFunc("/api/files/", protectedApiChain(srv.handleFileGet))
 	
 	// Media endpoints (v12 content_manifests)
 	http.HandleFunc("/api/media/upload", apiChain(srv.handleMediaUpload))

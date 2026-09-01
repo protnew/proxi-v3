@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/auth"
 	"github.com/unkillable-messenger/vpn/middleware"
 	"github.com/unkillable-messenger/vpn/storage"
 	"github.com/unkillable-messenger/vpn/store"
@@ -63,9 +64,14 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	apiChain := func(h http.HandlerFunc) http.HandlerFunc {
 		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(h)))
 	}
+	// S1 (2026-09-01): mirror prod chains — status/files behind JWT like registerRoutes does
+	testAuth := auth.NewAuthService("test-secret-setup")
+	protected := func(h http.HandlerFunc) http.HandlerFunc {
+		return securityHeadersMiddleware(corsMiddleware(rateLimitMiddleware(authMiddleware(testAuth, h))))
+	}
 
 	mux.HandleFunc("/api/health", apiChain(s.handleHealth))
-	mux.HandleFunc("/api/status", apiChain(s.handleStatus))
+	mux.HandleFunc("/api/status", protected(s.handleStatus))
 	mux.HandleFunc("/api/messages", apiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case "GET":
@@ -101,7 +107,7 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}))
 	mux.HandleFunc("/api/identity", apiChain(s.handleIdentityGet))
 	mux.HandleFunc("/api/files/upload", apiChain(s.handleFileUpload))
-	mux.HandleFunc("/api/files/", s.handleFileGet)
+	mux.HandleFunc("/api/files/", protected(s.handleFileGet))
 	mux.HandleFunc("/api/reactions", apiChain(s.handleReactions))
 	mux.HandleFunc("/api/read-receipts", apiChain(s.handleReadReceipts))
 	mux.HandleFunc("/api/profiles", apiChain(s.handleProfiles))
@@ -122,6 +128,23 @@ func get(t *testing.T, url string) *http.Response {
 	resp, err := http.Get(url)
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
+	}
+	return resp
+}
+
+// getAuth issues a GET with a valid Bearer token signed by the harness secret.
+func getAuth(t *testing.T, url string) *http.Response {
+	t.Helper()
+	authSvc := auth.NewAuthService("test-secret-setup")
+	tok, _, err := authSvc.GenerateTokenPair("user-1", "npub1test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	req, _ := http.NewRequest("GET", url, nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET(auth) %s: %v", url, err)
 	}
 	return resp
 }
@@ -168,9 +191,15 @@ func TestHealthEndpoint(t *testing.T) {
 
 func TestStatusEndpoint(t *testing.T) {
 	srv := setupTestServer(t)
+	// S1: without JWT the status endpoint must refuse
 	resp := get(t, srv.URL+"/api/status")
+	if resp.StatusCode != 401 {
+		t.Fatalf("status without JWT = %d, want 401", resp.StatusCode)
+	}
+	resp.Body.Close()
+	resp = getAuth(t, srv.URL+"/api/status")
 	if resp.StatusCode != 200 {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
+		t.Fatalf("status with JWT = %d, want 200", resp.StatusCode)
 	}
 	body := decodeJSON(t, resp)
 	if body["status"] != "running" {

@@ -28,9 +28,14 @@ func TestCoverageStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != 200 {
-		t.Errorf("status = %d, want 200", resp.StatusCode)
+	resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Errorf("status without JWT = %d, want 401", resp.StatusCode)
+	}
+	respAuth := getAuth(t, server.URL+"/api/status")
+	defer respAuth.Body.Close()
+	if respAuth.StatusCode != 200 {
+		t.Errorf("status with JWT = %d, want 200", respAuth.StatusCode)
 	}
 }
 

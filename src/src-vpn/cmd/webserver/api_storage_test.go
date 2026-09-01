@@ -108,8 +108,8 @@ func TestFileUploadAndGet(t *testing.T) {
 		t.Fatal("file ID should not be empty")
 	}
 
-	// GET file list
-	resp2 := get(t, srv.URL+"/api/files")
+	// GET file list (S1: JWT required now)
+	resp2 := getAuth(t, srv.URL+"/api/files")
 	body2 := decodeJSON(t, resp2)
 	files, ok := body2["files"].([]interface{})
 	if !ok {
