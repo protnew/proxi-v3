@@ -100,9 +100,17 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 
 	// File upload/download
 	http.HandleFunc("/api/files/upload", apiChain(srv.handleFileUpload))
-	// S1 (2026-09-01): file listing and management behind JWT. Downloads stay direct
-	// by ID inside the same handler after auth; rate limit intentionally skipped.
-	http.HandleFunc("/api/files/", protectedApiChain(srv.handleFileGet))
+	// S1 leftover (2026-09-01): list + DELETE need JWT. GET /api/files/{id} stays
+	// public so chat attachments work as bare URLs (img src / window.open, no header).
+	http.HandleFunc("/api/files", protectedApiChain(srv.handleFileGet))
+	http.HandleFunc("/api/files/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/files/")
+		if path == "" || r.Method == http.MethodDelete {
+			protectedApiChain(srv.handleFileGet)(w, r)
+			return
+		}
+		publicApiChain(srv.handleFileGet)(w, r)
+	})
 	
 	// Media endpoints (v12 content_manifests)
 	http.HandleFunc("/api/media/upload", apiChain(srv.handleMediaUpload))

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,7 +108,15 @@ func setupTestServer(t *testing.T) *httptest.Server {
 	}))
 	mux.HandleFunc("/api/identity", apiChain(s.handleIdentityGet))
 	mux.HandleFunc("/api/files/upload", apiChain(s.handleFileUpload))
-	mux.HandleFunc("/api/files/", protected(s.handleFileGet))
+	mux.HandleFunc("/api/files", protected(s.handleFileGet))
+	mux.HandleFunc("/api/files/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/files/")
+		if path == "" || r.Method == http.MethodDelete {
+			protected(s.handleFileGet)(w, r)
+			return
+		}
+		apiChain(s.handleFileGet)(w, r)
+	})
 	mux.HandleFunc("/api/reactions", apiChain(s.handleReactions))
 	mux.HandleFunc("/api/read-receipts", apiChain(s.handleReadReceipts))
 	mux.HandleFunc("/api/profiles", apiChain(s.handleProfiles))

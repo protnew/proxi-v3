@@ -13,8 +13,13 @@ test.describe('Product same-WiFi path', () => {
     expect(r.ok()).toBeTruthy()
     const j = await r.json()
     expect(j.ok).toBeTruthy()
-    expect(String(j.bind)).toMatch(/0\.0\.0\.0/)
+    // Q4 leftover: loopback bind is 127.0.0.1, not 0.0.0.0; phone_urls empty then.
+    expect(String(j.bind)).toMatch(/:\d+$/)
     expect(j.port).toBeTruthy()
+    if (j.reachable_from_lan === false) {
+      expect(Array.isArray(j.phone_urls)).toBeTruthy()
+      expect(j.phone_urls.length).toBe(0)
+    }
   })
 
   test('Alice give VPN one-click (demo partner prefilled)', async ({ browser }) => {

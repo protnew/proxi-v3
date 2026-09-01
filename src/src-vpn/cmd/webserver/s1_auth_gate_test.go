@@ -58,3 +58,17 @@ func TestS1StatusWithTokenWorks(t *testing.T) {
 		t.Fatalf("GET /api/status with JWT = %d, want 200", resp.StatusCode)
 	}
 }
+
+func TestS1FileDownloadWithoutJWTIsNot401(t *testing.T) {
+	srv := setupTestServer(t)
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + "/api/files/does-not-exist")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized {
+		t.Fatalf("GET /api/files/{id} without JWT = 401, want not-401 (chat attachments are bare URLs)")
+	}
+}
