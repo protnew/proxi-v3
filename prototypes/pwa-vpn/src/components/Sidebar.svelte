@@ -94,7 +94,7 @@
     <button type="button" class="copy-id" onclick={copyMyId} disabled={!myId} title="Копировать ПОЛНЫЙ ID">{copied ? '✓' : '📋'}</button>
   </div>
   {#if myId}
-    <div class="my-id-hint">В чат вставляй только из 📋 — на экране обрезка</div>
+    <div class="my-id-hint">Скопируйте ID кнопкой справа</div>
   {/if}
 
   <div class="chat-list">
@@ -142,7 +142,12 @@
 
     {#if filtered.length === 0}
       <div class="empty">
-        {search ? 'Ничего не найдено' : 'Нет переписок'}
+        {#if search}
+          Ничего не найдено
+        {:else}
+          <p>Нет переписок</p>
+          <button type="button" class="empty-cta" data-testid="sidebar-empty-new" onclick={() => stores.showNewChat.update(() => true)}>Новый чат</button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -210,4 +215,11 @@
 
   .avatar { background: color-mix(in srgb, var(--success) 22%, var(--bg)); }
   .avatar.group-av { background: color-mix(in srgb, var(--accent) 35%, var(--bg)); }
+  .empty { text-align: center; padding: 24px 16px; color: var(--text-muted); }
+  .empty-cta {
+    display: inline-block; margin-top: 12px; min-height: 44px; padding: 12px 20px;
+    background: var(--accent); color: var(--text-on-accent);
+    border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+  }
 </style>
+

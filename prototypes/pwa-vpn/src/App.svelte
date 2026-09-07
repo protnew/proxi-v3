@@ -155,10 +155,7 @@ if (initialView === 'newchat') {
       if (exists) stores.setTyping(chatId, pk)
     })
 
-    // 5. Request notification permission
-    if ('Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission()
-    }
+    // 5. Do not prompt notifications on first paint (club 30). User taps «Уведомления».
 
     // 6. Browser identity (secp256k1 keys in localStorage, no Go server needed)
     statusText = 'Проверка ключей...'
@@ -182,7 +179,8 @@ if (initialView === 'newchat') {
       browserId = existing || await getIdentity()
     }
     stores.profile.update(p => ({ ...p, pubkey: browserId.publicKey }))
-    console.log('[app] Identity:', browserId.publicKey.slice(0, 16) + '...')
+    // Club 30: show chat immediately. Transports continue in background.
+    loading = false
 
     // 7. DUAL TRANSPORT (audit 2026-08-05):
     //    - Nostr = optional serverless path
@@ -422,8 +420,9 @@ if (initialView === 'newchat') {
   .app { display: flex; height: 100vh; overflow: hidden; position: relative; }
 
   .loading-overlay-bg {
-    position: absolute; inset: 0; z-index: 20;
+    position: absolute; inset: 0; z-index: 5;
     display: flex; align-items: stretch;
+    pointer-events: none;
     background: color-mix(in srgb, var(--bg) 72%, transparent);
   }
   .skeleton-col { width: 280px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }

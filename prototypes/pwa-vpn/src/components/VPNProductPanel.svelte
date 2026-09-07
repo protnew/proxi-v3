@@ -4,6 +4,7 @@
   import { getLocalTabP2P, type TabP2PStatus } from '../lib/local-tab-p2p'
   import { dataRelay } from '../lib/nostr-data-relay'
   import { onMount } from 'svelte'
+  const isDevMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1'
   import { getPubkey } from '../lib/api'
   import { getTunnelStatus, stopTunnel, type TunnelStatus } from '../lib/amnezia-tunnel'
   import { subscribeWebPush, fetchPushConfig, sendTestPush } from '../lib/web-push'
@@ -11,9 +12,7 @@
 async function startVPNSignaling(targetPubkey: string) {
   try {
     await (rtcVPN as any).startNostrSignaling(targetPubkey)
-    console.log('[VPN] Nostr signaling started for', targetPubkey.slice(0, 8))
   } catch (e) {
-    console.warn('[VPN] Nostr signaling failed:', e)
   }
 }
   let showInviteModal = $state(false)
@@ -379,6 +378,7 @@ async function startVPNSignaling(targetPubkey: string) {
   })
 </script>
 <div class="vpn-product" data-testid="vpn-product">
+  {#if isDevMode}
   <div class="tab-p2p-status" data-testid="vpn-tab-p2p-status">
     VPN-101: {tabP2P.phase} · role={tabP2P.role}
     {#if tabP2P.tunnelIp} · IP {tabP2P.tunnelIp}{/if}
@@ -392,6 +392,7 @@ async function startVPNSignaling(targetPubkey: string) {
       <span class="ice-badge" title="NAT traversal method">🧊 {turnStatus}{#if transportMode} · 📡 {transportMode}{/if}</span>
       {#if amneziaStatus}<span class="ice-badge amnezia" title="DPI obfuscation">🛡️ {amneziaStatus}</span>{/if}
     </div>
+  {/if}
   {/if}
   {#if vpnStatus === 'off'}
     <div class="vpn-buttons">
@@ -407,13 +408,16 @@ async function startVPNSignaling(targetPubkey: string) {
       <button class="vpn-btn push" data-testid="vpn-push" disabled={pushBusy} onclick={enablePush}>
         🔔 Уведомления
       </button>
+      {#if isDevMode}
       <button class="vpn-btn engine" data-testid="vpn-tab-host" onclick={startTabP2PHost}>
         🧪 2 вкладки: я exit
       </button>
       <button class="vpn-btn request" data-testid="vpn-tab-join" onclick={startTabP2PJoiner}>
         🧪 2 вкладки: войти peer
       </button>
+      {/if}
     </div>
+    {#if isDevMode}
     <div class="phase2-status" data-testid="phase2-status">
       <span>Движок: {amneziaStatus || '—'}</span>
       <span>Push: {pushInfo || '—'}</span>
@@ -427,6 +431,7 @@ async function startVPNSignaling(targetPubkey: string) {
       <p class="adv-note">Основной VPN — кнопки «Дать/Запросить VPN» (WebRTC внутри продукта). Ниже только для тех, кто уже пользуется приложением AmneziaVPN отдельно.</p>
       <button class="linkish" data-testid="vpn-export-amnezia" type="button" onclick={exportForAmneziaOptional}>Экспорт conf в AmneziaVPN (опционально)</button>
     </details>
+    {/if}
     {#if demoPartnerLabel}
       <div class="lan-hint" data-testid="demo-partner">Демо-партнёр: {demoPartnerLabel} (ID подставлен)</div>
     {/if}
