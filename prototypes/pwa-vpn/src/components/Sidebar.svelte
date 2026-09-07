@@ -83,9 +83,9 @@
 
 <aside class="sidebar">
   <div class="header">
-    <button class="menu-btn" onclick={toggleSettings}>☰</button>
+    <button class="menu-btn" onclick={toggleSettings} aria-label="Настройки" title="Настройки">☰</button>
     <input type="text" placeholder="Поиск" bind:value={search} />
-    <button class="new-btn" onclick={() => stores.showNewChat.update(() => true)}>✏️</button>
+    <button class="new-btn" onclick={() => stores.showNewChat.update(() => true)} aria-label="Новый чат" title="Новый чат">✏️</button>
   </div>
 
   <div class="my-id-bar" title={myId ? ('Полный ID: ' + myId + ' — копируй только 📋') : 'identity loading...'}>
@@ -155,7 +155,8 @@
 <style>
   .sidebar { width: 360px; min-width: 360px; background: var(--bg-secondary); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); display: flex; flex-direction: column; border-right: 1px solid var(--border); height: 100vh; z-index: 20; }
   .header { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); }
-  .menu-btn, .new-btn { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 6px; border-radius: 50%; transition: background 0.2s; }
+  .header input { min-height: 44px; flex: 1; }
+  .menu-btn, .new-btn { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 6px; min-width: 44px; min-height: 44px; border-radius: 50%; transition: background 0.2s; }
   .menu-btn:hover, .new-btn:hover { background: var(--bg-hover); color: var(--text); }
   input { flex: 1; background: var(--bg-tertiary); border: 1px solid transparent; color: var(--text); padding: 10px 14px; border-radius: 20px; font-size: 13px; outline: none; transition: all 0.2s; box-shadow: inset 0 2px 4px rgba(0,0,0,0.1); }
   input:focus { border-color: var(--accent); background: var(--bg); box-shadow: 0 0 0 2px var(--bg-active); }

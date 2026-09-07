@@ -14,7 +14,10 @@ function openMobileChat() { mobileChatOpen = true; }
 function closeMobileChat() { mobileChatOpen = false; }
 
 // Detect mobile
-const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches;
+let isMobile = $state(typeof window !== 'undefined' && window.matchMedia('(max-width: 768px)').matches);
+function syncMobile() {
+  isMobile = window.matchMedia('(max-width: 768px)').matches
+}
 
   // Dev mode: show raw SOCKS5/WG settings (hidden in product mode)
   const isDevMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1';
@@ -46,7 +49,6 @@ const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width:
   import DemoPanel from './components/DemoPanel.svelte'
   import type { Message } from './stores/messenger'
 
-  console.log('[app] App.svelte script execution started');
 
   let loading = $state(true)
   let needsOnboarding = $state(false)
@@ -98,25 +100,25 @@ if (initialView === 'newchat') {
         loading = false
       }
     }, 8000)
-    console.log('[app] onMount started!');
     // 1. Load saved data
     stores.loadProfile()
     stores.loadChats()
     stores.loadContacts()
     initTheme()
+    const mq = window.matchMedia('(max-width: 768px)')
+    syncMobile()
+    mq.addEventListener('change', syncMobile)
 
     // 2. Init identity
     const pk = initIdentity()
     stores.profile.update(p => ({ ...p, pubkey: pk }))
 
     // 3. Init sounds
-    console.log('[app] Before initSounds');
     try {
       initSounds()
     } catch (e) {
       console.warn('[app] initSounds failed (likely AudioContext requires user gesture):', e);
     }
-    console.log('[app] After initSounds');
 
     // 4. Set up callbacks BEFORE connecting
     onMessage((msg: Message) => {
@@ -359,10 +361,10 @@ if (initialView === 'newchat') {
     <CallOverlay />
     {#if isDevMode}
       <VpnPanel />
+      <DemoPanel />
     {:else}
       <VPNProductPanel />
     {/if}
-    <DemoPanel />
   </div>
   {/if}
 

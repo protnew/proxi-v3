@@ -24,7 +24,11 @@ export function toggleTheme(): Theme {
 
 export function initTheme() {
   const stored = localStorage.getItem('messenger-theme') as Theme | null
-  if (stored === 'light' || stored === 'dark') currentTheme = stored
+  if (stored === 'light' || stored === 'dark') {
+    currentTheme = stored
+  } else if (typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: light)').matches) {
+    currentTheme = 'light'
+  }
   applyTheme(currentTheme)
 }
 

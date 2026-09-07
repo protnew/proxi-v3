@@ -49,7 +49,7 @@
   function enter() {
     if (!identity) return
     if (mode === 'show' && !confirmedBackup) {
-      error = 'Подтвердите, что сохранили seed/nsec'
+      error = 'Подтвердите, что сохранили секретный ключ'
       return
     }
     onDone?.()
@@ -63,22 +63,22 @@
 <div class="auth-screen" data-testid="auth-screen" role="main" aria-label="Создание аккаунта">
   <div class="auth-card">
   <h1>Proxi</h1>
-  <p class="sub">Неубиваемый мессенджер · ключи только на вашем устройстве</p>
+  <p class="sub">Мессенджер. Переписка остаётся на этом устройстве</p>
 
   {#if mode === 'start'}
-    <button class="primary" data-testid="auth-create" onclick={generate} disabled={loading} aria-label="Создать новый аккаунт">
+    <button class="primary" data-testid="auth-create" onclick={generate} disabled={loading} aria-label="Создать новый аккаунт" autofocus>
       {loading ? 'Генерация…' : 'Создать новый аккаунт'}
     </button>
-    <button class="secondary" data-testid="auth-import-open" onclick={() => mode = 'import'}>Импортировать nsec / seed</button>
+    <button class="secondary" data-testid="auth-import-open" onclick={() => mode = 'import'}>У меня уже есть аккаунт</button>
   {:else if mode === 'show' && identity}
-    <p class="warn">Сохраните nsec. Без него аккаунт не восстановить.</p>
-    <label>npub
+    <p class="warn">Сохраните секретный ключ. Без него аккаунт не восстановить.</p>
+    <label>Ваш адрес <span class="tech">npub</span>
       <div class="key-row">
         <input data-testid="auth-npub" readonly value={identity.npub || identity.publicKey} />
         <button type="button" class="icon-btn" onclick={() => copy(identity?.npub || identity?.publicKey || '')}>копировать</button>
       </div>
     </label>
-    <label>nsec
+    <label>Секретный ключ <span class="tech">nsec</span>
       <div class="key-row">
         <input data-testid="auth-nsec" readonly type={nsecVisible ? 'text' : 'password'} value={identity.nsec || identity.privateKey} />
         <button type="button" class="icon-btn" onclick={() => nsecVisible = !nsecVisible}>{nsecVisible ? 'скрыть' : 'показать'}</button>
@@ -87,15 +87,15 @@
     </label>
     <label class="check">
       <input type="checkbox" data-testid="auth-backup-ok" bind:checked={confirmedBackup} />
-      Я сохранил nsec в надёжном месте
+      Я сохранил секретный ключ в надёжном месте
     </label>
     <button class="primary" data-testid="auth-enter" onclick={enter} disabled={!confirmedBackup} aria-disabled={!confirmedBackup} aria-describedby="auth-enter-hint">Войти</button>
     {#if !confirmedBackup}
       <p id="auth-enter-hint" class="hint">Войти станет доступно после галки выше</p>
     {/if}
   {:else if mode === 'import'}
-    <label>nsec или hex private key
-      <input data-testid="auth-import-input" bind:value={importKey} placeholder="nsec1… или 64 hex" />
+    <label>Секретный ключ аккаунта
+      <input data-testid="auth-import-input" bind:value={importKey} placeholder="вставьте ключ" autocomplete="off" />
     </label>
     <button class="primary" data-testid="auth-import" onclick={doImport} disabled={loading || importKey.trim().length < 16}>
       {loading ? 'Импорт…' : 'Импортировать'}
@@ -161,7 +161,7 @@
   .icon-btn:hover { background: var(--bg-hover); }
   .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .primary, .secondary {
-    width: 100%; padding: 12px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600;
+    width: 100%; min-height: 44px; padding: 12px 16px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600;
     transition: all 180ms ease-in-out;
   }
   .primary { background: var(--accent); color: var(--text-on-accent); }
@@ -174,6 +174,7 @@
   .ok { color: var(--success); }
   .err { color: var(--danger); }
   .hint { color: var(--text-muted); font-size: 12px; margin: 0; text-align: center; }
+  .tech { opacity: 0.55; font-weight: 400; }
   .check { flex-direction: row; align-items: center; gap: 8px; color: var(--text); }
   .check input[type="checkbox"] {
     width: 16px; height: 16px; accent-color: var(--accent); flex-shrink: 0;
