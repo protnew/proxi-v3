@@ -21,7 +21,7 @@ async function pubkeyOf(page: Page): Promise<string> {
 async function startChat(page: Page, peer: string, name: string) {
   await page.getByRole('button', { name: '✏️' }).click()
   await expect(page.getByText('Новый чат')).toBeVisible({ timeout: 5000 })
-  const userId = page.getByRole('textbox', { name: /User ID/i })
+  const userId = page.getByRole('textbox', { name: /User ID|Адрес друга/i })
   if (await userId.count()) await userId.fill(peer)
   else await page.locator('input').first().fill(peer)
   const nameBox = page.getByRole('textbox', { name: /Имя/i })

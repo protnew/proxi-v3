@@ -48,27 +48,27 @@
     <div class="dialog" onclick={(e) => e.stopPropagation()}>
       <div class="dialog-header">
         <h3>Новый чат</h3>
-        <button onclick={() => stores.showNewChat.set(false)}>✕</button>
+        <button onclick={() => stores.showNewChat.set(false)} aria-label="Закрыть" title="Закрыть">✕</button>
       </div>
 
       <div class="tabs">
         <button class:active={tab === 'new'} onclick={() => tab = 'new'}>Новый контакт</button>
         <button class:active={tab === 'list'} onclick={() => tab = 'list'}>Контакты ({contactList.length})</button>
-        <button class:active={tab === 'group'} onclick={() => tab = 'group'}>👥 Группа</button>
+        <button class:active={tab === 'group'} onclick={() => tab = 'group'}>Группа</button>
       </div>
 
       {#if tab === 'new'}
         <div class="form">
-          <label for="pk-input">User ID</label>
-          <textarea id="pk-input" placeholder="Вставь ID друга (из его профиля)" bind:value={newKey} rows="2"></textarea>
+          <label for="pk-input">Адрес друга</label>
+          <textarea id="pk-input" placeholder="Вставьте адрес из профиля друга" bind:value={newKey} rows="2"></textarea>
           <label for="name-input">Имя (необязательно)</label>
           <input id="name-input" type="text" placeholder="Имя друга" bind:value={newName} />
           <button class="start-btn" onclick={startChat} disabled={newKey.trim().length < 8}>
-            💬 Начать чат
+            Начать чат
           </button>
 
           <div class="share-section">
-            <p>Твой ключ — отправь другу:</p>
+            <p>Ваш адрес — отправьте другу:</p>
             <div class="key-box">
               <code>{getUserId() || currentProfile?.pubkey?.slice(0, 32)}...</code>
               <button onclick={() => navigator.clipboard.writeText(currentProfile?.pubkey || '')}>📋</button>
@@ -115,14 +115,14 @@
   .dialog { background: var(--bg-tertiary); border-radius: 12px; width: 420px; max-height: 80vh; overflow-y: auto; }
   .dialog-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--bg); }
   h3 { margin: 0; font-size: 16px; }
-  .dialog-header button { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; width: auto; }
+  .dialog-header button { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; width: 44px; min-height: 44px; }
   .tabs { display: flex; border-bottom: 1px solid var(--bg); }
-  .tabs button { flex: 1; background: none; border: none; color: var(--text-muted); padding: 10px; cursor: pointer; font-size: 13px; }
+  .tabs button { flex: 1; background: none; border: none; color: var(--text-muted); padding: 10px; cursor: pointer; font-size: 13px; min-height: 44px; }
   .tabs button.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
   .form { padding: 16px; }
   label { display: block; font-size: 12px; color: var(--text-muted); margin: 8px 0 4px; }
   textarea, input { width: 100%; background: var(--bg-tertiary); border: none; color: var(--text); padding: 10px; border-radius: 8px; font-size: 13px; margin-bottom: 8px; font-family: monospace; box-sizing: border-box; }
-  .start-btn { width: 100%; padding: 12px; background: var(--accent); border: none; color: var(--text-on-accent); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .start-btn { width: 100%; min-height: 44px; padding: 12px; background: var(--accent); border: none; color: var(--text-on-accent); border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
   .start-btn:disabled { opacity: 0.4; }
   .share-section { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--bg-hover); }
   .share-section p { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; }

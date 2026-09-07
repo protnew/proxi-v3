@@ -401,16 +401,15 @@ function processMessageUrls(text: string) {
       {/each}
       {#if currentChat.messages.length === 0}
         <div class="no-msg">
-          <div>💬</div>
-          <p>Начните разговор</p>
-          <p class="hint">E2E зашифровано через Nostr</p>
+          <p>Напишите первое сообщение</p>
+          <p class="hint">Если друг сейчас не в сети, оно уйдёт позже</p>
         </div>
       {/if}
     </div>
     {#if contextMenu}
       <div class="ctx-menu" style="left:{contextMenu.x}px;top:{contextMenu.y}px">
         <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doReply(m) }}>↩ Ответить</button>
-        <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doForward(m) }}>↪ Копировать</button>
+        <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doForward(m) }}>Переслать</button>
         {#if currentChat?.messages.find(x => x.id === contextMenu?.msgId && isMine(x))}
           <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doEdit(m) }}>✏️ Редактировать</button>
           <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doDelete(m) }}>🗑️ Удалить</button>
@@ -435,9 +434,9 @@ function processMessageUrls(text: string) {
       </div>
     {/if}
     <div class="input-area">
-      <button class="ibtn" onclick={() => showEmoji = !showEmoji}>😊</button>
+      <button class="ibtn" onclick={() => showEmoji = !showEmoji} aria-label="Смайлики" title="Смайлики">😊</button>
       <EmojiPicker {showEmoji} onSelect={addEmoji} />
-      <button class="ibtn" onclick={() => document.getElementById('f-in')?.click()}>📎</button>
+      <button class="ibtn" onclick={() => document.getElementById('f-in')?.click()} aria-label="Файл" title="Файл">📎</button>
       <input id="f-in" type="file" hidden onchange={handleFileSelect} />
       <textarea
         placeholder={editingMsg ? 'Редактировать сообщение...' : 'Сообщение'}
@@ -446,9 +445,9 @@ function processMessageUrls(text: string) {
         rows="1"
       ></textarea>
       {#if inputText.trim()}
-        <button class="send-btn" onclick={sendMessage}>➤</button>
+        <button class="send-btn" onclick={sendMessage} aria-label="Отправить" title="Отправить">➤</button>
       {:else}
-        <button class="mic-btn" class:rec={isRecording}
+        <button class="mic-btn" class:rec={isRecording} aria-label="Голосовое" title="Голосовое"
           onmousedown={startRecording} onmouseup={stopRecording} onmouseleave={() => isRecording && stopRecording()}>
           {isRecording ? '⏺' : '🎤'}
         </button>
@@ -465,9 +464,8 @@ function processMessageUrls(text: string) {
   </div>
 {:else}
   <div class="empty">
-    <div class="empty-icon">🛡️</div>
     <h2 data-testid="chat-empty-brand">Proxi</h2>
-    <p>Выберите чат или начните новый</p>
-    <p class="sub">P2P • E2E • Неубиваемо</p>
+    <p>Выберите чат слева или начните новый</p>
+    <button type="button" class="empty-cta" data-testid="chat-empty-new" onclick={() => stores.showNewChat.set(true)}>Новый чат</button>
   </div>
 {/if}

@@ -15,7 +15,7 @@ async function openNewChat(page: Page) {
 
 async function startChat(page: Page, userId: string, name: string) {
   await openNewChat(page)
-  const idBox = page.getByRole('textbox', { name: /User ID|pubkey|Pubkey/i }).or(
+  const idBox = page.getByRole('textbox', { name: /User ID|pubkey|Pubkey|Адрес друга/i }).or(
     page.locator('input[placeholder*="User"], input[placeholder*="pubkey" i], input[placeholder*="ID"]').first(),
   )
   if (await idBox.count() === 0) {

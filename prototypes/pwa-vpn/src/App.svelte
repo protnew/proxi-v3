@@ -340,7 +340,7 @@ if (initialView === 'newchat') {
       </div>
       <div class="loading-status">
         <div class="spinner"></div>
-        <p>🛡️ {statusText}</p>
+        <p>{statusText}</p>
       </div>
     </div>
     {/if}
@@ -451,4 +451,11 @@ if (initialView === 'newchat') {
     .chat-mobile-wrapper { width: 100%; flex: none; }
   }
 
+  @media (prefers-reduced-motion: reduce) {
+    :global(*), :global(*::before), :global(*::after) {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
 </style>
