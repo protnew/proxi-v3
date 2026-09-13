@@ -35,7 +35,7 @@ object HevSocks5Engine {
             |socks5:
             |  port: ${cfg.socksPort}
             |  address: ${cfg.socksHost}
-            |  udp: 'udp'
+            |  udp: 'tcp'
             |misc:
             |  log-level: warn
             |""".trimMargin()

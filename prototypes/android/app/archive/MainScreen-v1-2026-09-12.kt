@@ -283,20 +283,6 @@ fun VpnStatusBar() {
     val context = androidx.compose.ui.platform.LocalContext.current
     var vpnOn by remember { mutableStateOf(false) }
     var vpnStatus by remember { mutableStateOf("disconnected") }
-    var exitHost by remember { mutableStateOf("") }
-    var exitOn by remember { mutableStateOf(false) }
-
-    fun startTunIntent(ctx: android.content.Context) {
-        val parts = exitHost.trim().split(":")
-        if (parts.size == 2) {
-            com.indestructible.messenger.vpn.TunVpnService.exitProxyHost = parts[0].trim()
-            com.indestructible.messenger.vpn.TunVpnService.exitProxyPort = parts[1].trim().toIntOrNull() ?: 10808
-            com.indestructible.messenger.vpn.TunVpnService.t42 = com.indestructible.messenger.vpn.TunVpnService.t42.copy(socksHost = parts[0].trim(), socksPort = parts[1].trim().toIntOrNull() ?: 10808)
-        }
-        val intent = Intent(ctx, com.indestructible.messenger.vpn.TunVpnService::class.java)
-        intent.action = "START_VPN"
-        ctx.startService(intent)
-    }
 
     Row(
         modifier = Modifier.fillMaxWidth().background(MessengerColors.DarkBg).padding(8.dp),
@@ -310,94 +296,32 @@ fun VpnStatusBar() {
             color = statusColor,
             fontSize = 12.sp
         )
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("\uD83D\uDEE1\uFE0F VPN", color = Color.White, fontSize = 12.sp)
-                val statusColor = if (vpnOn) Color(0xFF4CAF50) else Color(0xFFFF6B6B)
-                Text(
-                    if (vpnOn) "\u0412\u043A\u043B\u044E\u0447\u0435\u043D" else "\u041E\u0442\u043A\u043B\u044E\u0447\u0435\u043D",
-                    color = statusColor,
-                    fontSize = 12.sp
-                )
-                Switch(
-                    checked = vpnOn,
-                    onCheckedChange = { enabled ->
-                        vpnOn = enabled
-                        vpnStatus = if (enabled) "connecting" else "disconnected"
-                        val ctx = context
-                        if (enabled) {
-                            val prepare = android.net.VpnService.prepare(ctx)
-                            if (prepare != null) {
-                                vpnOn = false
-                                vpnStatus = "needs permission"
-                                com.indestructible.messenger.VpnPermissionHolder.requestThen {
-                                    startTunIntent(ctx)
-                                    vpnOn = true
-                                    vpnStatus = "connected (after permission)"
-                                }
-                            } else {
-                                startTunIntent(ctx)
-                                vpnStatus = if (exitHost.isBlank()) "connected (self-exit)" else "tun → ${exitHost.trim()}"
-                            }
-                        } else {
-                            val intent = Intent(ctx, com.indestructible.messenger.vpn.TunVpnService::class.java)
-                            intent.action = "STOP_VPN"
-                            ctx.startService(intent)
-                            vpnStatus = "disconnected"
-                        }
-                    },
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Color(0xFF4CAF50),
-                        checkedTrackColor = Color(0xFF2E7D32),
-                        uncheckedThumbColor = Color(0xFFEF5350),
-                    )
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("\uD83D\uDDA9 Exit: ", color = Color.Gray, fontSize = 11.sp)
-                OutlinedTextField(
-                    value = exitHost,
-                    onValueChange = { exitHost = it },
-                    placeholder = { Text("192.168.1.50:10808", color = Color.DarkGray, fontSize = 11.sp) },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 11.sp, color = Color.White),
-                    modifier = Modifier.width(150.dp).height(52.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        unfocusedTextColor = Color.White,
-                        focusedTextColor = Color.White,
-                        unfocusedBorderColor = Color.DarkGray,
-                        focusedBorderColor = Color(0xFF4CAF50)
-                    )
-                )
-                TextButton(onClick = {
-                    exitOn = !exitOn
-                    if (exitOn) {
-                        com.indestructible.messenger.vpn.Socks5ExitServer.bindHost = "0.0.0.0"
-                        com.indestructible.messenger.vpn.Socks5ExitServer.bindPort = 10808
-                        val ok = com.indestructible.messenger.vpn.Socks5ExitServer.start()
-                        vpnStatus = if (ok) "exit :${com.indestructible.messenger.vpn.Socks5ExitServer.bindPort}" else "exit start failed"
-                    } else {
-                        com.indestructible.messenger.vpn.Socks5ExitServer.stop()
-                        vpnStatus = "exit off"
-                    }
-                }) {
-                    Text(
-                        if (exitOn) "\u2623 \u042D\u0442\u043E\u0442 \u0442\u0435\u043B \u2014 \u0432\u044B\u0445\u043E\u0434: \u0412\u041A\u041B" else "\u2623 \u042D\u0442\u043E\u0442 \u0442\u0435\u043B \u2014 \u0432\u044B\u0445\u043E\u0434",
-                        color = if (exitOn) Color(0xFF4CAF50) else Color.Gray,
-                        fontSize = 10.sp
-                    )
+        Switch(
+            checked = vpnOn,
+            onCheckedChange = { enabled ->
+                vpnOn = enabled
+                vpnStatus = if (enabled) "connecting" else "disconnected"
+                // MOB-101c: Start/stop VPN via Intent
+                val ctx = context
+                if (enabled) {
+                    val intent = Intent(ctx, com.indestructible.messenger.vpn.VpnService::class.java)
+                    intent.action = "START_VPN"
+                    ctx.startService(intent)
+                    vpnStatus = "connected"
+                } else {
+                    val intent = Intent(ctx, com.indestructible.messenger.vpn.VpnService::class.java)
+                    intent.action = "STOP_VPN"
+                    ctx.startService(intent)
+                    vpnStatus = "disconnected"
                 }
-            }
-            Text(vpnStatus, color = Color.DarkGray, fontSize = 10.sp, modifier = Modifier.padding(top = 2.dp))
-        }
+                // For now: toggle state + visual feedback
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = Color(0xFF4CAF50),
+                checkedTrackColor = Color(0xFF2E7D32),
+                uncheckedThumbColor = Color(0xFFEF5350),
+            )
+        )
     }
 }
 

@@ -16,6 +16,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        VpnPermissionHolder.activity = this
         setContent {
             MessengerTheme {
                 Surface(
@@ -26,5 +27,31 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == VpnPermissionHolder.REQUEST_CODE) {
+            VpnPermissionHolder.onResult(resultCode == android.app.Activity.RESULT_OK)
+        }
+    }
+}
+
+object VpnPermissionHolder {
+    const val REQUEST_CODE = 100
+    var activity: android.app.Activity? = null
+    var onGranted: (() -> Unit)? = null
+
+    fun requestThen(onGranted: () -> Unit) {
+        val act = activity ?: return
+        val intent = android.net.VpnService.prepare(act) ?: run { onGranted(); return }
+        this.onGranted = onGranted
+        try { act.startActivityForResult(intent, REQUEST_CODE) } catch (_: Exception) {}
+    }
+
+    fun onResult(granted: Boolean) {
+        val cb = onGranted
+        onGranted = null
+        if (granted && cb != null) cb()
     }
 }

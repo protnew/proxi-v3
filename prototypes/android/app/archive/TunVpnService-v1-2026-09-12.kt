@@ -1,7 +1,7 @@
 package com.indestructible.messenger.vpn
 
 import android.app.Notification
-import android.app.PendingIntent
+
 import android.content.Intent
 import android.net.VpnService as AndroidVpnService
 import android.os.ParcelFileDescriptor
@@ -50,8 +50,6 @@ class TunVpnService : AndroidVpnService() {
 
 
     companion object {
-        const val ACTION_START = "START_VPN"
-        const val ACTION_STOP = "STOP_VPN"
         private const val TAG = "TunVpnService"
         private const val TUN_MTU = 1500
         private const val TUN_ADDRESS = "10.8.0.2"
@@ -81,35 +79,6 @@ class TunVpnService : AndroidVpnService() {
     private val isRunning = AtomicBoolean(false)
     private var readerThread: Thread? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_START -> start()
-            ACTION_STOP -> stopVpn()
-        }
-        return START_NOT_STICKY
-    }
-
-    fun start() {
-        if (isRunning.get()) return
-        val prepared = AndroidVpnService.prepare(this)
-        if (prepared != null) {
-            status = "awaiting_permission"
-            onStatusChange?.invoke(status)
-            Log.w(TAG, "VPN permission not granted yet; caller must fire the prepare intent")
-            return
-        }
-        if (exitProxyHost.isEmpty() || exitProxyPort <= 0) {
-            Socks5ExitServer.bindHost = "127.0.0.1"
-            Socks5ExitServer.bindPort = t42.socksPort
-            Socks5ExitServer.start()
-            exitProxyHost = t42.socksHost
-            exitProxyPort = t42.socksPort
-            status = "self-exit 127.0.0.1:${t42.socksPort}"
-            onStatusChange?.invoke(status)
-        }
-        startVpn()
-    }
-
     // Active TCP connections: source port → TcpConn
     private val connections = ConcurrentHashMap<Int, TcpConn>()
 
@@ -125,11 +94,6 @@ class TunVpnService : AndroidVpnService() {
             builder.addRoute("0.0.0.0", 0)   // Route EVERYTHING through TUN
             builder.addDnsServer(TUN_DNS)
             builder.addSearchDomain(".")
-            try {
-                builder.addDisallowedApplication("com.indestructible.messenger")
-            } catch (e: android.content.pm.PackageManager.NameNotFoundException) {
-                Log.w(TAG, "self-exclude failed; SOCKS traffic may loop into TUN")
-            }
 
             tunFd = builder.establish()
             if (tunFd == null) {
@@ -333,7 +297,6 @@ class TunVpnService : AndroidVpnService() {
         isRunning.set(false)
         gate.setChannel(false)
         HevSocks5Engine.stop()
-        Socks5ExitServer.stop()
 
         // Close all connections
         for ((_, conn) in connections) {
