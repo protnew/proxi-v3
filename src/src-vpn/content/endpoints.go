@@ -3,7 +3,6 @@ package content
 import (
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -111,25 +110,27 @@ func extractContentID(path string) (id string, ok bool) {
 // It checks, in order: the "X-User-Id" header, the "user_id" query param, and
 // the "user_id" form field. Returns "" when anonymous.
 func userIDFromRequest(r *http.Request) string {
-	if uid := r.Header.Get("X-User-Id"); uid != "" {
-		return uid
-	}
-	if uid := r.URL.Query().Get("user_id"); uid != "" {
-		return uid
-	}
-	if uid := r.FormValue("user_id"); uid != "" {
+	if uid, ok := r.Context().Value("userID").(string); ok && uid != "" {
 		return uid
 	}
 	return ""
 }
 
 // isPremiumFromRequest reports whether the caller is a premium subscriber.
-// Determined by the "X-Premium: true" header or "premium=1" query param.
+// Only JWT claims in context count — headers and query must not raise access.
 func isPremiumFromRequest(r *http.Request) bool {
-	if h := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Premium"))); h == "true" || h == "1" {
-		return true
+	if v, ok := r.Context().Value("premium").(bool); ok {
+		return v
 	}
-	return r.URL.Query().Get("premium") == "1"
+	return false
+}
+
+func denyContentAccess(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+	writeError(w, http.StatusForbidden, "access denied")
+	return true
 }
 
 // --------------------------- Upload ---------------------------
@@ -190,9 +191,9 @@ func (v *ContentVault) HandleContentUpload(w http.ResponseWriter, r *http.Reques
 	if accessLevel == "" {
 		accessLevel = string(AccessPublic)
 	}
-	uploader := strings.TrimSpace(r.FormValue("uploader"))
+	uploader := userIDFromRequest(r)
 	if uploader == "" {
-		uploader = userIDFromRequest(r)
+		uploader = strings.TrimSpace(r.FormValue("uploader"))
 	}
 	var allowedUsers []string
 	if au := strings.TrimSpace(r.FormValue("allowed_users")); au != "" {
@@ -348,20 +349,15 @@ func (v *ContentVault) HandleContentDownload(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := v.access.CheckAccess(id, userIDFromRequest(r), isPremiumFromRequest(r)); err != nil {
-		if errors.Is(err, ErrAccessDenied) {
-			writeError(w, http.StatusForbidden, "access denied")
-			return
-		}
-		// No policy: allow for backwards-compatibility? We treat absence as
-		// public to keep existing tests functional.
-	}
-
 	v.mu.RLock()
 	entry, exists := v.blobs[id]
 	v.mu.RUnlock()
 	if !exists {
 		writeError(w, http.StatusNotFound, "content not found")
+		return
+	}
+
+	if denyContentAccess(w, v.access.CheckAccess(id, userIDFromRequest(r), isPremiumFromRequest(r))) {
 		return
 	}
 
@@ -406,18 +402,15 @@ func (v *ContentVault) HandleContentStream(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := v.access.CheckAccess(id, userIDFromRequest(r), isPremiumFromRequest(r)); err != nil {
-		if errors.Is(err, ErrAccessDenied) {
-			writeError(w, http.StatusForbidden, "access denied")
-			return
-		}
-	}
-
 	v.mu.RLock()
 	entry, exists := v.blobs[id]
 	v.mu.RUnlock()
 	if !exists {
 		writeError(w, http.StatusNotFound, "content not found")
+		return
+	}
+
+	if denyContentAccess(w, v.access.CheckAccess(id, userIDFromRequest(r), isPremiumFromRequest(r))) {
 		return
 	}
 

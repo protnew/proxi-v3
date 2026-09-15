@@ -144,16 +144,14 @@ func (h *ChatHub) Unregister(c *Client) {
 // Broadcast sends a message to every connected client except the sender
 // (identified by excludeUserID, empty = send to all).
 func (h *ChatHub) Broadcast(data []byte, excludeUserID string) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.broadcastLocked(data, excludeUserID)
 }
 
-// broadcastLocked is the internal broadcast helper. Caller must hold at least
-// a read-lock on h.mu.
+// broadcastLocked is the internal broadcast helper. Caller must hold the write-lock
+// because a full send buffer deletes the client from the map.
 func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
-	// P1 FIX: Collect dead clients, close outside lock (no I/O under RLock)
-	// P6 FIXED: Multi-device — iterate all clients across all devices
 	var dead []*Client
 	for uid, clients := range h.clients {
 		if uid == excludeUserID {
@@ -166,6 +164,9 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 				log.Printf("[chat] send buffer full for user %s, marking for disconnect", uid)
 				dead = append(dead, c)
 				delete(clients, c)
+				if len(clients) == 0 {
+					delete(h.clients, uid)
+				}
 			}
 		}
 	}
@@ -182,16 +183,10 @@ func (h *ChatHub) broadcastLocked(data []byte, excludeUserID string) {
 func (h *ChatHub) SendTo(userID string, data []byte) bool {
 	var deadClients []*Client
 	var delivered bool
-	
-	func() {
-		h.mu.RLock()
-		defer h.mu.RUnlock()
-		
-		// P6 FIXED: Multi-device — deliver to all sessions of the user
+
+	h.mu.Lock()
 	clients, ok := h.clients[userID]
-		if !ok {
-			return
-		}
+	if ok {
 		for c := range clients {
 			select {
 			case c.Send <- data:
@@ -202,23 +197,19 @@ func (h *ChatHub) SendTo(userID string, data []byte) bool {
 				delete(clients, c)
 			}
 		}
-	}()
-	
-	// P3 FIX: Close connection outside the lock
-	if len(deadClients) > 0 {
-		h.mu.Lock()
-		if clients, ok := h.clients[userID]; ok && len(clients) == 0 {
+		if len(clients) == 0 {
 			delete(h.clients, userID)
 		}
-		h.mu.Unlock()
-		for _, dc := range deadClients {
-			close(dc.Send)
-			if dc.Conn != nil {
-				dc.forceClose(websocket.StatusPolicyViolation, "buffer full")
-			}
+	}
+	h.mu.Unlock()
+
+	for _, dc := range deadClients {
+		close(dc.Send)
+		if dc.Conn != nil {
+			dc.forceClose(websocket.StatusPolicyViolation, "buffer full")
 		}
 	}
-	
+
 	return delivered
 }
 

@@ -410,6 +410,20 @@ CREATE INDEX IF NOT EXISTS idx_stream_chunks_sequence ON stream_chunks(stream_id
     created_at INTEGER NOT NULL DEFAULT 0
 );`,
 	},
+	{
+		Version: 15,
+		Name:    "push_subscriptions_and_identity_owner",
+		Up: `
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    user_id TEXT PRIMARY KEY,
+    endpoint TEXT NOT NULL DEFAULT '',
+    p256dh TEXT NOT NULL DEFAULT '',
+    auth TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL DEFAULT 0
+);
+ALTER TABLE identity ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
 // runMigrations applies all pending migrations in order.

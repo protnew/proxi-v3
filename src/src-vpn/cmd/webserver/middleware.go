@@ -29,9 +29,9 @@ func authMiddleware(authSvc *auth.AuthService, next http.HandlerFunc) http.Handl
 			return
 		}
 
-		// Inject userID and npub into context
 		ctx := context.WithValue(r.Context(), "userID", claims.UserID)
 		ctx = context.WithValue(ctx, "npub", claims.Npub)
+		ctx = context.WithValue(ctx, "premium", claims.Premium)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }

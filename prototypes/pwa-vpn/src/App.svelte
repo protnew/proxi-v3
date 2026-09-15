@@ -348,7 +348,12 @@ if (initialView === 'newchat') {
       </div>
     {:else}
       <div class="sidebar-mobile-wrapper" class:hidden-mobile={mobileChatOpen}>
-        <Sidebar on:chatselect={openMobileChat} />
+        <div class="sidebar-stack">
+          <Sidebar on:chatselect={openMobileChat} />
+          {#if !isDevMode}
+            <VPNProductPanel />
+          {/if}
+        </div>
       </div>
     {/if}
     <div class="chat-mobile-wrapper" class:hidden-mobile={!mobileChatOpen && isMobile}>
@@ -360,8 +365,6 @@ if (initialView === 'newchat') {
     {#if isDevMode}
       <VpnPanel />
       <DemoPanel />
-    {:else}
-      <VPNProductPanel />
     {/if}
   </div>
   {/if}
@@ -440,10 +443,31 @@ if (initialView === 'newchat') {
 
   /* Mobile wrappers */
   .sidebar-mobile-wrapper { height: 100%; }
+  .sidebar-stack {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 360px;
+    min-width: 360px;
+    border-right: 1px solid var(--border);
+  }
+  .sidebar-stack :global(.sidebar) {
+    flex: 1;
+    min-height: 0;
+    height: auto;
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+  }
+  .sidebar-stack :global(.vpn-product) {
+    flex-shrink: 0;
+    border-top: 1px solid var(--border);
+  }
   .chat-mobile-wrapper { flex: 1; height: 100%; min-width: 0; }
   .settings-mobile-wrapper { width: 100%; height: 100%; overflow-y: auto; }
   @media (max-width: 768px) {
     .sidebar-mobile-wrapper { width: 100%; }
+    .sidebar-stack { width: 100%; min-width: 100%; }
     .sidebar-mobile-wrapper.hidden-mobile { display: none; }
     .chat-mobile-wrapper.hidden-mobile { display: none; }
     .settings-mobile-wrapper.hidden-mobile { display: none; }

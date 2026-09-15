@@ -1,6 +1,6 @@
 import { test, expect, Page } from '@playwright/test'
 
-const APP_URL = process.env.APP_URL || 'http://127.0.0.1:8090'
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5173'
 const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
 async function waitForApp(page: Page) {

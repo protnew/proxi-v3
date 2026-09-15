@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,7 +31,8 @@ func (s *Store) Backup(dstPath string) error {
 	}
 
 	// Use VACUUM INTO (SQLite 3.27+)
-	_, err := s.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", dstPath))
+	escaped := strings.ReplaceAll(dstPath, "'", "''")
+	_, err := s.db.Exec("VACUUM INTO '" + escaped + "'")
 	if err != nil {
 		return fmt.Errorf("store: VACUUM INTO failed: %w", err)
 	}
@@ -63,6 +65,8 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 	}
 	s.db = nil
 
+	removeSQLiteSidecars(dbPath)
+
 	// Copy backup file to DB path
 	src, err := os.Open(srcPath)
 	if err != nil {
@@ -94,6 +98,11 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 
 	s.db = db
 	return nil
+}
+
+func removeSQLiteSidecars(dbPath string) {
+	_ = os.Remove(dbPath + "-wal")
+	_ = os.Remove(dbPath + "-shm")
 }
 
 // AutoBackup starts a goroutine that periodically backs up the database

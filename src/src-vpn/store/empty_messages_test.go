@@ -38,10 +38,10 @@ func TestDeleteEmptyMessages(t *testing.T) {
 	defer s.Close()
 
 	// bypass SaveMessage guard via raw insert
-	_, err = s.DB().Exec(`INSERT INTO messages (id, sender, recipient, text, encrypted, timestamp) VALUES
-		('x1','a','b','',0,1),
-		('x2','a','b','hi',0,2),
-		('x3','a','b','  ',0,3)`)
+	_, err = s.DB().Exec(`INSERT INTO messages (id, sender, recipient, text, encrypted, timestamp, ttl) VALUES
+		('x1','a','b','',0,1,1),
+		('x2','a','b','hi',0,2,0),
+		('x3','a','b','',0,3,0)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,16 +49,34 @@ func TestDeleteEmptyMessages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n < 1 {
-		t.Fatalf("deleted=%d want >=1", n)
+	if n != 1 {
+		t.Fatalf("deleted=%d want 1 (expired TTL empty only)", n)
 	}
 	msgs, err := s.GetMessages(50, 0, "a")
 	if err != nil {
 		t.Fatal(err)
 	}
+	foundTTLEmpty := false
+	foundPlainEmpty := false
+	foundHi := false
 	for _, m := range msgs {
-		if m.Text == "" || m.Text == "  " {
-			t.Fatalf("empty still present: %+v", m)
+		if m.ID == "x1" {
+			foundTTLEmpty = true
 		}
+		if m.ID == "x3" {
+			foundPlainEmpty = true
+		}
+		if m.ID == "x2" {
+			foundHi = true
+		}
+	}
+	if foundTTLEmpty {
+		t.Fatal("expired TTL empty row should be deleted")
+	}
+	if !foundPlainEmpty {
+		t.Fatal("non-TTL empty row must remain")
+	}
+	if !foundHi {
+		t.Fatal("non-empty row must remain")
 	}
 }

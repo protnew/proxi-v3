@@ -5,7 +5,7 @@
 pwsh scripts/start-messenger-dev.ps1
 ```
 - UI http://127.0.0.1:5173/
-- API http://127.0.0.1:8080/api/health
+- API http://127.0.0.1:8090/api/health
 
 ## Alice → Bob
 | Шаг | Alice | Bob |

@@ -95,14 +95,26 @@ func (v *ContentVault) HandleContentDelete(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	v.mu.Lock()
+	v.mu.RLock()
 	_, existed := v.blobs[id]
-	delete(v.blobs, id)
-	v.mu.Unlock()
+	v.mu.RUnlock()
 	if !existed {
 		writeError(w, http.StatusNotFound, "content not found")
 		return
 	}
+
+	uploader := ""
+	if entry, err := v.catalog.Get(id); err == nil && entry != nil {
+		uploader = entry.Uploader
+	}
+	if uploader != userIDFromRequest(r) {
+		writeError(w, http.StatusForbidden, "access denied")
+		return
+	}
+
+	v.mu.Lock()
+	delete(v.blobs, id)
+	v.mu.Unlock()
 
 	if err := v.catalog.Delete(id); err != nil {
 		log.Printf("Error catalog Delete: %v", err)

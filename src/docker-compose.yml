@@ -11,7 +11,7 @@ services:
       - PORT=8080
       - DIST_DIR=/app/dist
       - DATA_DIR=/app/data
-      - JWT_SECRET=change-me-in-production
+      - JWT_SECRET
       - REDIS_ADDR=redis:6379
       # TLS (optional)
       # - TLS_CERT=/app/certs/cert.pem

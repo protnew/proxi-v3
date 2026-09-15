@@ -18,6 +18,28 @@ func (s *Store) SaveIdentity(npub, nsec, seedPhrase string) error {
 	return nil
 }
 
+// LoadIdentityOwner returns the JWT user who claimed the singleton identity row.
+func (s *Store) LoadIdentityOwner() string {
+	var owner string
+	err := s.db.QueryRow(`SELECT COALESCE(owner_user_id, '') FROM identity WHERE id = 1`).Scan(&owner)
+	if err != nil {
+		return ""
+	}
+	return owner
+}
+
+// SetIdentityOwner records the first authenticated caller as identity owner.
+func (s *Store) SetIdentityOwner(userID string) error {
+	if userID == "" {
+		return nil
+	}
+	_, err := s.db.Exec(
+		`UPDATE identity SET owner_user_id = ? WHERE id = 1 AND (owner_user_id = '' OR owner_user_id IS NULL)`,
+		userID,
+	)
+	return err
+}
+
 // LoadIdentity reads the stored identity. It returns ("", "", "", sql.ErrNoRows)
 // if no identity has been saved yet.
 

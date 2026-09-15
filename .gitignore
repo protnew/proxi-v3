@@ -11,6 +11,8 @@ coverage/
 node_modules/
 dist-svelte/
 *.bak
+*.bak*
+**/*bak_*
 fix_*.py
 
 # Android/Gradle
@@ -28,6 +30,8 @@ src-tauri/target/
 # OS
 nul
 .env
+.env*
+e2e-shots/
 .DS_Store
 Thumbs.db
 
@@ -73,3 +77,5 @@ src/src-vpn/data/identity.json
 src/src-vpn/data/vapid.json
 src/src-vpn/cmd/webserver/data/vapid.json
 src/src-vpn/data/uploads/
+**/amnezia/*.conf
+**/indestructible.conf

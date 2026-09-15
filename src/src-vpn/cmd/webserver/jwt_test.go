@@ -30,3 +30,10 @@ func TestRequireJWTSecret_noFallbackLiteral(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestRequireJWTSecret_stubFails(t *testing.T) {
+	t.Setenv("JWT_SECRET", "change-me-in-production")
+	if _, err := requireJWTSecret(); err == nil {
+		t.Fatal("stub JWT_SECRET must fail")
+	}
+}

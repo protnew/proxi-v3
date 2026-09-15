@@ -239,6 +239,58 @@ func TestProtectedIdentityRequireJWT(t *testing.T) {
 	}
 }
 
+func TestTwoSignupsIdentityIsolation(t *testing.T) {
+	srv, _, _ := setupAuthServer(t)
+	signup := func(npub, username string) string {
+		t.Helper()
+		b, _ := json.Marshal(map[string]string{"npub": npub, "username": username})
+		resp, err := http.Post(srv.URL+"/api/auth/signup", "application/json", bytes.NewReader(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("signup %s status=%d", username, resp.StatusCode)
+		}
+		var tok map[string]string
+		json.NewDecoder(resp.Body).Decode(&tok)
+		if tok["access_token"] == "" {
+			t.Fatal("missing access_token")
+		}
+		return tok["access_token"]
+	}
+	getIdentity := func(token string) (int, map[string]interface{}) {
+		t.Helper()
+		req, _ := http.NewRequest("GET", srv.URL+"/api/identity", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var body map[string]interface{}
+		json.NewDecoder(resp.Body).Decode(&body)
+		return resp.StatusCode, body
+	}
+
+	a := signup(strings.Repeat("aa", 32), "alice")
+	st, body := getIdentity(a)
+	if st != 200 {
+		t.Fatalf("alice identity status=%d", st)
+	}
+	if body["nsec"] == nil || body["nsec"] == "" {
+		t.Fatal("alice should receive nsec")
+	}
+	b := signup(strings.Repeat("bb", 32), "bob")
+	st, body = getIdentity(b)
+	if st != 403 {
+		t.Fatalf("bob identity status=%d want 403", st)
+	}
+	if _, ok := body["nsec"]; ok {
+		t.Fatal("bob must not receive nsec")
+	}
+}
+
 func TestWSRequiresTokenWhenAuthEnabled(t *testing.T) {
 	srv, _, _ := setupAuthServer(t)
 	// httptest + websocket upgrade without token should 401

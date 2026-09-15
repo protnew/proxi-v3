@@ -305,7 +305,7 @@ func (s *Store) GetPushSubscriptions(userIDs []string) ([]PushSubscription, erro
 		args[i] = id
 	}
 
-	query := `SELECT id, user_id, endpoint, p256dh, auth, created_at
+	query := `SELECT rowid, user_id, endpoint, p256dh, auth, created_at
 			  FROM push_subscriptions
 			  WHERE user_id IN (` + strings.Join(placeholders, ",") + `)`
 

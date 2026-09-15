@@ -120,3 +120,36 @@ func TestBackupRestore(t *testing.T) {
 
 	restoreStore.Close()
 }
+
+func TestRestoreRemovesWalSidecars(t *testing.T) {
+	dir := t.TempDir()
+	live := filepath.Join(dir, "live.db")
+	bak := filepath.Join(dir, "bak.db")
+	s, err := NewStore(live)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveMessage(Message{ID: "w1", From: "a", To: "broadcast", Text: "wal", Timestamp: 3}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Backup(bak); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(live+"-wal", []byte("garbage-wal"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(live+"-shm", []byte("garbage-shm"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Restore(bak, live); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var ok string
+	if err := s.DB().QueryRow("PRAGMA integrity_check").Scan(&ok); err != nil {
+		t.Fatal(err)
+	}
+	if ok != "ok" {
+		t.Fatalf("integrity_check=%q", ok)
+	}
+}

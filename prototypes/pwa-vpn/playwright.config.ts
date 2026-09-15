@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-// Native Windows: Vite :5173 + Go API :8080 must be up
+// Native Windows: Vite :5173 + Go API :8090 must be up
 export default defineConfig({
   testDir: '.',
   testMatch: [

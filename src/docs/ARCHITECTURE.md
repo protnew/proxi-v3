@@ -1,3 +1,7 @@
+# SUPERSEDED 2026-09-15
+
+Не SoT. Daily: PWA `prototypes/pwa-vpn` :5173 + Go `src/src-vpn` :8090. См. vault `00-ГДЕ-КОД-SOURCE-OF-TRUTH.md`.
+
 # Архитектура Unkillable Messenger
 
 ## Слои

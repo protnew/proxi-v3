@@ -19,7 +19,7 @@ async function startVPNSignaling(targetPubkey: string) {
   let showRequestModal = $state(false)
   let incomingEvent = $state<VPNEvent | null>(null)
   let friendId = $state('')
-  let vpnStatus = $state<'off' | 'sharing' | 'connecting' | 'connected'>('off')
+  let vpnStatus = $state<'off' | 'connecting' | 'connected' | 'error'>('off')
   let statusText = $state('VPN выключен')
   let log = $state<string[]>([])
   let tabP2P = $state<TabP2PStatus>({
@@ -38,7 +38,7 @@ async function startVPNSignaling(targetPubkey: string) {
       vpnStatus = 'connecting'
       statusText = s.phase === 'waiting_peer' ? 'VPN-101: жду вторую вкладку…' : 'VPN-101: WebRTC negotiating…'
     } else if (s.phase === 'error') {
-      vpnStatus = 'off'
+      vpnStatus = 'error'
       statusText = 'VPN-101 error: ' + s.lastError
       addLog('VPN-101 error: ' + s.lastError)
     }
@@ -178,16 +178,16 @@ async function startVPNSignaling(targetPubkey: string) {
       await ensureNostr()
       const peer = normalizePeerId(friendId)
       const id = await nostrVPN.inviteFriend(peer, '', '')
-      vpnStatus = 'sharing'
+      vpnStatus = 'connecting'
       statusText = 'Раздаю VPN · жду подключения друга'
       addLog('Инвайт отправлен, готов как exit node (WebRTC)')
       addLog('Инвайт OK id=' + id.slice(0, 12) + '…')
       showInviteModal = false
     } catch (e) {
+      vpnStatus = 'error'
+      statusText = 'Ошибка: ' + (e as Error).message
       addLog('Ошибка: ' + (e as Error).message)
     }
-  }
-  async function requestVPN() {
     if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
     try {
@@ -209,7 +209,7 @@ async function startVPNSignaling(targetPubkey: string) {
       await ensureNostr()
       if (ev.type === 'vpn-request') {
         await nostrVPN.acceptVPN(ev.from, '', '')
-        vpnStatus = 'sharing'
+        vpnStatus = 'connecting'
         statusText = 'Раздаю VPN · жду WebRTC offer'
         addLog('Запрос принят, готов как exit node (WebRTC)')
       } else if (ev.type === 'vpn-invite') {
@@ -224,8 +224,8 @@ async function startVPNSignaling(targetPubkey: string) {
         const answerTimeout = setTimeout(() => {
           if (vpnStatus === 'connecting') {
             addLog('WebRTC: таймаут ожидания answer')
-            vpnStatus = 'off'
-            statusText = 'VPN выключен'
+            vpnStatus = 'error'
+            statusText = 'Не удалось подключить VPN'
           }
         }, 30000)
         rtcAnswerResolver = (sdp: string, ice: string[]) => {
@@ -288,8 +288,8 @@ async function startVPNSignaling(targetPubkey: string) {
       statusText = 'VPN подключён (WebRTC P2P)'
     } catch (e) {
       addLog('WebRTC answer failed: ' + (e as Error).message)
-      vpnStatus = 'off'
-      statusText = 'VPN выключен'
+      vpnStatus = 'error'
+      statusText = 'Не удалось подключить VPN'
     }
   }
   async function rejectVPN() {
@@ -394,9 +394,18 @@ async function startVPNSignaling(targetPubkey: string) {
     </div>
   {/if}
   {/if}
-  {#if vpnStatus === 'off'}
+  {#if vpnStatus === 'off' || vpnStatus === 'error'}
+    {#if vpnStatus === 'off'}
+      <p class="vpn-empty" data-testid="vpn-empty">VPN выключен. В браузере это WebRTC DataChannel, не системный туннель телефона.</p>
+    {:else}
+      <div class="vpn-status error" data-testid="vpn-error">
+        <span class="status-dot"></span>
+        <span>{statusText}</span>
+        <button class="disconnect-btn" type="button" data-testid="vpn-error-dismiss" onclick={() => { vpnStatus = 'off'; statusText = 'VPN выключен' }}>Закрыть</button>
+      </div>
+    {/if}
     <div class="vpn-buttons">
-      <button class="vpn-btn share" data-testid="vpn-give" onclick={() => { applyDemoPartner(); if (friendId.trim()) giveVPN(); else showInviteModal = true }}>
+      <button class="vpn-btn share" data-testid="vpn-give" disabled={vpnStatus === 'connecting'} onclick={() => { applyDemoPartner(); if (friendId.trim()) giveVPN(); else showInviteModal = true }}>
         📡 Дать VPN другу
       </button>
       <button class="vpn-btn request" data-testid="vpn-request" onclick={() => { applyDemoPartner(); if (friendId.trim()) requestVPN(); else showRequestModal = true }}>
@@ -439,7 +448,7 @@ async function startVPNSignaling(targetPubkey: string) {
       <div class="lan-hint" data-testid="lan-url">Телефон (та же Wi‑Fi): <code>{lanPhoneUrl}</code></div>
     {/if}
   {:else}
-    <div class="vpn-status" class:sharing={vpnStatus === 'sharing'} class:connected={vpnStatus === 'connected'}>
+    <div class="vpn-status" class:connecting={vpnStatus === 'connecting'} class:connected={vpnStatus === 'connected'}>
       <span class="status-dot"></span>
       <span>{statusText}</span>
       {#if lastTunnelIp}<span class="ip">IP {lastTunnelIp}</span>{/if}

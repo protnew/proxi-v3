@@ -11,5 +11,9 @@ func requireJWTSecret() (string, error) {
 	if s == "" {
 		return "", fmt.Errorf("JWT_SECRET is required")
 	}
+	switch s {
+	case "change-me-in-production", "changeme", "secret", "password":
+		return "", fmt.Errorf("JWT_SECRET is a known stub; set a unique value")
+	}
 	return s, nil
 }

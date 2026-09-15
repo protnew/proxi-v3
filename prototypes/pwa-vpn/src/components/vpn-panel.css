@@ -4,8 +4,10 @@
   .vpn-btn.share { background: linear-gradient(135deg, var(--bg-secondary), color-mix(in srgb, var(--success) 30%, var(--bg))); color: var(--text-on-accent); }
   .vpn-btn.request { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 35%, var(--bg)), var(--accent)); color: var(--text-on-accent); }
   .vpn-status { display: flex; align-items: center; gap: 8px; padding: 14px; border-radius: 12px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
-  .vpn-status.sharing { background: color-mix(in srgb, var(--success) 12%, var(--bg)); color: var(--success); border: 1px solid var(--border); }
+  .vpn-status.connecting { background: color-mix(in srgb, var(--warn) 12%, var(--bg)); color: var(--warn); border: 1px solid var(--border); }
   .vpn-status.connected { background: var(--bg); color: var(--accent-light); border: 1px solid var(--border); }
+  .vpn-status.error { background: color-mix(in srgb, var(--danger) 12%, var(--bg)); color: var(--danger); border: 1px solid var(--danger); }
+  .vpn-empty { margin: 0 0 8px; font-size: 13px; color: var(--text-muted); line-height: 1.35; }
   .tab-p2p-status { font-size: 0.8rem; opacity: 0.85; margin: 8px 0; padding: 6px 8px; border-radius: 8px; background: var(--bg-secondary); }
   .status-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
   .ip { font-family: monospace; opacity: 0.9; }

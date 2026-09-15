@@ -35,13 +35,13 @@ try {
 } finally { Pop-Location }
 
 if (-not $SkipE2E) {
-  Write-Host "=== 3) playwright (expects :5173 + :8080) ===" -ForegroundColor Cyan
+  Write-Host "=== 3) playwright (expects :5173 + :8090) ===" -ForegroundColor Cyan
   # health check
   try {
-    $h = Invoke-WebRequest -Uri "http://127.0.0.1:8080/api/health" -UseBasicParsing -TimeoutSec 3
+    $h = Invoke-WebRequest -Uri "http://127.0.0.1:8090/api/health" -UseBasicParsing -TimeoutSec 3
     if ($h.StatusCode -ne 200) { throw "API not healthy" }
   } catch {
-    Write-Host "SKIP playwright: Go API :8080 not up (start messenger-server-dev.exe)" -ForegroundColor Yellow
+    Write-Host "SKIP playwright: Go API :8090 not up (start messenger-server-dev.exe)" -ForegroundColor Yellow
     exit 0
   }
   Push-Location $Pwa

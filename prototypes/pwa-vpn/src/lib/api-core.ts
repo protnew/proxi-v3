@@ -207,13 +207,13 @@ let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastStatus: Record<string, any> = { connected: false, relays: 0 };
 
 function buildWsUrl(): string {
+  return `${WS_BASE}/ws`;
+}
+
+function wsProtocols(): string | string[] | undefined {
   const token = getStoredToken();
-  const pubkey = cachedIdentity?.pubkey || '';
-  const params = new URLSearchParams();
-  if (token) params.set('token', token);
-  if (pubkey) params.set('userId', pubkey);
-  const qs = params.toString();
-  return `${WS_BASE}/ws${qs ? '?' + qs : ''}`;
+  if (!token) return undefined;
+  return ['access_token.' + token];
 }
 
 function handleWsMessage(event: MessageEvent) {
@@ -288,7 +288,7 @@ export async function connectRelays(): Promise<number> {
   return new Promise<number>((resolve) => {
     let resolved = false;
     try {
-      const ws = new WebSocket(buildWsUrl());
+      const ws = new WebSocket(buildWsUrl(), wsProtocols());
       wsConnection = ws;
 
       ws.onopen = () => {

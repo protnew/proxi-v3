@@ -341,18 +341,25 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 // Returns number of deleted messages.
 func (s *Store) CleanExpiredMessages() (int64, error) {
 	now := time.Now().Unix()
-	// Crypto-erasure: wipe plaintext/ciphertext before free space reuse
-	if _, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, fmt.Errorf("begin ttl tx: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
 		`UPDATE messages SET text = '', attachments = '', encrypted = 0
 		 WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
 	); err != nil {
 		return 0, fmt.Errorf("crypto-erase expired messages: %w", err)
 	}
-	res, err := s.db.Exec(
+	res, err := tx.Exec(
 		`DELETE FROM messages WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("clean expired messages: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("commit ttl tx: %w", err)
 	}
 	n, _ := res.RowsAffected()
 	return n, nil
@@ -360,15 +367,20 @@ func (s *Store) CleanExpiredMessages() (int64, error) {
 
 // CryptoEraseMessage overwrites message content then deletes (SEC-002 manual).
 func (s *Store) CryptoEraseMessage(messageID string) error {
-	if _, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin erase tx: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(
 		`UPDATE messages SET text = '', attachments = '', encrypted = 0 WHERE id = ?`, messageID,
 	); err != nil {
 		return fmt.Errorf("crypto-erase %s: %w", messageID, err)
 	}
-	if _, err := s.db.Exec(`DELETE FROM messages WHERE id = ?`, messageID); err != nil {
+	if _, err := tx.Exec(`DELETE FROM messages WHERE id = ?`, messageID); err != nil {
 		return fmt.Errorf("delete after erase %s: %w", messageID, err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // ---------------------------------------------------------------------------
@@ -440,7 +452,12 @@ func (s *Store) MarkScheduledSent(id string) error {
 
 // DeleteEmptyMessages removes rows with empty/whitespace-only text (MSG-005 cleanup).
 func (s *Store) DeleteEmptyMessages() (int64, error) {
-	res, err := s.db.Exec(`DELETE FROM messages WHERE trim(text) = '' OR text IS NULL`)
+	now := time.Now().Unix()
+	res, err := s.db.Exec(
+		`DELETE FROM messages
+		 WHERE ttl > 0 AND (timestamp + ttl) < ?
+		   AND (trim(text) = '' OR text IS NULL)`, now,
+	)
 	if err != nil {
 		return 0, fmt.Errorf("delete empty messages: %w", err)
 	}

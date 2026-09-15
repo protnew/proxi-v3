@@ -23,9 +23,9 @@ if [[ "${SKIP_E2E:-}" == "1" ]]; then
 fi
 
 echo "=== 3) playwright ==="
-if curl -fsS "http://127.0.0.1:8080/api/health" >/dev/null 2>&1; then
+if curl -fsS "http://127.0.0.1:8090/api/health" >/dev/null 2>&1; then
   npx playwright test --config=playwright.config.ts
 else
-  echo "SKIP playwright: :8080 down"
+  echo "SKIP playwright: :8090 down"
 fi
 echo "TDD LOOP OK"

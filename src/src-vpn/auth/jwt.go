@@ -18,8 +18,9 @@ const userIDKey contextKey = "userID"
 
 // Claims represents the JWT claims for access and refresh tokens.
 type Claims struct {
-	UserID string `json:"user_id"`
-	Npub   string `json:"npub"`
+	UserID  string `json:"user_id"`
+	Npub    string `json:"npub"`
+	Premium bool   `json:"premium"`
 	jwt.RegisteredClaims
 }
 
@@ -151,6 +152,9 @@ func AuthMiddleware(secret string) func(http.Handler) http.Handler {
 			}
 
 			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+			ctx = context.WithValue(ctx, "userID", claims.UserID)
+			ctx = context.WithValue(ctx, "npub", claims.Npub)
+			ctx = context.WithValue(ctx, "premium", claims.Premium)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

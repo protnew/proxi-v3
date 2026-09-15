@@ -25,8 +25,8 @@ import {
 export function connectWebSocket(token: string, onMessage: (msg: any) => void): WebSocket {
   const WS_BASE = (import.meta as any).env?.VITE_API_URL?.replace(/^http/, 'ws') || 
     (typeof location !== 'undefined' ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}` : 'ws://localhost:8090');
-  const wsUrl = `${WS_BASE}/ws?token=${encodeURIComponent(token)}`;
-  const ws = new WebSocket(wsUrl);
+  const wsUrl = `${WS_BASE}/ws`;
+  const ws = token ? new WebSocket(wsUrl, ['access_token.' + token]) : new WebSocket(wsUrl);
   ws.onmessage = (event) => {
     try { onMessage(JSON.parse(event.data)); } catch { onMessage({ type: 'raw', data: event.data }); }
   };

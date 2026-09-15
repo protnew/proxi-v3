@@ -2,6 +2,7 @@ package content
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -50,12 +51,11 @@ func uploadViaHTTP(t *testing.T, v *ContentVault, filename string, data []byte, 
 
 	req := httptest.NewRequest(http.MethodPost, "/api/content", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
-	// Propagate fields that callers may have put on the request via headers.
 	if uid, ok := fields["_header_user_id"]; ok {
-		req.Header.Set("X-User-Id", uid)
+		req = req.WithContext(context.WithValue(req.Context(), "userID", uid))
 	}
 	if prem, ok := fields["_header_premium"]; ok {
-		req.Header.Set("X-Premium", prem)
+		req = req.WithContext(context.WithValue(req.Context(), "premium", prem == "true" || prem == "1"))
 	}
 
 	rec := httptest.NewRecorder()
@@ -77,7 +77,14 @@ func downloadViaHTTP(t *testing.T, v *ContentVault, id string, headers map[strin
 	t.Helper()
 	req := httptest.NewRequest(http.MethodGet, "/api/content/"+id, nil)
 	for k, val := range headers {
-		req.Header.Set(k, val)
+		switch k {
+		case "X-User-Id":
+			req = req.WithContext(context.WithValue(req.Context(), "userID", val))
+		case "X-Premium":
+			req = req.WithContext(context.WithValue(req.Context(), "premium", val == "true" || val == "1"))
+		default:
+			req.Header.Set(k, val)
+		}
 	}
 	rec := httptest.NewRecorder()
 	v.HandleContentDownload(rec, req)
@@ -382,7 +389,7 @@ func TestEndpoint_AccessControlDeniesStream(t *testing.T) {
 
 	// Disallowed user → 403 on stream too.
 	req := httptest.NewRequest(http.MethodGet, "/api/content/"+resp.ID+"/stream", nil)
-	req.Header.Set("X-User-Id", "stranger")
+	req = req.WithContext(context.WithValue(req.Context(), "userID", "stranger"))
 	rec := httptest.NewRecorder()
 	v.HandleContentStream(rec, req)
 	if rec.Code != http.StatusForbidden {
@@ -391,7 +398,7 @@ func TestEndpoint_AccessControlDeniesStream(t *testing.T) {
 
 	// Allowed owner → 200.
 	req2 := httptest.NewRequest(http.MethodGet, "/api/content/"+resp.ID+"/stream", nil)
-	req2.Header.Set("X-User-Id", "owner")
+	req2 = req2.WithContext(context.WithValue(req2.Context(), "userID", "owner"))
 	rec2 := httptest.NewRecorder()
 	v.HandleContentStream(rec2, req2)
 	if rec2.Code != http.StatusOK {
@@ -428,6 +435,51 @@ func TestEndpoint_Delete(t *testing.T) {
 	v.HandleContentDelete(rec2, req2)
 	if rec2.Code != http.StatusNotFound {
 		t.Errorf("re-delete status = %d, want 404", rec2.Code)
+	}
+}
+
+func TestEndpoint_DeleteOwnerOnly(t *testing.T) {
+	v := newTestVault(t)
+	data := bytes.Repeat([]byte("own"), 50)
+	resp := uploadViaHTTP(t, v, "own.bin", data, map[string]string{
+		"title":    "Owned",
+		"type":     "document",
+		"access":   "public",
+		"uploader": "alice",
+	})
+	req := httptest.NewRequest(http.MethodDelete, "/api/content/"+resp.ID, nil)
+	req = req.WithContext(context.WithValue(req.Context(), "userID", "bob"))
+	rec := httptest.NewRecorder()
+	v.HandleContentDelete(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("bob delete status = %d, want 403", rec.Code)
+	}
+	req2 := httptest.NewRequest(http.MethodDelete, "/api/content/"+resp.ID, nil)
+	req2 = req2.WithContext(context.WithValue(req2.Context(), "userID", "alice"))
+	rec2 := httptest.NewRecorder()
+	v.HandleContentDelete(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("alice delete status = %d, want 200", rec2.Code)
+	}
+}
+
+func TestEndpoint_HeadersDoNotRaiseAccess(t *testing.T) {
+	v := newTestVault(t)
+	data := bytes.Repeat([]byte("paid"), 50)
+	resp := uploadViaHTTP(t, v, "paid.bin", data, map[string]string{
+		"title":    "Paid",
+		"type":     "document",
+		"access":   "paid",
+		"uploader": "owner",
+	})
+	req := httptest.NewRequest(http.MethodGet, "/api/content/"+resp.ID+"?premium=1&user_id=owner", nil)
+	req.Header.Set("X-User-Id", "owner")
+	req.Header.Set("X-Premium", "true")
+	req = req.WithContext(context.WithValue(req.Context(), "userID", "freeloader"))
+	rec := httptest.NewRecorder()
+	v.HandleContentDownload(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("header bypass status = %d, want 403", rec.Code)
 	}
 }
 

@@ -25,7 +25,7 @@ import (
 // Routing identity is claims.Npub (full pubkey) so DM to/from match hub keys.
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	userId := ""
-	tokenStr := r.URL.Query().Get("token")
+	tokenStr := wsTokenFromUpgrade(r)
 	if s.authService != nil {
 		if tokenStr == "" {
 			http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
@@ -55,8 +55,13 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if origin := r.Header.Get("Origin"); origin != "" && !wsOriginAllowed(origin) {
+		http.Error(w, `{"error":"FORBIDDEN","message":"origin not allowed"}`, http.StatusForbidden)
+		return
+	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: []string{"*"},
+		Subprotocols:   wsRequestedProtocols(r),
 	})
 	if err != nil {
 		log.Printf("WS accept error: %v", err)
@@ -67,11 +72,64 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	chat.ServeWS(s.hub, userId, conn, r.Context())
 }
 
-// handleIdentityGet returns current user's identity (generates if needed)
+func callerUserID(r *http.Request) string {
+	if v, ok := r.Context().Value("userID").(string); ok {
+		return v
+	}
+	return ""
+}
+
+func wsOriginAllowed(origin string) bool {
+	for _, o := range corsAllowedOrigins() {
+		if o == origin {
+			return true
+		}
+	}
+	return isPrivateLANOrigin(origin)
+}
+
+func wsTokenFromUpgrade(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); len(h) > 7 && strings.EqualFold(h[:7], "bearer ") {
+		return strings.TrimSpace(h[7:])
+	}
+	for _, p := range wsRequestedProtocols(r) {
+		if strings.HasPrefix(p, "access_token.") {
+			return strings.TrimPrefix(p, "access_token.")
+		}
+	}
+	return ""
+}
+
+func wsRequestedProtocols(r *http.Request) []string {
+	raw := r.Header.Get("Sec-WebSocket-Protocol")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// handleIdentityGet returns the node's identity only to its owner (first JWT
+// caller that created or claimed the singleton row). Another signup must not
+// receive that nsec.
 func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
-	// Try loading from DB first
+	uid := callerUserID(r)
 	npub, nsec, seedPhrase, err := s.db.LoadIdentity()
 	if err == nil && npub != "" {
+		owner := s.db.LoadIdentityOwner()
+		if uid != "" && owner != "" && owner != uid {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "identity belongs to another user")
+			return
+		}
+		if uid != "" && owner == "" {
+			_ = s.db.SetIdentityOwner(uid)
+		}
 		writeJSON(w, 200, map[string]interface{}{
 			"npub":     npub,
 			"nsec":     nsec,
@@ -95,6 +153,9 @@ func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 	// Save to SQLite
 	if saveErr := s.db.SaveIdentity(npub, nsec, mnemonic); saveErr != nil {
 		log.Printf("WARNING: failed to save identity to db: %v", saveErr)
+	}
+	if uid != "" {
+		_ = s.db.SetIdentityOwner(uid)
 	}
 
 	// Also save to legacy file for backward compat
