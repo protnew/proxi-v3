@@ -79,3 +79,9 @@ src/src-vpn/cmd/webserver/data/vapid.json
 src/src-vpn/data/uploads/
 **/amnezia/*.conf
 **/indestructible.conf
+
+# secrets (P23)
+.env
+.env.*
+!.env.example
+

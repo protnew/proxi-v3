@@ -3,3 +3,8 @@ dist/
 test-results/
 .env
 *.log
+
+.env
+.env.*
+!.env.example
+
