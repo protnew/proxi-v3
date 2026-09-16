@@ -85,3 +85,13 @@ src/src-vpn/data/uploads/
 .env.*
 !.env.example
 
+
+# secrets (P23)
+.env
+.env.*
+!.env.example
+
+# secrets (P23)
+.env
+.env.*
+!.env.example

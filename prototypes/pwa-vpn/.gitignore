@@ -10,3 +10,12 @@ test-results/
 
 
 e2e-shots/
+
+.env
+.env.*
+!.env.example
+
+# secrets (P23)
+.env
+.env.*
+!.env.example
