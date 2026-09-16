@@ -1,4 +1,4 @@
-# Go
+﻿# Go
 *.exe
 messenger-server
 coverage.out
@@ -29,7 +29,6 @@ src-tauri/target/
 
 # OS
 nul
-.env
 .env*
 e2e-shots/
 .DS_Store
@@ -80,16 +79,9 @@ src/src-vpn/data/uploads/
 **/amnezia/*.conf
 **/indestructible.conf
 
-# secrets (P23)
-.env
-.env.*
-!.env.example
 
 
-# secrets (P23)
-.env
-.env.*
-!.env.example
+
 
 # secrets (P23)
 .env

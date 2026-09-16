@@ -1,19 +1,12 @@
-node_modules/
+﻿node_modules/
 dist/
 test-results/
-.env
 *.log
 
-.env
-.env.*
-!.env.example
 
 
 e2e-shots/
 
-.env
-.env.*
-!.env.example
 
 # secrets (P23)
 .env
