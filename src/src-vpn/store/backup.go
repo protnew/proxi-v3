@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -31,8 +30,7 @@ func (s *Store) Backup(dstPath string) error {
 	}
 
 	// Use VACUUM INTO (SQLite 3.27+)
-	escaped := strings.ReplaceAll(dstPath, "'", "''")
-	_, err := s.db.Exec("VACUUM INTO '" + escaped + "'")
+	_, err := s.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", dstPath))
 	if err != nil {
 		return fmt.Errorf("store: VACUUM INTO failed: %w", err)
 	}
@@ -50,7 +48,6 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 		return fmt.Errorf("store: database not open")
 	}
 
-	// Validate source exists
 	info, err := os.Stat(srcPath)
 	if err != nil {
 		return fmt.Errorf("store: backup file not found: %w", err)
@@ -59,50 +56,93 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 		return fmt.Errorf("store: backup path is a directory, not a file")
 	}
 
-	// Close current DB
+	srcAbs, err := filepath.Abs(srcPath)
+	if err != nil {
+		return fmt.Errorf("store: resolve backup path: %w", err)
+	}
+	dbAbs, err := filepath.Abs(dbPath)
+	if err != nil {
+		return fmt.Errorf("store: resolve db path: %w", err)
+	}
+	if srcAbs == dbAbs {
+		return fmt.Errorf("store: backup and database paths must differ")
+	}
+
+	// Stage and fsync the complete backup before touching the live database.
+	tmpPath := dbPath + ".restore-tmp"
+	_ = os.Remove(tmpPath)
+	src, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("store: open backup: %w", err)
+	}
+	tmp, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		src.Close()
+		return fmt.Errorf("store: create staged restore: %w", err)
+	}
+	cleanupTmp := true
+	defer func() {
+		if cleanupTmp {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+	if _, err := io.Copy(tmp, src); err != nil {
+		src.Close()
+		tmp.Close()
+		return fmt.Errorf("store: stage backup: %w", err)
+	}
+	if err := src.Close(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("store: close backup: %w", err)
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return fmt.Errorf("store: sync staged restore: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("store: close staged restore: %w", err)
+	}
+
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("store: close db: %w", err)
 	}
 	s.db = nil
 
-	removeSQLiteSidecars(dbPath)
-
-	// Copy backup file to DB path
-	src, err := os.Open(srcPath)
-	if err != nil {
-		return fmt.Errorf("store: open backup: %w", err)
+	// SQLite WAL sidecars belong to the old main DB. They must be removed before
+	// replacing it or stale frames can be replayed into the restored database.
+	for _, sidecar := range []string{dbPath + "-wal", dbPath + "-shm"} {
+		if err := os.Remove(sidecar); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("store: remove stale sidecar %s: %w", filepath.Base(sidecar), err)
+		}
 	}
-	defer src.Close()
-
-	dst, err := os.Create(dbPath)
-	if err != nil {
-		return fmt.Errorf("store: create db file: %w", err)
+	if err := os.Remove(dbPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("store: remove old db: %w", err)
 	}
-	defer dst.Close()
-
-	if _, err := io.Copy(dst, src); err != nil {
-		return fmt.Errorf("store: copy backup: %w", err)
+	if err := os.Rename(tmpPath, dbPath); err != nil {
+		return fmt.Errorf("store: install restored db: %w", err)
 	}
-	dst.Sync()
+	cleanupTmp = false
 
-	// Reopen database
 	db, err := sql.Open("sqlite", dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("store: reopen db: %w", err)
 	}
-
 	if _, err := db.Exec("PRAGMA foreign_keys = ON"); err != nil {
 		db.Close()
 		return fmt.Errorf("store: enable foreign keys: %w", err)
 	}
+	var integrity string
+	if err := db.QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil {
+		db.Close()
+		return fmt.Errorf("store: restored integrity check: %w", err)
+	}
+	if integrity != "ok" {
+		db.Close()
+		return fmt.Errorf("store: restored integrity check failed: %s", integrity)
+	}
 
 	s.db = db
 	return nil
-}
-
-func removeSQLiteSidecars(dbPath string) {
-	_ = os.Remove(dbPath + "-wal")
-	_ = os.Remove(dbPath + "-shm")
 }
 
 // AutoBackup starts a goroutine that periodically backs up the database

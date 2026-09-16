@@ -130,9 +130,13 @@ func TestDeleteMessage(t *testing.T) {
 	}
 
 	var count int
-	p.db.DB().QueryRow("SELECT COUNT(*) FROM messages WHERE id = ?", "msg1").Scan(&count)
-	if count != 0 {
-		t.Error("message should be deleted")
+	p.db.DB().QueryRow("SELECT COUNT(*) FROM messages WHERE id = ? AND is_deleted = 1 AND deleted_at > 0", "msg1").Scan(&count)
+	if count != 1 {
+		t.Error("message should be retained as a deleted tombstone")
+	}
+	p.db.DB().QueryRow("SELECT COUNT(*) FROM audit_log WHERE action = 'message.soft_delete' AND resource = ?", "msg1").Scan(&count)
+	if count != 1 {
+		t.Error("admin soft delete should write one audit row")
 	}
 
 	err = p.DeleteMessage(ctx, "nonexistent")

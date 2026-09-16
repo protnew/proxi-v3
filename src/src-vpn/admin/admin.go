@@ -26,7 +26,7 @@ func (p *Panel) GetDashboardStats(ctx context.Context) (map[string]interface{}, 
 	d := p.db.DB()
 
 	var msgCount, channelCount, peerCount, banCount, reportCount int
-	d.QueryRowContext(ctx, "SELECT COUNT(*) FROM messages").Scan(&msgCount)
+	d.QueryRowContext(ctx, "SELECT COUNT(*) FROM messages WHERE is_deleted = 0").Scan(&msgCount)
 	d.QueryRowContext(ctx, "SELECT COUNT(*) FROM channels").Scan(&channelCount)
 	d.QueryRowContext(ctx, "SELECT COUNT(*) FROM peers").Scan(&peerCount)
 	d.QueryRowContext(ctx, "SELECT COUNT(*) FROM user_bans WHERE expires_at IS NULL OR expires_at > datetime('now')").Scan(&banCount)
@@ -40,7 +40,7 @@ func (p *Panel) GetDashboardStats(ctx context.Context) (map[string]interface{}, 
 
 	// Active users (last 24h)
 	var activeUsers int
-	d.QueryRowContext(ctx, "SELECT COUNT(DISTINCT sender) FROM messages WHERE timestamp > strftime('%s','now','-1 day')").Scan(&activeUsers)
+	d.QueryRowContext(ctx, "SELECT COUNT(DISTINCT sender) FROM messages WHERE is_deleted = 0 AND timestamp > strftime('%s','now','-1 day')").Scan(&activeUsers)
 	stats["active_users_24h"] = activeUsers
 
 	return stats, nil
@@ -50,7 +50,7 @@ func (p *Panel) GetDashboardStats(ctx context.Context) (map[string]interface{}, 
 func (p *Panel) ListUsers(ctx context.Context, offset, limit int) ([]map[string]interface{}, error) {
 	d := p.db.DB()
 	rows, err := d.QueryContext(ctx,
-		"SELECT sender, COUNT(*) as msg_count, MAX(timestamp) as last_active FROM messages GROUP BY sender ORDER BY last_active DESC LIMIT ? OFFSET ?",
+		"SELECT sender, COUNT(*) as msg_count, MAX(timestamp) as last_active FROM messages WHERE is_deleted = 0 GROUP BY sender ORDER BY last_active DESC LIMIT ? OFFSET ?",
 		limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("list users: %w", err)
@@ -111,18 +111,28 @@ func (p *Panel) IsBanned(ctx context.Context, userID string) (bool, error) {
 	return count > 0, err
 }
 
-// DeleteMessage removes a message by ID.
+// DeleteMessage soft-deletes a message and records the moderation action atomically.
+// P1 assumption: admin/user deletes retain tombstones; SEC erasure uses Store.CryptoEraseMessage.
 func (p *Panel) DeleteMessage(ctx context.Context, messageID string) error {
-	d := p.db.DB()
-	res, err := d.ExecContext(ctx, "DELETE FROM messages WHERE id = ?", messageID)
-	if err != nil {
+	return p.db.RunInTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx,
+			"UPDATE messages SET is_deleted = 1, deleted_at = ? WHERE id = ? AND is_deleted = 0",
+			time.Now().Unix(), messageID)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return fmt.Errorf("message %s not found", messageID)
+		}
+		_, err = tx.ExecContext(ctx,
+			"INSERT INTO audit_log (user_id, action, resource, details) VALUES (?, ?, ?, ?)",
+			"admin", "message.soft_delete", messageID, "{}")
 		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("message %s not found", messageID)
-	}
-	return nil
+	})
 }
 
 // CreateReport adds a new report for a message.

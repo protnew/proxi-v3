@@ -308,11 +308,10 @@ CREATE TABLE IF NOT EXISTS prekey_bundles (
 		Version: 9,
 		Name:    "fts5_search",
 		Up: `
--- FTS5 full-text search (graceful: skip if FTS5 not compiled in)
--- Table creation is wrapped in a SELECT to test FTS5 availability
-CREATE TABLE IF NOT EXISTS messages_fts_testfts5 (dummy text);
-DROP TABLE IF EXISTS messages_fts_testfts5;
--- If above succeeded, FTS5 is available. Otherwise the triggers below are no-ops.
+-- P1/D5: remove the destructive FTS5 probe from migration Up.
+-- Destructive DDL in migration Up is forbidden (DATA ZERO TOLERANCE). No-op placeholder kept
+-- so schema_version v9 stays stable; real FTS index must be created without DROP.
+SELECT 1;
 `,
 	},
 	{
@@ -412,16 +411,16 @@ CREATE INDEX IF NOT EXISTS idx_stream_chunks_sequence ON stream_chunks(stream_id
 	},
 	{
 		Version: 15,
-		Name:    "push_subscriptions_and_identity_owner",
+		Name:    "messages_soft_delete_erasure",
 		Up: `
-CREATE TABLE IF NOT EXISTS push_subscriptions (
-    user_id TEXT PRIMARY KEY,
-    endpoint TEXT NOT NULL DEFAULT '',
-    p256dh TEXT NOT NULL DEFAULT '',
-    auth TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL DEFAULT 0
-);
-ALTER TABLE identity ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '';
+-- P1: user/admin delete → soft-delete tombstone (deleted_at).
+-- SEC crypto erase → random wipe + erased_at + hard DELETE in one tx.
+ALTER TABLE messages ADD COLUMN is_deleted INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE messages ADD COLUMN erased_at INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_messages_is_deleted ON messages(is_deleted);
+CREATE INDEX IF NOT EXISTS idx_messages_deleted_at ON messages(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_messages_erased_at ON messages(erased_at);
 `,
 	},
 }
@@ -435,10 +434,7 @@ func runMigrations(db *sql.DB) error {
 			name TEXT NOT NULL,
 			applied_at TEXT NOT NULL DEFAULT (datetime('now'))
 		)
-	`); 
-	
-	
-	err != nil {
+	`); err != nil {
 		return fmt.Errorf("create schema_version: %w", err)
 	}
 
@@ -477,7 +473,16 @@ func runMigrations(db *sql.DB) error {
 		log.Printf("✅ Migration v%d applied", m.Version)
 	}
 
+	// FTS5 probe lives outside migration Up: CREATE IF NOT EXISTS, ignore errors, never DROP.
+	tryEnsureFTS5(db)
 	return nil
+}
+
+func tryEnsureFTS5(db *sql.DB) {
+	// Capability probe only (separate Exec, errors ignored). Never DROP.
+	// Do not create product messages_fts here: it has no content sync and SearchMessagesFTS
+	// would stop falling back to LIKE.
+	_, _ = db.Exec(`CREATE VIRTUAL TABLE IF NOT EXISTS fts5_capability_probe USING fts5(x)`)
 }
 
 // GetSchemaVersion returns the current schema version.

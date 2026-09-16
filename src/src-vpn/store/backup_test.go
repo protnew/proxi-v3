@@ -89,9 +89,24 @@ func TestBackupRestore(t *testing.T) {
 		Encrypted: false,
 		Timestamp: 1700000001,
 	}
-	restoreStore.SaveMessage(restoreMsg)
+	if _, err := restoreStore.DB().Exec("PRAGMA journal_mode = WAL"); err != nil {
+		t.Fatalf("enable WAL: %v", err)
+	}
+	if _, err := restoreStore.DB().Exec("PRAGMA wal_autocheckpoint = 0"); err != nil {
+		t.Fatalf("disable WAL autocheckpoint: %v", err)
+	}
+	if err := restoreStore.SaveMessage(restoreMsg); err != nil {
+		t.Fatalf("SaveMessage restore target: %v", err)
+	}
+	walInfo, err := os.Stat(restorePath + "-wal")
+	if err != nil {
+		t.Fatalf("expected live WAL before restore: %v", err)
+	}
+	if walInfo.Size() == 0 {
+		t.Fatal("expected non-empty WAL before restore")
+	}
 
-	// Restore from backup
+	// Restore must discard the live DB's WAL/SHM before replacing the main file.
 	if err := restoreStore.Restore(backupPath, restorePath); err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
@@ -111,6 +126,13 @@ func TestBackupRestore(t *testing.T) {
 	if !found {
 		t.Error("original message not found after restore")
 	}
+	var integrity string
+	if err := restoreStore.DB().QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil {
+		t.Fatalf("integrity_check: %v", err)
+	}
+	if integrity != "ok" {
+		t.Fatalf("integrity_check=%q want ok", integrity)
+	}
 	// The overwritten message should not be there
 	for _, m := range msgs2 {
 		if m.ID == "should-be-overwritten" {
@@ -122,34 +144,65 @@ func TestBackupRestore(t *testing.T) {
 }
 
 func TestRestoreRemovesWalSidecars(t *testing.T) {
-	dir := t.TempDir()
-	live := filepath.Join(dir, "live.db")
-	bak := filepath.Join(dir, "bak.db")
-	s, err := NewStore(live)
+	dbDir := t.TempDir()
+	backupDir := t.TempDir()
+	dbPath := filepath.Join(dbDir, "live.db")
+	backupPath := filepath.Join(backupDir, "keep.db")
+
+	s, err := NewStore(dbPath)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("NewStore: %v", err)
 	}
-	if err := s.SaveMessage(Message{ID: "w1", From: "a", To: "broadcast", Text: "wal", Timestamp: 3}); err != nil {
-		t.Fatal(err)
+	keep := Message{ID: "keep", From: "alice", To: "broadcast", Text: "from-backup", Timestamp: 1}
+	if err := s.SaveMessage(keep); err != nil {
+		t.Fatalf("SaveMessage keep: %v", err)
 	}
-	if err := s.Backup(bak); err != nil {
-		t.Fatal(err)
+	if err := s.Backup(backupPath); err != nil {
+		t.Fatalf("Backup: %v", err)
 	}
-	if err := os.WriteFile(live+"-wal", []byte("garbage-wal"), 0600); err != nil {
-		t.Fatal(err)
+	drop := Message{ID: "drop", From: "alice", To: "broadcast", Text: "after-backup", Timestamp: 2}
+	if err := s.SaveMessage(drop); err != nil {
+		t.Fatalf("SaveMessage drop: %v", err)
 	}
-	if err := os.WriteFile(live+"-shm", []byte("garbage-shm"), 0600); err != nil {
-		t.Fatal(err)
+
+	walPath := dbPath + "-wal"
+	shmPath := dbPath + "-shm"
+	if _, err := os.Stat(walPath); err != nil {
+		if err := os.WriteFile(walPath, []byte("stale-wal-poison-p1"), 0o600); err != nil {
+			t.Fatalf("write wal: %v", err)
+		}
 	}
-	if err := s.Restore(bak, live); err != nil {
-		t.Fatal(err)
+	if _, err := os.Stat(shmPath); err != nil {
+		if err := os.WriteFile(shmPath, []byte("stale-shm-poison-p1"), 0o600); err != nil {
+			t.Fatalf("write shm: %v", err)
+		}
 	}
-	defer s.Close()
-	var ok string
-	if err := s.DB().QueryRow("PRAGMA integrity_check").Scan(&ok); err != nil {
-		t.Fatal(err)
+
+	if err := s.Restore(backupPath, dbPath); err != nil {
+		t.Fatalf("Restore: %v", err)
 	}
-	if ok != "ok" {
-		t.Fatalf("integrity_check=%q", ok)
+
+	var integrity string
+	if err := s.DB().QueryRow("PRAGMA integrity_check").Scan(&integrity); err != nil {
+		t.Fatalf("integrity_check: %v", err)
 	}
+	if integrity != "ok" {
+		t.Fatalf("integrity_check=%q want ok", integrity)
+	}
+
+	msgs, err := s.GetMessages(50, 0, "alice")
+	if err != nil {
+		t.Fatalf("GetMessages: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, m := range msgs {
+		ids[m.ID] = true
+	}
+	if !ids["keep"] {
+		t.Fatal("backup row missing after restore")
+	}
+	if ids["drop"] {
+		t.Fatal("post-backup row survived restore (stale WAL replay?)")
+	}
+	s.Close()
 }

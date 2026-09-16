@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -64,7 +65,7 @@ func (s *Store) SaveMessage(msg Message) error {
 
 func (s *Store) EditMessage(messageID, newText, senderNpub string) error {
 	res, err := s.db.Exec(
-		`UPDATE messages SET text = ? WHERE id = ? AND sender = ?`,
+		`UPDATE messages SET text = ? WHERE id = ? AND sender = ? AND IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0`,
 		newText, messageID, senderNpub,
 	)
 	if err != nil {
@@ -77,10 +78,11 @@ func (s *Store) EditMessage(messageID, newText, senderNpub string) error {
 	return nil
 }
 
-// DeleteMessage removes a message by ID. Returns error if not found.
+// DeleteMessage soft-deletes a user message. SEC erasure is a separate, transactional path.
+// P1 assumption: ordinary user delete keeps a tombstone until an explicit retention policy purges it.
 
 func (s *Store) DeleteMessage(messageID, senderNpub string) error {
-	res, err := s.db.Exec(`DELETE FROM messages WHERE id = ? AND sender = ?`, messageID, senderNpub)
+	res, err := s.db.Exec(`UPDATE messages SET is_deleted = 1, deleted_at = ? WHERE id = ? AND sender = ? AND IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0`, time.Now().Unix(), messageID, senderNpub)
 	if err != nil {
 		return fmt.Errorf("delete message %s: %w", messageID, err)
 	}
@@ -99,7 +101,7 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 	rows, err := s.db.Query(
 		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages
-		 WHERE timestamp > ?
+		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND timestamp > ?
 		   AND (recipient = 'broadcast'
 		        OR sender = ?
 		        OR recipient = ?)
@@ -131,7 +133,7 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 func (s *Store) GetMessageByID(id string) (*Message, error) {
 	row := s.db.QueryRow(
 		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
-		 FROM messages WHERE id = ?`, id,
+		 FROM messages WHERE id = ? AND IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0`, id,
 	)
 	var m Message
 	var enc int
@@ -297,7 +299,7 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 		rows, err = s.db.Query(
 			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages
-		 WHERE text LIKE ?
+		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND text LIKE ?
 		 ORDER BY timestamp DESC
 		 LIMIT ?`,
 			"%"+query+"%", limit,
@@ -306,7 +308,7 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 		rows, err = s.db.Query(
 			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
 		 FROM messages
-		 WHERE text LIKE ?
+		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND text LIKE ?
 		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)
 		 ORDER BY timestamp DESC
 		 LIMIT ?`,
@@ -332,55 +334,64 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 	return msgs, rows.Err()
 }
 
-// CleanExpiredMessages deletes all messages where TTL > 0 and timestamp+ttl < now.
-// Returns the number of deleted messages.
-
-// CleanExpiredMessages SEC-002: crypto-erasure then delete.
-// 1) Overwrite text/attachments with zeros for expired TTL rows
-// 2) DELETE those rows
-// Returns number of deleted messages.
-func (s *Store) CleanExpiredMessages() (int64, error) {
+// CleanExpiredMessages SEC-002: wipe and delete expired TTL rows atomically.
+func (s *Store) CleanExpiredMessages() (n int64, err error) {
 	now := time.Now().Unix()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return 0, fmt.Errorf("begin ttl tx: %w", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(
-		`UPDATE messages SET text = '', attachments = '', encrypted = 0
-		 WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
-	); err != nil {
-		return 0, fmt.Errorf("crypto-erase expired messages: %w", err)
-	}
-	res, err := tx.Exec(
-		`DELETE FROM messages WHERE ttl > 0 AND (timestamp + ttl) < ?`, now,
-	)
-	if err != nil {
-		return 0, fmt.Errorf("clean expired messages: %w", err)
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, fmt.Errorf("commit ttl tx: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	return n, nil
+	err = s.RunInTx(context.Background(), func(tx *sql.Tx) error {
+		if _, err := tx.Exec(
+			`UPDATE messages SET
+				text = hex(randomblob(max(16, length(text)))),
+				attachments = '',
+				encrypted = 0,
+				erased_at = ?
+			 WHERE ttl > 0 AND (timestamp + ttl) < ? AND IFNULL(erased_at, 0) = 0`, now, now,
+		); err != nil {
+			return fmt.Errorf("crypto-erase expired messages: %w", err)
+		}
+		res, err := tx.Exec(`DELETE FROM messages WHERE erased_at IS NOT NULL AND erased_at > 0 AND ttl > 0 AND (timestamp + ttl) < ?`, now)
+		if err != nil {
+			return fmt.Errorf("clean expired messages: %w", err)
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
+	return n, err
 }
 
-// CryptoEraseMessage overwrites message content then deletes (SEC-002 manual).
+// CryptoEraseMessage wipes and hard-deletes a message in one transaction (SEC-002 manual).
+// This is intentionally distinct from DeleteMessage's user-visible soft delete.
 func (s *Store) CryptoEraseMessage(messageID string) error {
-	tx, err := s.db.Begin()
-	if err != nil {
-		return fmt.Errorf("begin erase tx: %w", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.Exec(
-		`UPDATE messages SET text = '', attachments = '', encrypted = 0 WHERE id = ?`, messageID,
-	); err != nil {
-		return fmt.Errorf("crypto-erase %s: %w", messageID, err)
-	}
-	if _, err := tx.Exec(`DELETE FROM messages WHERE id = ?`, messageID); err != nil {
-		return fmt.Errorf("delete after erase %s: %w", messageID, err)
-	}
-	return tx.Commit()
+	return s.RunInTx(context.Background(), func(tx *sql.Tx) error {
+		now := time.Now().Unix()
+		res, err := tx.Exec(
+			`UPDATE messages SET
+				text = hex(randomblob(max(16, length(text)))),
+				attachments = '',
+				encrypted = 0,
+				erased_at = ?
+			 WHERE id = ?`, now, messageID,
+		)
+		if err != nil {
+			return fmt.Errorf("crypto-erase %s: %w", messageID, err)
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return fmt.Errorf("crypto-erase rows %s: %w", messageID, err)
+		}
+		if n == 0 {
+			return fmt.Errorf("message %s not found", messageID)
+		}
+		if _, err := tx.Exec(`DELETE FROM messages WHERE id = ? AND erased_at IS NOT NULL AND erased_at > 0`, messageID); err != nil {
+			return fmt.Errorf("delete after erase %s: %w", messageID, err)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO audit_log (user_id, action, resource, details) VALUES (?, ?, ?, ?)`,
+			"system", "crypto_erase", messageID, `{"tx":true,"sec":"SEC-002"}`,
+		); err != nil {
+			return fmt.Errorf("audit crypto-erase %s: %w", messageID, err)
+		}
+		return nil
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -450,13 +461,18 @@ func (s *Store) MarkScheduledSent(id string) error {
 
 // DeadMansSwitch represents a message that will be sent if the user doesn't check in.
 
-// DeleteEmptyMessages removes rows with empty/whitespace-only text (MSG-005 cleanup).
-func (s *Store) DeleteEmptyMessages() (int64, error) {
+// DeleteEmptyMessages removes leftover SEC-erasure rows (erased_at set AND TTL expired).
+// Empty/whitespace text alone is never a deletion predicate (P1 data-loss gate).
+// allowEmptyCleanup default callers MUST pass false; true only purges marked leftovers.
+func (s *Store) DeleteEmptyMessages(allowEmptyCleanup bool) (int64, error) {
+	if !allowEmptyCleanup {
+		return 0, nil
+	}
 	now := time.Now().Unix()
 	res, err := s.db.Exec(
 		`DELETE FROM messages
-		 WHERE ttl > 0 AND (timestamp + ttl) < ?
-		   AND (trim(text) = '' OR text IS NULL)`, now,
+		 WHERE erased_at IS NOT NULL AND erased_at > 0
+		   AND ttl > 0 AND (timestamp + ttl) < ?`, now,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("delete empty messages: %w", err)
