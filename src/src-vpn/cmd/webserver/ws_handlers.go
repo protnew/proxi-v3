@@ -130,10 +130,11 @@ func (s *Server) initHub() {
 		s.drSessions = chat.NewDRSessionStore() // CRYP-010
 	}
 	s.hub.OnMessage = func(msg *chat.Message) {
-		log.Printf("💬 [%s→%s]: %s", msg.From, msg.To, truncate(msg.Text, 50))
+		// P5: never log message bodies on the hot path (metadata only).
+		log.Printf("💬 [%s→%s] type=%s encrypted=%v len=%d", msg.From, msg.To, msg.Type, msg.ClaimedEncrypted(), len(msg.Text))
 
-		// Process bot commands
-		if msg.Type == "chat" && msg.Text != "" {
+		// Process bot commands — skip ciphertext (bots need plaintext; E2E DMs are opaque).
+		if msg.Type == "chat" && msg.Text != "" && !msg.ClaimedEncrypted() && !chat.LooksLikeClientCiphertext(msg.Text) {
 			botMsg := bot.Message{
 				ID:        msg.ID,
 				From:      msg.From,
@@ -149,13 +150,20 @@ func (s *Server) initHub() {
 		}
 
 		// Save chat messages to SQLite (skip empty text — MSG-003)
+		// P5: persist ciphertext as-is with Encrypted=true; refuse claimed-encrypted plaintext.
 		if msg.Type == "chat" && strings.TrimSpace(msg.Text) != "" {
+			if msg.ClaimedEncrypted() && !chat.LooksLikeClientCiphertext(msg.Text) {
+				log.Printf("P5 refuse persist: encrypted flag without ciphertext from %s", truncate(msg.From, 16))
+				return
+			}
+			msg.NormalizeE2EFlags()
 			msgID := fmt.Sprintf("msg-%d-%s", msg.Ts, randomHex(4))
 			storeMsg := store.Message{
 				ID:            msgID,
 				From:          msg.From,
 				To:            msg.To,
 				Text:          msg.Text,
+				Encrypted:     msg.ClaimedEncrypted(),
 				Timestamp:     msg.Ts,
 				ReplyTo:       msg.ReplyTo,
 				ForwardedFrom: msg.ForwardedFrom,

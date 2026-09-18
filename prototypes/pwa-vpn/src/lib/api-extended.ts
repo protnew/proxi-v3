@@ -4,6 +4,7 @@
  */
 import { request, createGroup, listGroups } from './api';
 import type { ApiResponse } from './api';
+import { isE2EEnabledLocal, setE2EEnabledLocal } from './api-core';
 
 // ============================================================
 // M-013: Full-text search
@@ -24,19 +25,20 @@ export async function deleteMessage(msgId: string): Promise<ApiResponse> {
 }
 
 // ============================================================
-// S-001: E2E encryption toggle
+// S-001: E2E encryption toggle (P5: share state with api-core sendDM path)
 // ============================================================
-let e2eEnabled = true;
-export function isE2EEnabled(): boolean { return e2eEnabled; }
+export function isE2EEnabled(): boolean { return isE2EEnabledLocal(); }
 export function setE2EEnabled(enabled: boolean): void {
-  e2eEnabled = enabled;
+  setE2EEnabledLocal(enabled);
   if (typeof localStorage !== 'undefined') localStorage.setItem('proxi_e2e', enabled ? '1' : '0');
 }
 export function loadE2EPref(): boolean {
+  let enabled = true;
   if (typeof localStorage !== 'undefined') {
-    e2eEnabled = localStorage.getItem('proxi_e2e') !== '0';
+    enabled = localStorage.getItem('proxi_e2e') !== '0';
   }
-  return e2eEnabled;
+  setE2EEnabledLocal(enabled);
+  return enabled;
 }
 
 // ============================================================

@@ -3,6 +3,7 @@ package chat
 import (
 	"bytes"
 	"encoding/json"
+	"strings"
 	"time"
 )
 
@@ -47,8 +48,37 @@ type Message struct {
 	ForwardedFrom string `json:"forwardedFrom,omitempty"` // original sender npub for forwarded messages
 	TTL           int    `json:"ttl,omitempty"`           // self-destruct in seconds (0 = never)
 	IsE2E         bool   `json:"is_e2e,omitempty"`        // flag indicating the message payload (Text) is E2E encrypted
+	Encrypted     bool   `json:"encrypted,omitempty"`     // P5: client wire flag (must match ciphertext)
 	VoiceData     string `json:"voiceData,omitempty"`     // base64-encoded audio (legacy fallback)
 	VoiceDuration int    `json:"voiceDuration,omitempty"` // voice duration in seconds
+}
+
+// LooksLikeClientCiphertext reports whether text is client-side NIP-44 / legacy v1 ciphertext.
+func LooksLikeClientCiphertext(text string) bool {
+	return strings.HasPrefix(text, "nip44:") || strings.HasPrefix(text, "v1.")
+}
+
+// ClaimedEncrypted is true when either wire flag is set.
+func (m *Message) ClaimedEncrypted() bool {
+	if m == nil {
+		return false
+	}
+	return m.Encrypted || m.IsE2E
+}
+
+// NormalizeE2EFlags keeps Encrypted/IsE2E consistent with payload shape (P5).
+func (m *Message) NormalizeE2EFlags() {
+	if m == nil {
+		return
+	}
+	if LooksLikeClientCiphertext(m.Text) {
+		m.Encrypted = true
+		m.IsE2E = true
+		return
+	}
+	// Never allow encrypted:true on plaintext.
+	m.Encrypted = false
+	m.IsE2E = false
 }
 
 // Encode marshals the message to JSON bytes.

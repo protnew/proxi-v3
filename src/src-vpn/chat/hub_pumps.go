@@ -178,6 +178,16 @@ func (c *Client) ReadPump(ctx context.Context) {
 			msg.Ts = time.Now().Unix()
 		}
 
+		// P5: refuse chat frames that claim E2E without ciphertext (no plaintext under encrypted:true).
+		if msg.Type == TypeChat {
+			claimed := msg.ClaimedEncrypted()
+			if claimed && !LooksLikeClientCiphertext(msg.Text) {
+				log.Printf("[chat] P5 refuse: encrypted flag without ciphertext from %s", c.UserID)
+				continue
+			}
+			msg.NormalizeE2EFlags()
+		}
+
 		// Push to worker pool.
 		if c.hub.OnMessage != nil {
 			select {

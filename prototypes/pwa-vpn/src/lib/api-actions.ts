@@ -36,14 +36,42 @@ export function connectWebSocket(token: string, onMessage: (msg: any) => void): 
 export function buildChatPayload(to: string, content: string) {
   const ident = getCachedIdentity();
   const from = ident?.pubkey || ident?.userId || '';
+  // P5: flag follows actual ciphertext in content, not the E2E toggle alone.
   return makeChatPayload(from, to, content, isE2EEnabled());
 }
 
 export const chatApi = {
+  /**
+   * P5: when E2E is on, NIP-44 ciphertext MUST be on the wire before sendRaw.
+   * `encrypted:true` only if payload is actually ciphertext. Never send plaintext
+   * under the encrypted flag; refuse if encryption cannot be performed.
+   */
   sendDM: async (to: string, content: string) => {
     const ident = getCachedIdentity();
     const from = ident?.pubkey || ident?.userId || '';
-    const payload = makeChatPayload(from, to, content, isE2EEnabled());
+    const e2eOn = isE2EEnabled();
+    let wireText = content;
+    let didEncrypt = false;
+
+    if (e2eOn) {
+      if (!ident?.privateKey || to.length < 64) {
+        return { status: 400, error: 'e2e_required_but_cannot_encrypt' };
+      }
+      try {
+        wireText = await encryptDM(content, ident.privateKey, to);
+        didEncrypt = true;
+      } catch (e) {
+        console.warn('[api] sendDM: NIP-44 encrypt failed — refusing plaintext send');
+        return { status: 400, error: 'e2e_encrypt_failed' };
+      }
+    }
+
+    const payload = makeChatPayload(from, to, wireText, didEncrypt);
+    if (e2eOn && !payload.encrypted) {
+      // Defense in depth: never claim/send "encrypted" without ciphertext markers.
+      return { status: 400, error: 'e2e_ciphertext_required' };
+    }
+
     const sent = sendRaw(payload);
     if (sent) {
       // FIX double-save: Go hub persists WS chat messages itself (ws_handlers.go SaveMessage).
@@ -51,9 +79,8 @@ export const chatApi = {
       return { status: 200, data: { ok: true, via: 'ws', encrypted: payload.encrypted } };
     }
     try {
-      if (ident?.privateKey && to.length >= 64) {
-        const encrypted = await encryptDM(content, ident.privateKey, to);
-        console.log('[api] sendDM: encrypted via NIP-E2E, sending through Nostr...');
+      if (didEncrypt || (ident?.privateKey && to.length >= 64)) {
+        const encrypted = didEncrypt ? wireText : await encryptDM(content, ident!.privateKey, to);
         const nostrWs = typeof window !== 'undefined' ? (window as any).__nostrWS : null;
         if (nostrWs && nostrWs.readyState === 1) {
           const createdAt = Math.floor(Date.now() / 1000);
@@ -62,18 +89,31 @@ export const chatApi = {
             'EVENT',
             { kind: 4, content: eventContent, created_at: createdAt, tags: [['p', to]], pubkey: from }
           ]));
-          console.log('[api] sendDM: sent encrypted Nostr DM');
           return { status: 200, data: { ok: true, via: 'nostr-e2e', encrypted: true } };
         }
       }
     } catch (e) {
-      console.warn('[api] sendDM: Nostr E2E failed:', e);
+      console.warn('[api] sendDM: Nostr E2E failed');
+    }
+    // REST fallback: never POST plaintext when E2E is required.
+    if (e2eOn) {
+      if (!didEncrypt) {
+        return { status: 503, error: 'e2e_no_transport', data: { encrypted: false } };
+      }
+      try {
+        return await request('/api/messages', {
+          method: 'POST',
+          body: JSON.stringify({ to, text: wireText, encrypted: true }),
+        });
+      } catch {
+        return { status: 503, error: 'e2e_no_transport', data: { encrypted: true } };
+      }
     }
     try {
       return await request('/api/messages', { method: 'POST', body: JSON.stringify({ to, text: content }) });
     } catch {
       console.warn('[api] sendDM: all transports failed, optimistic UI only');
-      return { status: 200, data: { ok: true, via: 'optimistic', encrypted: payload.encrypted } };
+      return { status: 200, data: { ok: true, via: 'optimistic', encrypted: false } };
     }
   },
   sendTyping: (to: string) => {
