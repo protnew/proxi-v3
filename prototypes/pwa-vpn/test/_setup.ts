@@ -1,9 +1,14 @@
 /**
- * Global test setup — crypto.subtle + localStorage for Node
+ * Global test setup — crypto.subtle + localStorage + IndexedDB for Node
  */
 import { webcrypto } from 'crypto';
+import 'fake-indexeddb/auto';
 
 if (!globalThis.crypto) {
+  (globalThis as any).crypto = webcrypto;
+}
+// jsdom / partial polyfills may lack subtle
+if (!(globalThis as any).crypto?.subtle) {
   (globalThis as any).crypto = webcrypto;
 }
 

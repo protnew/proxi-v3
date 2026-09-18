@@ -119,20 +119,20 @@ export function initIdentity(): string {
     return cachedIdentity.pubkey;
   }
 
-  // SL-020/021/022: Load existing or generate real secp256k1 keys in browser.
-  // Keys NEVER leave the browser. Go server is optional (for WS relay only).
+  // SL-020/021/022 + P11: keys live in IndexedDB (non-extractable wrap).
+  // Sync boot may only see pubkey in localStorage; privateKey hydrates async.
   try {
-    // VPN-PEER-REAL fix: Load existing key from localStorage BEFORE generating new
-    const savedPriv = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-seckey') : null;
     const savedPub = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-pubkey') : null;
-    if (savedPriv && savedPub && savedPriv.length === 64) {
-      cachedIdentity = { pubkey: savedPub, privateKey: savedPriv };
+    // Scrub any leftover plaintext seckey (P11)
+    try { localStorage?.removeItem('indestructible-seckey'); } catch { /* */ }
+    if (savedPub && savedPub.length === 64) {
+      cachedIdentity = { pubkey: savedPub, privateKey: cachedIdentity?.privateKey || '' };
+      void hydratePrivateKeyFromSecureStore();
       initIdentityAsync();
       exposeProxiDebug();
       return cachedIdentity.pubkey;
     }
     // No saved key — do NOT silent-create (ONB-000 AuthScreen owns first-run)
-    // Demo roles handled above. Product path: AuthScreen → createIdentity.
     cachedIdentity = null as any;
     exposeProxiDebug();
     return '';
@@ -371,6 +371,12 @@ export function getStatus(): Record<string, any> { return lastStatus; }
 /** Set identity directly (used by AuthScreen after key creation/import). */
 export function setIdentity(pubkey: string, privateKey: string): void {
   cachedIdentity = { pubkey, privateKey };
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('indestructible-pubkey', pubkey);
+      localStorage.removeItem('indestructible-seckey');
+    }
+  } catch { /* */ }
 }
 
 // ============================================================

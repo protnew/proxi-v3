@@ -166,11 +166,10 @@ if (initialView === 'newchat') {
       browserId = { privateKey: demoKey, publicKey: demoKey, npub: 'npub1demo' + demoKey.slice(0, 16), nsec: 'nsec1demo', createdAt: Date.now() };
       console.log('[app] Demo mode identity:', demoRole);
     } else {
-      const { loadIdentityAsync, getIdentity } = await import('./lib/identity')
+      const { loadIdentityAsync, getIdentity, loadStoredPubkey } = await import('./lib/identity')
       const existing = await loadIdentityAsync()
-      const legacyPriv = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-seckey') : null
-      const legacyPub = typeof localStorage !== 'undefined' ? localStorage.getItem('indestructible-pubkey') : null
-      if (!existing && !(legacyPriv && legacyPub)) {
+      const storedPub = loadStoredPubkey()
+      if (!existing && !storedPub) {
         // ONB-000: first-run product path — do not silent-create keys
         needsOnboarding = true
         loading = false

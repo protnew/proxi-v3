@@ -10,7 +10,9 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db          *sql.DB
+	identityKey [32]byte // P6: AES-256 key outside SQLite for nsec/seed_phrase
+	keyPath     string   // where the key came from (file path / env / :memory:)
 }
 
 // DB returns the underlying database connection (for admin operations).
@@ -53,10 +55,20 @@ func NewStore(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("set synchronous=NORMAL: %w", err)
 	}
 
-	s := &Store{db: db}
+	key, keyPath, err := loadOrCreateIdentityKey(dbPath)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("identity key: %w", err)
+	}
+
+	s := &Store{db: db, identityKey: key, keyPath: keyPath}
 	if err := runMigrations(db); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	if err := s.migrateIdentityAtRest(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("migrate identity at rest: %w", err)
 	}
 	return s, nil
 }

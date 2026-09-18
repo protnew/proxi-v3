@@ -1,9 +1,10 @@
+import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { getEmptyState } from '../src/lib/empty-states'
 import { makeStatus, nextRetrySeconds } from '../src/lib/connection-status'
 import { toast, getErrorLog, exportErrorLog, clearErrorLog, onToast } from '../src/lib/toast'
 import { t, setLocale, getLocale } from '../src/lib/i18n'
-import { importIdentity, createIdentity, deleteIdentity } from '../src/lib/identity'
+import { importIdentity, createIdentity, deleteIdentity, wipeSecureStore } from '../src/lib/identity'
 
 describe('ONB-003 empty states', () => {
   it('returns RU contacts empty', () => {
@@ -55,17 +56,22 @@ describe('INF-002 i18n', () => {
 })
 
 describe('ONB-000 identity import/create', () => {
-  beforeEach(() => deleteIdentity())
+  beforeEach(async () => {
+    localStorage.clear()
+    await wipeSecureStore()
+  })
   it('createIdentity yields npub/nsec', async () => {
     const id = await createIdentity()
     expect(id.npub.startsWith('npub1')).toBe(true)
     expect(id.nsec.startsWith('nsec1')).toBe(true)
+    expect(localStorage.getItem('indestructible-seckey')).toBeNull()
   })
   it('importIdentity roundtrip nsec', async () => {
     const a = await createIdentity()
-    deleteIdentity()
+    await deleteIdentity()
     const b = await importIdentity(a.nsec)
     expect(b.npub).toBe(a.npub)
     expect(b.publicKey).toBe(a.publicKey)
+    expect(localStorage.getItem('indestructible-seckey')).toBeNull()
   })
 })

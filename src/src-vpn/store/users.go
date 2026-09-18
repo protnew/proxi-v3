@@ -7,10 +7,19 @@ import (
 )
 
 func (s *Store) SaveIdentity(npub, nsec, seedPhrase string) error {
-	_, err := s.db.Exec(
+	// P6: encrypt nsec + seed_phrase at rest; npub stays plaintext (public).
+	sealedNsec, err := s.sealField(nsec)
+	if err != nil {
+		return err
+	}
+	sealedSeed, err := s.sealField(seedPhrase)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(
 		`INSERT OR REPLACE INTO identity (id, npub, nsec, seed_phrase)
 		 VALUES (1, ?, ?, ?)`,
-		npub, nsec, seedPhrase,
+		npub, sealedNsec, sealedSeed,
 	)
 	if err != nil {
 		return fmt.Errorf("save identity: %w", err)
@@ -44,11 +53,20 @@ func (s *Store) SetIdentityOwner(userID string) error {
 // if no identity has been saved yet.
 
 func (s *Store) LoadIdentity() (npub, nsec, seedPhrase string, err error) {
+	var sealedNsec, sealedSeed string
 	err = s.db.QueryRow(
 		`SELECT npub, nsec, seed_phrase FROM identity WHERE id = 1`,
-	).Scan(&npub, &nsec, &seedPhrase)
+	).Scan(&npub, &sealedNsec, &sealedSeed)
 	if err != nil {
 		return "", "", "", fmt.Errorf("load identity: %w", err)
+	}
+	nsec, err = s.openField(sealedNsec)
+	if err != nil {
+		return "", "", "", err
+	}
+	seedPhrase, err = s.openField(sealedSeed)
+	if err != nil {
+		return "", "", "", err
 	}
 	return npub, nsec, seedPhrase, nil
 }

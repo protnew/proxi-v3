@@ -1,6 +1,12 @@
 /**
  * Identity module — secp256k1 keys, Nostr npub/nsec, BIP-39 seed
- * Everything runs in the browser, keys never leave the device
+ * Everything runs in the browser, keys never leave the device.
+ *
+ * P11: private key material is NOT stored in localStorage.
+ *   - Non-extractable AES-GCM CryptoKey lives in IndexedDB
+ *   - Encrypted identity blob (AES-GCM) also in IndexedDB
+ *   - Only pubkey may remain in localStorage for sync boot
+ *   - Legacy indestructible-seckey / identity-v2 are migrated then removed
  */
 import * as secp from '@noble/secp256k1'
 
@@ -13,16 +19,31 @@ const hexToBytes = (hex: string) => {
   return bytes
 }
 
-// Simple BIP-39 word list (2048 words) — we load a subset for demo
-// In production, use @scure/bip39
 const STORAGE_KEY = 'indestructible-identity'
+const STORAGE_ENC = 'indestructible-identity-v2'
+const DEVICE_KEY = 'indestructible-device-key'
+const SECKEY_LS = 'indestructible-seckey'
+const PUBKEY_LS = 'indestructible-pubkey'
+
+const IDB_NAME = 'indestructible-secure'
+const IDB_STORE = 'keys'
+const IDB_WRAP_KEY = 'wrap-key-v1'
+const IDB_IDENTITY = 'identity-v3'
 
 export interface Identity {
-  privateKey: string  // hex
+  privateKey: string  // hex — held in memory only after unlock
   publicKey: string   // hex
   npub: string        // bech32 encoded
   nsec: string        // bech32 encoded
   createdAt: number
+}
+
+/** In-memory cache after create/load — never written to localStorage. */
+let memoryCache: Identity | null = null
+
+/** @internal test helper — simulates page reload without wiping IDB */
+export function _clearMemoryCacheForTests(): void {
+  memoryCache = null
 }
 
 /**
@@ -44,28 +65,183 @@ export async function createIdentity(): Promise<Identity> {
     createdAt: Date.now(),
   }
 
-  await saveIdentityEncrypted(identity)
-  // Keep legacy keys used by api.ts / WS signup path
-  try {
-    localStorage.setItem('indestructible-seckey', identity.privateKey)
-    localStorage.setItem('indestructible-pubkey', identity.publicKey)
-  } catch { /* */ }
+  await persistIdentitySecure(identity)
   return identity
 }
 
-const DEVICE_KEY = 'indestructible-device-key'
-const STORAGE_ENC = 'indestructible-identity-v2'
+// ---------- IndexedDB + non-extractable wrapping key (P11) ----------
 
-async function getDeviceKey(): Promise<CryptoKey> {
+function openSecureDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('indexedDB unavailable'))
+      return
+    }
+    const req = indexedDB.open(IDB_NAME, 1)
+    req.onupgradeneeded = () => {
+      const db = req.result
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE)
+      }
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error || new Error('idb open failed'))
+  })
+}
+
+function idbGet<T>(key: string): Promise<T | undefined> {
+  return openSecureDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readonly')
+        const req = tx.objectStore(IDB_STORE).get(key)
+        req.onsuccess = () => resolve(req.result as T | undefined)
+        req.onerror = () => reject(req.error)
+        tx.oncomplete = () => db.close()
+      }),
+  )
+}
+
+function idbSet(key: string, value: unknown): Promise<void> {
+  return openSecureDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite')
+        tx.objectStore(IDB_STORE).put(value, key)
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }),
+  )
+}
+
+function idbDel(key: string): Promise<void> {
+  return openSecureDB().then(
+    (db) =>
+      new Promise((resolve, reject) => {
+        const tx = db.transaction(IDB_STORE, 'readwrite')
+        tx.objectStore(IDB_STORE).delete(key)
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+        tx.onerror = () => reject(tx.error)
+      }),
+  )
+}
+
+/** Non-extractable AES-GCM wrapping key stored in IndexedDB (structured clone). */
+async function getOrCreateWrapKey(): Promise<CryptoKey> {
+  const existing = await idbGet<CryptoKey>(IDB_WRAP_KEY)
+  if (existing) return existing
+  const key = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    false, // non-extractable
+    ['encrypt', 'decrypt'],
+  )
+  await idbSet(IDB_WRAP_KEY, key)
+  return key
+}
+
+type IdentityPackV3 = { v: 3; iv: string; ct: string }
+
+async function persistIdentitySecure(identity: Identity): Promise<void> {
+  memoryCache = identity
+  try {
+    const key = await getOrCreateWrapKey()
+    const iv = crypto.getRandomValues(new Uint8Array(12))
+    const pt = new TextEncoder().encode(JSON.stringify(identity))
+    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt)
+    const pack: IdentityPackV3 = {
+      v: 3,
+      iv: bytesToHex(iv),
+      ct: btoa(String.fromCharCode(...new Uint8Array(ct))),
+    }
+    await idbSet(IDB_IDENTITY, pack)
+    // Pubkey only in localStorage (public material, sync boot helpers)
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(PUBKEY_LS, identity.publicKey)
+        // P11: never persist seckey; scrub legacy leftovers
+        localStorage.removeItem(SECKEY_LS)
+        localStorage.removeItem(STORAGE_KEY)
+        localStorage.removeItem(STORAGE_ENC)
+        localStorage.removeItem(DEVICE_KEY)
+      }
+    } catch { /* SSR / quota */ }
+  } catch (e) {
+    console.warn('[identity] secure persist failed', e)
+    throw e
+  }
+}
+
+/** Legacy v2: device secret in localStorage + AES blob — migrate then scrub. */
+async function migrateLegacyLocalStorage(): Promise<Identity | null> {
+  if (typeof localStorage === 'undefined') return null
+
+  // Plain seckey (worst case) — rebuild identity and move to IDB
+  const legacySec = localStorage.getItem(SECKEY_LS)
+  const legacyPub = localStorage.getItem(PUBKEY_LS)
+  if (legacySec && /^[0-9a-fA-F]{64}$/.test(legacySec)) {
+    const privateKeyBytes = hexToBytes(legacySec.toLowerCase())
+    const publicKey = legacyPub && legacyPub.length === 64
+      ? legacyPub.toLowerCase()
+      : bytesToHex(secp.schnorr.getPublicKey(privateKeyBytes))
+    const identity: Identity = {
+      privateKey: legacySec.toLowerCase(),
+      publicKey,
+      npub: encodeBech32('npub', hexToBytes(publicKey)),
+      nsec: encodeBech32('nsec', privateKeyBytes),
+      createdAt: Date.now(),
+    }
+    await persistIdentitySecure(identity)
+    return identity
+  }
+
+  // v2 encrypted blob in localStorage
+  const enc = localStorage.getItem(STORAGE_ENC)
+  if (enc) {
+    try {
+      const pack = JSON.parse(enc) as { v: number; iv: string; ct: string }
+      const deviceKey = await getLegacyDeviceKey()
+      const iv = hexToBytes(pack.iv)
+      const ctBin = atob(pack.ct)
+      const ct = new Uint8Array(ctBin.length)
+      for (let i = 0; i < ctBin.length; i++) ct[i] = ctBin.charCodeAt(i)
+      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, deviceKey, ct)
+      const identity = JSON.parse(new TextDecoder().decode(pt)) as Identity
+      await persistIdentitySecure(identity)
+      return identity
+    } catch (e) {
+      console.warn('[identity] v2 migrate failed', e)
+    }
+  }
+
+  // v1 plaintext JSON
+  const legacy = localStorage.getItem(STORAGE_KEY)
+  if (legacy) {
+    try {
+      const identity = JSON.parse(legacy) as Identity
+      if (identity?.privateKey) {
+        await persistIdentitySecure(identity)
+        return identity
+      }
+    } catch { /* */ }
+  }
+
+  return null
+}
+
+async function getLegacyDeviceKey(): Promise<CryptoKey> {
   let raw = localStorage.getItem(DEVICE_KEY)
   let bytes: Uint8Array
   if (!raw) {
     bytes = crypto.getRandomValues(new Uint8Array(32))
-    localStorage.setItem(DEVICE_KEY, Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(''))
   } else {
     bytes = hexToBytes(raw)
   }
-  // PBKDF2 stretch device secret → AES key (mitigates casual localStorage dump)
   const base = await crypto.subtle.importKey('raw', bytes as BufferSource, 'PBKDF2', false, ['deriveKey'])
   return crypto.subtle.deriveKey(
     {
@@ -81,56 +257,69 @@ async function getDeviceKey(): Promise<CryptoKey> {
   )
 }
 
-async function saveIdentityEncrypted(identity: Identity): Promise<void> {
+async function loadFromSecureStore(): Promise<Identity | null> {
   try {
-    const key = await getDeviceKey()
-    const iv = crypto.getRandomValues(new Uint8Array(12))
-    const pt = new TextEncoder().encode(JSON.stringify(identity))
-    const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, pt)
-    const pack = {
-      v: 2,
-      iv: Array.from(iv).map(b => b.toString(16).padStart(2, '0')).join(''),
-      ct: btoa(String.fromCharCode(...new Uint8Array(ct))),
-    }
-    localStorage.setItem(STORAGE_ENC, JSON.stringify(pack))
-    // Remove plaintext legacy if present
-    localStorage.removeItem(STORAGE_KEY)
+    const pack = await idbGet<IdentityPackV3>(IDB_IDENTITY)
+    if (!pack || pack.v !== 3) return null
+    const key = await getOrCreateWrapKey()
+    const iv = hexToBytes(pack.iv)
+    const ctBin = atob(pack.ct)
+    const ct = new Uint8Array(ctBin.length)
+    for (let i = 0; i < ctBin.length; i++) ct[i] = ctBin.charCodeAt(i)
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
+    return JSON.parse(new TextDecoder().decode(pt)) as Identity
   } catch (e) {
-    console.warn('[identity] encrypt save failed, plaintext fallback', e)
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(identity))
+    console.warn('[identity] secure load failed', e)
+    return null
   }
 }
 
 /**
- * Load existing identity from localStorage (v2 encrypted or legacy plaintext)
+ * Sync load — cannot unlock IndexedDB; returns memory cache only.
+ * Prefer loadIdentityAsync().
  */
 export function loadIdentity(): Identity | null {
-  // Sync path: try legacy plaintext first for sync callers
-  const legacy = localStorage.getItem(STORAGE_KEY)
-  if (legacy) {
-    try { return JSON.parse(legacy) as Identity } catch { /* fallthrough */ }
-  }
-  return null
+  return memoryCache
 }
 
-/** Async load — decrypts v2 storage */
-export async function loadIdentityAsync(): Promise<Identity | null> {
-  const enc = localStorage.getItem(STORAGE_ENC)
-  if (enc) {
-    try {
-      const pack = JSON.parse(enc) as { v: number; iv: string; ct: string }
-      const key = await getDeviceKey()
-      const iv = hexToBytes(pack.iv)
-      const ctBin = atob(pack.ct)
-      const ct = new Uint8Array(ctBin.length)
-      for (let i = 0; i < ctBin.length; i++) ct[i] = ctBin.charCodeAt(i)
-      const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, ct)
-      return JSON.parse(new TextDecoder().decode(pt)) as Identity
-    } catch (e) {
-      console.warn('[identity] decrypt failed', e)
-    }
+/** Public key from localStorage (safe) — used by sync boot paths. */
+export function loadStoredPubkey(): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    return localStorage.getItem(PUBKEY_LS)
+  } catch {
+    return null
   }
-  return loadIdentity()
+}
+
+/** True if a legacy plaintext seckey is still sitting in localStorage (should be scrubbed). */
+export function hasLegacySeckeyInLocalStorage(): boolean {
+  try {
+    if (typeof localStorage === 'undefined') return false
+    const v = localStorage.getItem(SECKEY_LS)
+    return !!(v && v.length > 0)
+  } catch {
+    return false
+  }
+}
+
+/** Async load — IndexedDB v3, with one-shot migration from localStorage legacy. */
+export async function loadIdentityAsync(): Promise<Identity | null> {
+  if (memoryCache) return memoryCache
+  let id = await loadFromSecureStore()
+  if (!id) {
+    id = await migrateLegacyLocalStorage()
+  } else {
+    // Scrub any leftover plaintext seckey even when IDB already has the key
+    try {
+      localStorage?.removeItem(SECKEY_LS)
+      localStorage?.removeItem(STORAGE_KEY)
+      localStorage?.removeItem(STORAGE_ENC)
+      localStorage?.removeItem(DEVICE_KEY)
+    } catch { /* */ }
+  }
+  if (id) memoryCache = id
+  return id
 }
 
 /**
@@ -143,22 +332,39 @@ export async function getIdentity(): Promise<Identity> {
 }
 
 /**
- * Delete identity (logout)
+ * Delete identity (logout) — clears IDB identity blob + LS pubkey + memory.
+ * Wrapping key is retained (device binding); use wipeSecureStore() for full wipe.
  */
-export function deleteIdentity(): void {
+export async function deleteIdentity(): Promise<void> {
+  memoryCache = null
   try {
-    if (typeof localStorage === 'undefined') return
-    localStorage.removeItem(STORAGE_KEY)
-    localStorage.removeItem(STORAGE_ENC)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY)
+      localStorage.removeItem(STORAGE_ENC)
+      localStorage.removeItem(DEVICE_KEY)
+      localStorage.removeItem(SECKEY_LS)
+      localStorage.removeItem(PUBKEY_LS)
+    }
   } catch { /* SSR */ }
-  // keep DEVICE_KEY so re-login on same browser can rotate identity cleanly
+  try {
+    await idbDel(IDB_IDENTITY)
+  } catch { /* */ }
+}
+
+/** Full wipe including non-extractable wrap key (factory reset). */
+export async function wipeSecureStore(): Promise<void> {
+  memoryCache = null
+  deleteIdentity()
+  try {
+    await idbDel(IDB_WRAP_KEY)
+    await idbDel(IDB_IDENTITY)
+  } catch { /* */ }
 }
 
 /**
  * Sign a Nostr event
  */
 export async function signEvent(event: Record<string, unknown>, privateKey: string): Promise<string> {
-  // Serialize event for signing (Nostr spec)
   const serialized = JSON.stringify([
     0,
     event['pubkey'],
@@ -238,7 +444,6 @@ function encodeBech32(hrp: string, data: Uint8Array): string {
   return result
 }
 
-
 /** Decode bech32 npub/nsec → bytes */
 function decodeBech32(bech: string): { hrp: string; data: Uint8Array } {
   const lower = bech.trim().toLowerCase()
@@ -253,9 +458,7 @@ function decodeBech32(bech: string): { hrp: string; data: Uint8Array } {
     words.push(v)
   }
   if (words.length < 7) throw new Error('bech32 too short')
-  // drop checksum 6
   const dataWords = words.slice(0, -6)
-  // convert 5→8
   let acc = 0, bits = 0
   const bytes: number[] = []
   const maxv = 255
@@ -295,6 +498,6 @@ export async function importIdentity(input: string): Promise<Identity> {
     nsec: encodeBech32('nsec', privateKeyBytes),
     createdAt: Date.now(),
   }
-  await saveIdentityEncrypted(identity)
+  await persistIdentitySecure(identity)
   return identity
 }

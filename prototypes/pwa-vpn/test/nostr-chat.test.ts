@@ -1,13 +1,19 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect } from 'vitest'
-import { createIdentity, loadIdentityAsync } from '../src/lib/identity'
+import { describe, it, expect, beforeEach } from 'vitest'
+import 'fake-indexeddb/auto'
+import { webcrypto } from 'crypto'
+if (!(globalThis as any).crypto?.subtle) (globalThis as any).crypto = webcrypto
 
-// We test encrypt/decrypt indirectly through identity + crypto.subtle
-// Full NostrChat test requires WebSocket mock — keep in e2e
+import { createIdentity, loadIdentityAsync, wipeSecureStore, _clearMemoryCacheForTests } from '../src/lib/identity'
 
 describe('Identity for Nostr', () => {
+  beforeEach(async () => {
+    localStorage.clear()
+    await wipeSecureStore()
+  })
+
   it('generates secp256k1 keypair', async () => {
     const id = await createIdentity()
     expect(id.privateKey).toMatch(/^[0-9a-f]{64}$/)
@@ -16,20 +22,20 @@ describe('Identity for Nostr', () => {
     expect(id.nsec).toMatch(/^nsec1/)
   })
 
-  it('persists to localStorage', async () => {
+  it('P11: persists to IndexedDB, not localStorage seckey', async () => {
     const id = await createIdentity()
-    // v2 encrypted storage (audit fix — no plaintext private key)
-    const enc = localStorage.getItem('indestructible-identity-v2')
-    expect(enc).toBeTruthy()
+    expect(localStorage.getItem('indestructible-seckey')).toBeNull()
+    expect(localStorage.getItem('indestructible-identity-v2')).toBeNull()
+    expect(localStorage.getItem('indestructible-pubkey')).toBe(id.publicKey)
+    _clearMemoryCacheForTests()
     const loaded = await loadIdentityAsync()
     expect(loaded).toBeTruthy()
     expect(loaded!.publicKey).toBe(id.publicKey)
-    expect(loaded!.publicKey).toMatch(/^[0-9a-f]{64}$/)
+    expect(loaded!.privateKey).toBe(id.privateKey)
   })
 
   it('loads existing identity', async () => {
     const id1 = await createIdentity()
-    const { loadIdentityAsync } = await import('../src/lib/identity')
     const id2 = await loadIdentityAsync()
     expect(id2).toBeTruthy()
     expect(id2!.publicKey).toBe(id1.publicKey)
