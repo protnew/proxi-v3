@@ -15,11 +15,16 @@ const hexToBytes = (hex: string) => {
 }
 
 const KIND_DM = 4
-const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band',
-]
+// P4: no public relays — DM/presence only via local embedded relay.
+// Public relays leak the social graph (who talks to whom) permanently.
+function defaultRelays(): string[] {
+  const loc = typeof window !== 'undefined' ? window.location : null
+  if (!loc) return ['ws://127.0.0.1:8090/nostr']
+  const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:'
+  // /nostr requires JWT (P9) — WS cannot send Authorization header
+  const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
+  return [`${proto}//${loc.host}/nostr${tok ? `?token=${encodeURIComponent(tok)}` : ''}`]
+}
 
 export interface NostrMessage {
   id: string
@@ -76,7 +81,7 @@ export class NostrChat {
   private connectedCount = 0
   private subId = 'dm-' + Math.random().toString(36).slice(2, 10)
 
-  constructor(identity: Identity, relays: string[] = DEFAULT_RELAYS) {
+  constructor(identity: Identity, relays: string[] = defaultRelays()) {
     this.identity = identity
     this.relays = relays
   }
@@ -104,7 +109,7 @@ export class NostrChat {
         ws.onopen = () => {
           ws.send(subMsg)
           this.connectedCount++
-          console.log(`[Nostr] Connected to ${url} (${this.connectedCount} total)`)
+          console.log(`[Nostr] Connected to ${url.split('?')[0]} (${this.connectedCount} total)`)
           if (!settled) { settled = true; resolve() }
         }
         ws.onmessage = (e) => this.handleMessage(e.data)
@@ -122,6 +127,11 @@ export class NostrChat {
   }
 
   onMessage(cb: MessageCallback) { this.messageCallbacks.push(cb) }
+
+  // Presence publish path — module functions have no access to instance sockets
+  get openSockets(): WebSocket[] {
+    return this.connections.filter(ws => ws.readyState === WebSocket.OPEN)
+  }
 
   async sendDM(recipientPubkey: string, text: string): Promise<boolean> {
     if (!text.trim()) return false
@@ -172,6 +182,9 @@ export class NostrChat {
 
 
 // MSG-105: Presence via Nostr (kind 10002 relay list + periodic ping)
+let activeChat: NostrChat | null = null
+export function setActiveChat(chat: NostrChat | null) { activeChat = chat }
+
 const PRESENCE_KIND = 34000
 type PresenceCallback = (pubkey: string, online: boolean) => void
 const presenceCallbacks: PresenceCallback[] = []
@@ -194,10 +207,8 @@ export async function broadcastPresence(identity: Identity): Promise<void> {
       content: 'online',
     }
     const signed = await signEvent(event, identity.privateKey)
-    for (const ws of relays.values()) {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(['EVENT', signed]))
-      }
+    for (const ws of activeChat?.openSockets ?? []) {
+      ws.send(JSON.stringify(['EVENT', signed]))
     }
   } catch {}
 }

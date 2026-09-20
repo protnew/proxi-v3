@@ -44,7 +44,7 @@ function syncMobile() {
   import AuthScreen from './components/AuthScreen.svelte'
   import { initPush } from './lib/push'
   import { checkForUpdate } from './lib/update-check'
-  import { startPresence, stopPresence } from './lib/nostr-chat'
+  import { startPresence, stopPresence, setActiveChat } from './lib/nostr-chat'
   import VpnPanel from './components/VpnPanel.svelte'
   import DemoPanel from './components/DemoPanel.svelte'
   import type { Message } from './stores/messenger'
@@ -83,8 +83,6 @@ if (initialView === 'newchat') {
       try {
         const resp: any = await sendDM(to, text)
         if (resp?.status && resp.status < 400) return { ok: true, via: resp?.data?.via || 'dm' }
-        const nostr = (window as any).__nostrChat
-        if (nostr?.isConnected && await nostr.sendDM(to, text)) return { ok: true, via: 'nostr' }
         return { ok: false, error: 'transport down' }
       } catch (e: any) {
         return { ok: false, error: e?.message || 'err' }
@@ -186,6 +184,7 @@ if (initialView === 'newchat') {
     //    - Go /ws = ALWAYS when local API healthy (do NOT skip if Nostr connects)
     statusText = 'Подключение транспортов...'
     let nostrChat: NostrChat | null = new NostrChat(browserId)
+    setActiveChat(nostrChat)
     nostrChat.onMessage((msg: NostrMessage) => {
       console.log('[app] Nostr DM from', msg.from.slice(0, 16), ':', msg.text.slice(0, 50))
       const peerName = getName(msg.from)
@@ -210,7 +209,7 @@ if (initialView === 'newchat') {
       console.warn('[app] Nostr connect failed:', e)
       nostrRelays = 0
     }
-    if (nostrRelays === 0) nostrChat = null
+    if (nostrRelays === 0) { nostrChat = null; setActiveChat(null) }
 
     // Go hub — always attempt (signup JWT + /ws). Independent of Nostr.
     let goRelays = 0

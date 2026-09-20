@@ -24,7 +24,9 @@
   let showSeed = $state(false)
   let pushEnabled = $state(false)
   let killSwitch = $state(false)
-  let relayList = $state('wss://relay.damus.io\nwss://nos.lol\nwss://relay.nostr.band')
+  // P4: DM/VPN-signaling ходит только через встроенный relay — публичные
+  // релеи сливают соцграф. Поле информационное (канон: local /nostr).
+  let relayList = $state(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/nostr`)
 
   async function loadSeed() {
     identity = await loadIdentityAsync() as any

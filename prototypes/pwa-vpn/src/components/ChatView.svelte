@@ -3,7 +3,7 @@
   const dispatch = createEventDispatcher();
   import "./ChatView.css";
   import * as stores from '../stores/messenger'
-  import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getStatus, getSeckey } from '../lib/api'
+  import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getSeckey } from '../lib/api'
   import { uploadFile, downloadByCID, formatCIDShort, MAX_FILE_BYTES } from '../lib/ipfs-storage'
   import { enqueue as outboxEnqueue, startOutboxWatcher } from '../lib/offline-outbox'
   import { playOutgoing } from '../lib/sounds'
@@ -108,22 +108,11 @@
         const resp: any = await sendGroupMessage(peer, text)
         if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp)
       } else {
-        const go = getStatus()
-        const nostr = (window as any).__nostrChat
+        // P4: single DM factory — server /ws only (NostrChat is receive-only).
         let sent = false
-        if (go?.connected) {
-          const resp: any = await sendDM(peer, text)
-          if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
-          else sent = true
-        }
-        if (nostr?.isConnected) {
-          try { if (await nostr.sendDM(peer, text)) sent = true } catch {}
-        }
-        if (!sent) {
-          const resp: any = await sendDM(peer, text)
-          if (resp?.status && resp.status < 400) sent = true
-          else console.error('[chatview] sendDM fallback failed', resp)
-        }
+        const resp: any = await sendDM(peer, text)
+        if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
+        else if (resp?.status) sent = true
         if (!sent) {
           outboxEnqueue(peer, text)
           console.log('[chatview] queued offline (outbox)')

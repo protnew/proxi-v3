@@ -10,11 +10,15 @@ export const KIND_VPN_OFFER = 30091
 export const KIND_VPN_ANSWER = 30092
 export const KIND_VPN_ICE = 30093
 
-const DEFAULT_RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band',
-]
+// P4: VPN signaling only via local embedded relay — SDP/ICE must not
+// reach public relays (leaks IP/topology). /nostr requires JWT (P9).
+function defaultRelays(): string[] {
+  const loc = typeof window !== 'undefined' ? window.location : null
+  if (!loc) return ['ws://127.0.0.1:8090/nostr']
+  const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:'
+  const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
+  return [`${proto}//${loc.host}/nostr${tok ? `?token=${encodeURIComponent(tok)}` : ''}`]
+}
 
 export interface VPNSignal {
   type: 'request' | 'offer' | 'answer' | 'ice-candidate'
@@ -36,7 +40,7 @@ export class NostrSignaling {
   private onSignal: ((signal: VPNSignal) => void) | null = null
   private subscriptionId = 'vpn-' + Math.random().toString(36).slice(2, 10)
 
-  constructor(identity: Identity, relays: string[] = DEFAULT_RELAYS) {
+  constructor(identity: Identity, relays: string[] = defaultRelays()) {
     this.relays = relays
     this.identity = identity
   }
@@ -57,7 +61,7 @@ export class NostrSignaling {
         const ws = new WebSocket(relayUrl)
         ws.onopen = () => {
           ws.send(subMsg)
-          console.log(`[Nostr] Connected to ${relayUrl}`)
+          console.log(`[Nostr] Connected to ${relayUrl.split('?')[0]}`)
         }
         ws.onmessage = (e) => {
           this.handleMessage(e.data)
