@@ -10,16 +10,35 @@ import (
 	"github.com/unkillable-messenger/vpn/crypto"
 )
 
+// DRSessionMarker persists "session existed" flags across restarts (P13).
+// Implemented by store.Store.
+type DRSessionMarker interface {
+	SaveDRSessionMarker(localNpub, remoteNpub string) error
+	HasDRSessionMarker(localNpub, remoteNpub string) bool
+}
+
 // DRSessionStore keeps in-memory Double Ratchet sessions keyed by conversation pair.
-// Not durable across restarts — production must persist ratchet state (follow-up).
+// Ratchet state itself is not yet durable; a persistent marker (P13) lets the
+// sender fail closed after restart instead of silently downgrading.
 type DRSessionStore struct {
 	mu       sync.RWMutex
 	sessions map[string]*crypto.RatchetState // key = pairKey(a,b) from local perspective: local|remote
+	marker   DRSessionMarker                 // optional; nil in tests
 }
 
 // NewDRSessionStore creates an empty session store.
 func NewDRSessionStore() *DRSessionStore {
 	return &DRSessionStore{sessions: make(map[string]*crypto.RatchetState)}
+}
+
+// SetMarker attaches a persistent session marker sink (P13).
+func (s *DRSessionStore) SetMarker(m DRSessionMarker) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.marker = m
 }
 
 func pairKey(local, remote string) string {
@@ -65,7 +84,27 @@ func (s *DRSessionStore) BootstrapPair(aliceNpub, bobNpub string, aliceIK crypto
 	}
 	s.PutSession(aliceNpub, bobNpub, aliceRS)
 	s.PutSession(bobNpub, aliceNpub, bobRS)
+	s.markSession(aliceNpub, bobNpub)
+	s.markSession(bobNpub, aliceNpub)
 	return nil
+}
+
+// markSession persists a session marker (best-effort; P13).
+func (s *DRSessionStore) markSession(local, remote string) {
+	s.mu.RLock()
+	m := s.marker
+	s.mu.RUnlock()
+	if m != nil {
+		_ = m.SaveDRSessionMarker(local, remote)
+	}
+}
+
+// hadMarker reports a persisted-but-lost session (restart without state persist).
+func (s *DRSessionStore) hadMarker(local, remote string) bool {
+	s.mu.RLock()
+	m := s.marker
+	s.mu.RUnlock()
+	return m != nil && m.HasDRSessionMarker(local, remote)
 }
 
 // EncryptOutbound encrypts plaintext with DR for local→remote.
@@ -73,6 +112,10 @@ func (s *DRSessionStore) BootstrapPair(aliceNpub, bobNpub string, aliceIK crypto
 func (s *DRSessionStore) EncryptOutbound(local, remote, plaintext string) (ciphertext string, usedDR bool, err error) {
 	rs, ok := s.GetSession(local, remote)
 	if !ok {
+		// P13 fail-closed: marker survives restart — session existed, state lost.
+		if s.hadMarker(local, remote) {
+			return "", true, fmt.Errorf("DR session lost after restart — re-handshake required")
+		}
 		return plaintext, false, nil
 	}
 	ct, err := rs.RatchetEncrypt([]byte(plaintext))
@@ -91,6 +134,9 @@ func (s *DRSessionStore) DecryptInbound(local, remote, payload string) (plaintex
 	}
 	rs, ok := s.GetSession(local, remote)
 	if !ok {
+		if s.hadMarker(local, remote) {
+			return "", true, fmt.Errorf("DR session lost after restart — re-handshake required")
+		}
 		return "", true, fmt.Errorf("DR session missing for %s←%s", local, remote)
 	}
 	raw, err := base64.StdEncoding.DecodeString(payload[len(prefix):])
@@ -141,6 +187,8 @@ func (s *DRSessionStore) CreateSessionAsInitiator(local, remote string, aliceIK 
 	bobRS.RemotePub = aliceRS.DHPub
 	s.PutSession(local, remote, aliceRS)
 	s.PutSession(remote, local, bobRS)
+	s.markSession(local, remote)
+	s.markSession(remote, local)
 	return out.EKPub, nil
 }
 
@@ -159,5 +207,6 @@ func (s *DRSessionStore) CreateSessionAsResponder(local, remote string, bob *cry
 	rs := crypto.NewRatchetState(sk[:], false)
 	rs.RemotePub = aliceEKPub
 	s.PutSession(local, remote, rs)
+	s.markSession(local, remote)
 	return nil
 }

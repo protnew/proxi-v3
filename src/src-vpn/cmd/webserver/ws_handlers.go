@@ -152,6 +152,9 @@ func (s *Server) initHub() {
 	if s.drSessions == nil {
 		s.drSessions = chat.NewDRSessionStore() // CRYP-010
 	}
+	if s.db != nil {
+		s.drSessions.SetMarker(s.db) // P13: persist session markers, fail closed after restart
+	}
 	s.hub.OnMessage = func(msg *chat.Message) {
 		// P5: never log message bodies on the hot path (metadata only).
 		log.Printf("💬 [%s→%s] type=%s encrypted=%v len=%d", msg.From, msg.To, msg.Type, msg.ClaimedEncrypted(), len(msg.Text))

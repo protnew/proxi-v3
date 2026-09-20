@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -224,11 +225,12 @@ func TestMediaUpload(t *testing.T) {
 		part, _ := writer.CreateFormFile("file", "test.txt")
 		content := []byte("hello world file content")
 		part.Write(content)
-		writer.WriteField("npub", "test-user-npub")
+		writer.WriteField("npub", "spoof-attempt-npub") // P16: form field ignored, JWT ctx wins
 		writer.Close()
 
 		req, _ := http.NewRequest("POST", "/api/media/upload", body)
 		req.Header.Set("Content-Type", writer.FormDataContentType())
+		req = req.WithContext(context.WithValue(req.Context(), "npub", "test-user-npub"))
 
 		rr := httptest.NewRecorder()
 		srv.handleMediaUpload(rr, req)

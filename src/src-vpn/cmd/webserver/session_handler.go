@@ -27,6 +27,9 @@ func (s *Server) handleSessionEstablish(w http.ResponseWriter, r *http.Request) 
 	if s.drSessions == nil {
 		s.drSessions = chat.NewDRSessionStore()
 	}
+	if s.db != nil {
+		s.drSessions.SetMarker(s.db) // P13
+	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
