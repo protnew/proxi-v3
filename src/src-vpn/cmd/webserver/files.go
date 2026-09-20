@@ -119,6 +119,12 @@ func (s *Server) handleFileGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P15: файлы не публичные — Bearer или ?token= JWT обязателен
+	if !s.fileTokenOK(r) {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "token required")
+		return
+	}
+
 	// Extract path after /api/files/
 	path := strings.TrimPrefix(r.URL.Path, "/api/files/")
 
@@ -159,6 +165,11 @@ func (s *Server) handleFileDownload(w http.ResponseWriter, r *http.Request, file
 	disposition := "attachment"
 	if strings.HasPrefix(fm.Type, "image/") || strings.HasPrefix(fm.Type, "video/") || strings.HasPrefix(fm.Type, "audio/") {
 		disposition = "inline"
+	}
+	// P10: SVG может нести <script> — только attachment + sandbox CSP.
+	if fm.Type == "image/svg+xml" || strings.HasSuffix(strings.ToLower(fm.Name), ".svg") {
+		disposition = "attachment"
+		w.Header().Set("Content-Security-Policy", "script-src 'none'; sandbox")
 	}
 
 	if fm.Type != "" {

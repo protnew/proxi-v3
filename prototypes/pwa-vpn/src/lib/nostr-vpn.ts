@@ -5,6 +5,7 @@
 import * as secp from '@noble/secp256k1'
 import { signEvent } from './identity'
 import { getPubkey, getSeckey } from './api'
+import { getStoredToken } from './api-core'
 import { wrapVpnInvite, unwrapVpnInvite, publishGiftWrap, type VpnInvitePayload } from './nip59-giftwrap'
 
 function hexToBytes(hex: string): Uint8Array {
@@ -52,7 +53,9 @@ function relayWsUrl(): string {
   const loc = typeof window !== 'undefined' ? window.location : null
   if (!loc) return 'ws://127.0.0.1:8090/nostr'
   const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${loc.host}/nostr`
+  // P9: /nostr требует JWT — добавляем ?token= (WS не умеет Authorization header)
+  const tok = getStoredToken()
+  return `${proto}//${loc.host}/nostr${tok ? `?token=${encodeURIComponent(tok)}` : ''}`
 }
 
 export class NostrVPNSignaling {

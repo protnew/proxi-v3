@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -105,13 +106,56 @@ type PreviewService struct {
 
 // NewPreviewService creates a PreviewService with the default HTTP client and
 // a cache using the given TTL.
+// P18 (2026-09-20): SSRF-гард — dialer отклоняет приватные/loopback/link-local
+// адреса на уровне connect (после DNS), не доверяя hostname.
 func NewPreviewService(ttl time.Duration) *PreviewService {
+	dialer := &net.Dialer{Timeout: 5 * time.Second}
 	return &PreviewService{
 		cache: NewPreviewCache(ttl),
 		client: &http.Client{
 			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					host, port, err := net.SplitHostPort(addr)
+					if err != nil {
+						return nil, err
+					}
+					ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+					if err != nil {
+						return nil, err
+					}
+					if len(ips) == 0 {
+						return nil, fmt.Errorf("ssrf: no addresses for %s", host)
+					}
+					for _, ipa := range ips {
+						if isBlockedPreviewIP(ipa.IP) {
+							return nil, fmt.Errorf("ssrf: private/blocked address %s", ipa.IP)
+						}
+					}
+					// anti-rebind: дозвон на уже проверенный IP, не на hostname
+					return dialer.DialContext(ctx, network, net.JoinHostPort(ips[0].IP.String(), port))
+				},
+			},
 		},
 	}
+}
+
+// isBlockedPreviewIP — loopback, link-local, unspecified, RFC1918, ULA fc00::/7,
+// CGNAT 100.64/10, multicast.
+func isBlockedPreviewIP(ip net.IP) bool {
+	if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsMulticast() || ip.IsPrivate() {
+		return true
+	}
+	if ip4 := ip.To4(); ip4 != nil {
+		if ip4[0] == 100 && ip4[1] >= 64 && ip4[1] <= 127 { // CGNAT 100.64.0.0/10
+			return true
+		}
+		if ip4[0] == 0 || ip4[0] == 127 {
+			return true
+		}
+	}
+	return false
 }
 
 // FetchPreview fetches a URL, parses its OpenGraph tags, and returns a

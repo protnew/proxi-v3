@@ -15,6 +15,7 @@ import {
   isE2EEnabled,
   API_BASE,
   getWsConnection,
+  getStoredToken,
   type ApiResponse,
 } from './api-core';
 
@@ -164,7 +165,11 @@ export const contentApi = {
     formData.append('file', file);
     return request<{ id: string; name: string; size: number; url: string }>('/api/files/upload', { method: 'POST', body: formData });
   },
-  download: (id: string) => `${API_BASE}/api/files/${id}`,
+  // P15: файлы за JWT — ?token= для bare <img src>/download
+  download: (id: string) => {
+    const t = getStoredToken();
+    return `${API_BASE}/api/files/${id}${t ? `?token=${encodeURIComponent(t)}` : ''}`;
+  },
   uploadContent: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);

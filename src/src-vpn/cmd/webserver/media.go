@@ -115,6 +115,12 @@ func (s *Server) handleMediaGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P15: медиа не публичные — Bearer или ?token= JWT обязателен
+	if !s.fileTokenOK(r) {
+		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "token required")
+		return
+	}
+
 	path := strings.TrimPrefix(r.URL.Path, "/api/media/")
 	if path == "" {
 		writeError(w, http.StatusBadRequest, "BAD_REQUEST", "Missing manifest ID")

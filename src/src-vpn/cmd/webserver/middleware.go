@@ -35,3 +35,24 @@ func authMiddleware(authSvc *auth.AuthService, next http.HandlerFunc) http.Handl
 		next.ServeHTTP(w, r.WithContext(ctx))
 	}
 }
+
+// fileTokenOK — P15 (2026-09-20): файлы/медиа доступны по Bearer header ИЛИ
+// ?token= JWT (нужен для <img src>/download-ссылок, где заголовок не поставить).
+// Когда authService == nil (dev/test) — пропускает.
+func (s *Server) fileTokenOK(r *http.Request) bool {
+	if s.authService == nil {
+		return true
+	}
+	tok := r.URL.Query().Get("token")
+	if tok == "" {
+		h := r.Header.Get("Authorization")
+		if strings.HasPrefix(strings.ToLower(h), "bearer ") {
+			tok = strings.TrimSpace(h[7:])
+		}
+	}
+	if tok == "" {
+		return false
+	}
+	_, err := s.authService.ValidateToken(tok)
+	return err == nil
+}
