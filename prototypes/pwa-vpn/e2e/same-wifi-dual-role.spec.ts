@@ -2,18 +2,10 @@
  * Same-WiFi dual-role — то, что МОЖНО прогнать без двух сетей.
  */
 import { test, expect } from '@playwright/test'
+import { apiToken } from './helpers/auth'
 
 const BASE = process.env.APP_URL || 'http://127.0.0.1:5173'
 const API = process.env.API_URL || 'http://127.0.0.1:8090'
-
-async function apiToken(request: any): Promise<string> {
-  const r = await request.post(API + '/api/auth/signup', {
-    data: { npub: 'f'.repeat(64), username: 'e2e_sw_' + Date.now().toString().slice(-6) },
-  })
-  expect(r.ok()).toBeTruthy()
-  const j = await r.json()
-  return j.access_token as string
-}
 
 test.describe('Same-WiFi dual-role (2 browser contexts)', () => {
   test('health + both roles load + in-app engine API', async ({ browser, request }) => {

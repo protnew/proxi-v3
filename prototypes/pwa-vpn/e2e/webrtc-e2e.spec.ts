@@ -3,20 +3,10 @@
  * No AmneziaVPN GUI. No /api/vpn/amnezia/import.
  */
 import { test, expect } from "@playwright/test"
+import { apiToken } from './helpers/auth'
 
 const APP = process.env.APP_URL || "http://127.0.0.1:5173"
 const API = process.env.API_URL || "http://127.0.0.1:8090"
-
-async function apiToken(request: any): Promise<string> {
-  const npub = "e".repeat(64)
-  const r = await request.post(API + "/api/auth/signup", {
-    data: { npub, username: "e2e_webrtc_" + Date.now().toString().slice(-6) },
-  })
-  expect(r.ok()).toBeTruthy()
-  const j = await r.json()
-  expect(j.access_token).toBeTruthy()
-  return j.access_token as string
-}
 
 function auth(token: string) {
   return { Authorization: `Bearer ${token}` }
