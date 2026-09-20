@@ -204,8 +204,8 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 
 	// Auth endpoints (D1 — JWT authentication)
 	// P1: challenge-response — signup/login require a signed kind:22242 event.
-	http.HandleFunc("/api/auth/challenge", publicApiChain(rateLimitMiddleware(srv.handleAuthChallenge)))
-	http.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/api/auth/challenge", publicApiChain(authRateLimitMiddleware(srv.handleAuthChallenge)))
+	http.HandleFunc("/api/auth/signup", publicApiChain(authRateLimitMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
@@ -256,8 +256,8 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
-	}))
-	http.HandleFunc("/api/auth/login", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
+	})))
+	http.HandleFunc("/api/auth/login", publicApiChain(authRateLimitMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
@@ -284,8 +284,8 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 		accessToken, refreshToken, _ := srv.authService.GenerateTokenPair(userID, npub)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"access_token": accessToken, "refresh_token": refreshToken, "user_id": userID})
-	}))
-	http.HandleFunc("/api/auth/refresh", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
+	})))
+	http.HandleFunc("/api/auth/refresh", publicApiChain(authRateLimitMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
@@ -304,7 +304,7 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"access_token": newAccess, "refresh_token": newRefresh})
-	}))
+	})))
 
 	initExtraRoutes(srv.db, apiChain)
 

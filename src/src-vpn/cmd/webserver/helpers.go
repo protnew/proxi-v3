@@ -18,6 +18,14 @@ func rateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// authRateLimitMiddleware — strict per-IP limit for /api/auth/* (P19).
+func authRateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	handler := authLimiter.Middleware(next)
+	return func(w http.ResponseWriter, r *http.Request) {
+		handler.ServeHTTP(w, r)
+	}
+}
+
 // ========== Security headers middleware ==========
 
 func securityHeadersMiddleware(next http.HandlerFunc) http.HandlerFunc {
