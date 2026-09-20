@@ -38,13 +38,17 @@ object IdentityStore {
     }
 
     fun save(ctx: Context, id: NostrIdentity) {
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, wrappingKey())
-        val ct = cipher.doFinal(id.privateKey)
-        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(PREF_CT, Base64.encodeToString(ct, Base64.NO_WRAP))
-            .putString(PREF_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
-            .apply()
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.ENCRYPT_MODE, wrappingKey())
+            val ct = cipher.doFinal(id.privateKey)
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(PREF_CT, Base64.encodeToString(ct, Base64.NO_WRAP))
+                .putString(PREF_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+                .commit() // sync: a force-stop right after onboarding must not lose the key
+        } catch (e: Exception) {
+            android.util.Log.e("IdentityStore", "save failed — session will not persist", e)
+        }
     }
 
     fun load(ctx: Context): NostrIdentity? {
