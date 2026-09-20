@@ -33,7 +33,11 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	npub := r.URL.Query().Get("npub")
+	// P16: caller scope = JWT npub; query npub — только фильтр, не идентичность
+	npub, _ := r.Context().Value("npub").(string)
+	if npub == "" {
+		npub = r.URL.Query().Get("npub")
+	}
 	if npub == "" {
 		npub = "anonymous"
 	}

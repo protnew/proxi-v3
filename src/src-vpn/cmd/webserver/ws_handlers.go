@@ -24,6 +24,11 @@ import (
 // AUTH-009: when authService is set, a valid JWT is required.
 // Routing identity is claims.Npub (full pubkey) so DM to/from match hub keys.
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
+	// P19: Origin whitelist — CSWSH через произвольный Origin закрыт.
+	if origin := r.Header.Get("Origin"); origin != "" && !wsOriginAllowed(origin) {
+		http.Error(w, `{"error":"FORBIDDEN","message":"origin not allowed"}`, http.StatusForbidden)
+		return
+	}
 	userId := ""
 	tokenStr := r.URL.Query().Get("token")
 	if s.authService != nil {
@@ -67,16 +72,30 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 	chat.ServeWS(s.hub, userId, conn, r.Context())
 }
 
-// handleIdentityGet returns current user's identity (generates if needed)
+// handleIdentityGet returns current user's identity (generates if needed).
+// Singleton device identity: only the owner JWT user may export nsec.
 func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
+	caller, _ := r.Context().Value("userID").(string)
+	if caller == "" {
+		caller, _ = r.Context().Value("user_id").(string)
+	}
+
 	// Try loading from DB first
-	npub, nsec, seedPhrase, err := s.db.LoadIdentity()
+	npub, _, _, err := s.db.LoadIdentity()
 	if err == nil && npub != "" {
+		owner := s.db.LoadIdentityOwner()
+		if owner == "" && caller != "" {
+			_ = s.db.SetIdentityOwner(caller)
+			owner = caller
+		}
+		if owner != "" && caller != "" && owner != caller {
+			writeError(w, 403, "FORBIDDEN", "identity owned by another user")
+			return
+		}
+		// P3: private key material never leaves the server over the API.
 		writeJSON(w, 200, map[string]interface{}{
-			"npub":     npub,
-			"nsec":     nsec,
-			"isNew":    false,
-			"mnemonic": seedPhrase,
+			"npub":  npub,
+			"isNew": false,
 		})
 		return
 	}
@@ -89,12 +108,17 @@ func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	mnemonic, _ := identity.GenerateMnemonic()
-	nsec = identity.PrivKeyToNsec(privKey)
+	nsec := identity.PrivKeyToNsec(privKey)
 	npub = identity.PubKeyToNpub(privKey.PubKey())
 
 	// Save to SQLite
 	if saveErr := s.db.SaveIdentity(npub, nsec, mnemonic); saveErr != nil {
 		log.Printf("WARNING: failed to save identity to db: %v", saveErr)
+	}
+	if caller != "" {
+		if ownErr := s.db.SetIdentityOwner(caller); ownErr != nil {
+			log.Printf("WARNING: failed to set identity owner: %v", ownErr)
+		}
 	}
 
 	// Also save to legacy file for backward compat
@@ -103,11 +127,10 @@ func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARNING: failed to save identity file: %v", fileErr)
 	}
 
+	// P3: private key material never leaves the server over the API.
 	writeJSON(w, 200, map[string]interface{}{
-		"npub":     npub,
-		"nsec":     nsec,
-		"mnemonic": mnemonic,
-		"isNew":    true,
+		"npub":  npub,
+		"isNew": true,
 	})
 }
 

@@ -75,8 +75,8 @@ func (s *Server) handleFileUpload(w http.ResponseWriter, r *http.Request) {
 		fileID = fileIDWithExt
 	}
 
-	// Get uploader npub
-	uploadedBy := r.FormValue("npub")
+	// P16: uploader = JWT npub; form field spoofable и больше не читается
+	uploadedBy, _ := r.Context().Value("npub").(string)
 	if uploadedBy == "" {
 		uploadedBy = "anonymous"
 	}

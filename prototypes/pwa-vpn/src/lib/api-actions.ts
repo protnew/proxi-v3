@@ -25,8 +25,9 @@ import {
 export function connectWebSocket(token: string, onMessage: (msg: any) => void): WebSocket {
   const WS_BASE = (import.meta as any).env?.VITE_API_URL?.replace(/^http/, 'ws') || 
     (typeof location !== 'undefined' ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}` : 'ws://localhost:8090');
-  const wsUrl = `${WS_BASE}/ws`;
-  const ws = token ? new WebSocket(wsUrl, ['access_token.' + token]) : new WebSocket(wsUrl);
+  // Query token survives Vite ws proxy; subprotocol kept for direct :8090 clients.
+  const wsUrl = token ? `${WS_BASE}/ws?token=${encodeURIComponent(token)}` : `${WS_BASE}/ws`;
+  const ws = new WebSocket(wsUrl);
   ws.onmessage = (event) => {
     try { onMessage(JSON.parse(event.data)); } catch { onMessage({ type: 'raw', data: event.data }); }
   };
@@ -131,8 +132,28 @@ export const chatApi = {
 };
 
 export const authApi = {
-  login: (pubkey: string, signature: string) =>
-    request('/api/auth/login', { method: 'POST', body: JSON.stringify({ pubkey, signature }) }),
+  // P1: login = challenge → NIP-42-style signed event → JWT. No raw npub auth.
+  login: async (pubkey: string) => {
+    const priv = getCachedIdentity()?.privateKey;
+    const ch = await request<{ challenge: string }>('/api/auth/challenge', {
+      method: 'POST', body: JSON.stringify({ npub: pubkey }),
+    });
+    if (!ch.data?.challenge || !priv) {
+      return { status: ch.status || 401, data: null, error: 'no challenge or private key' } as any;
+    }
+    const { finalizeEvent } = await import('nostr-tools/pure');
+    const sk = new Uint8Array(priv.match(/.{2}/g)!.map(h => parseInt(h, 16)));
+    const event = finalizeEvent({
+      kind: 22242,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [['challenge', ch.data.challenge]],
+      content: ch.data.challenge,
+    }, sk);
+    return request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ npub: pubkey, challenge: ch.data.challenge, event }),
+    });
+  },
   me: () => request('/api/identity'),
 };
 

@@ -24,14 +24,11 @@ func (s *Server) handlePreKeyPublish(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	userID, ok := r.Context().Value("user_id").(string)
+	// P2 (2026-09-19): идентичность только из JWT claims — X-User-ID spoofable.
+	userID, ok := r.Context().Value("userID").(string)
 	if !ok || userID == "" {
-		// Fallback to header
-		userID = r.Header.Get("X-User-ID")
-		if userID == "" {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
 	}
 
 	var req PreKeyBundleRequest

@@ -38,7 +38,8 @@ func (s *Server) handleMediaUpload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contentType := detectContentType(header.Filename, file)
-	uploadedBy := r.FormValue("npub")
+	// P16: uploader = JWT npub; form field spoofable и больше не читается
+	uploadedBy, _ := r.Context().Value("npub").(string)
 	if uploadedBy == "" {
 		uploadedBy = "anonymous"
 	}

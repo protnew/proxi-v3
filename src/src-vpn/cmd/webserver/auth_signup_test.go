@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,12 +12,80 @@ import (
 	"testing"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/auth"
 	"github.com/unkillable-messenger/vpn/middleware"
 	"github.com/unkillable-messenger/vpn/storage"
 	"github.com/unkillable-messenger/vpn/store"
 )
+
+// P1 test helpers: real keypair + signed kind:22242 auth event.
+func makeAuthEvent(priv *btcec.PrivateKey, challenge string) *nostrAuthEvent {
+	pkHex := hex.EncodeToString(schnorr.SerializePubKey(priv.PubKey()))
+	ev := &nostrAuthEvent{
+		PubKey:    pkHex,
+		CreatedAt: time.Now().Unix(),
+		Kind:      authEventKind,
+		Tags:      [][]string{{"challenge", challenge}},
+		Content:   challenge,
+	}
+	id, _ := nostrEventID(ev)
+	ev.ID = hex.EncodeToString(id[:])
+	sig, _ := schnorr.Sign(priv, id[:])
+	ev.Sig = hex.EncodeToString(sig.Serialize())
+	return ev
+}
+
+// newTestIdentity returns privkey + npub (64-hex x-only accepted by npubToXOnlyHex).
+func newTestIdentity(t *testing.T) (*btcec.PrivateKey, string) {
+	t.Helper()
+	priv, err := btcec.NewPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return priv, hex.EncodeToString(schnorr.SerializePubKey(priv.PubKey()))
+}
+
+func fetchChallenge(t *testing.T, base, npub string) string {
+	t.Helper()
+	b, _ := json.Marshal(map[string]string{"npub": npub})
+	resp, err := http.Post(base+"/api/auth/challenge", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&out)
+	c, _ := out["challenge"].(string)
+	if c == "" {
+		t.Fatalf("no challenge for %s: status=%d", npub[:12], resp.StatusCode)
+	}
+	return c
+}
+
+// signupReal performs the full P1 flow: challenge → signed event → token.
+func signupReal(t *testing.T, base string) (token, npub string) {
+	t.Helper()
+	priv, npub := newTestIdentity(t)
+	challenge := fetchChallenge(t, base, npub)
+	ev := makeAuthEvent(priv, challenge)
+	b, _ := json.Marshal(map[string]interface{}{
+		"npub": npub, "challenge": challenge, "event": ev,
+	})
+	resp, err := http.Post(base+"/api/auth/signup", "application/json", bytes.NewReader(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var out map[string]string
+	json.NewDecoder(resp.Body).Decode(&out)
+	if resp.StatusCode != 200 || out["access_token"] == "" {
+		t.Fatalf("signupReal status=%d body=%v", resp.StatusCode, out)
+	}
+	return out["access_token"], npub
+}
 
 // setupAuthServer wires JWT + public signup + protected messages/identity (AUTH-008/009).
 func setupAuthServer(t *testing.T) (*httptest.Server, *auth.AuthService, *store.Store) {
@@ -56,15 +125,18 @@ func setupAuthServer(t *testing.T) (*httptest.Server, *auth.AuthService, *store.
 	}
 
 	mux := http.NewServeMux()
-	// mirror production AUTH routes
+	// mirror production AUTH routes (P1: challenge-response)
+	mux.HandleFunc("/api/auth/challenge", publicApiChain(s.handleAuthChallenge))
 	mux.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
 		}
 		var body struct {
-			Npub     string `json:"npub"`
-			Username string `json:"username"`
+			Npub      string          `json:"npub"`
+			Username  string          `json:"username"`
+			Challenge string          `json:"challenge"`
+			Event     *nostrAuthEvent `json:"event"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -72,6 +144,10 @@ func setupAuthServer(t *testing.T) (*httptest.Server, *auth.AuthService, *store.
 		}
 		if body.Npub == "" {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
+			return
+		}
+		if err := verifyAuthEvent(body.Npub, body.Challenge, body.Event); err != nil {
+			writeError(w, http.StatusUnauthorized, "AUTH_FAILED", err.Error())
 			return
 		}
 		userID := body.Npub
@@ -122,7 +198,27 @@ func setupAuthServer(t *testing.T) (*httptest.Server, *auth.AuthService, *store.
 
 func TestSignupTable(t *testing.T) {
 	srv, authSvc, _ := setupAuthServer(t)
-	longNpub := strings.Repeat("ab", 32) // 64 hex chars
+
+	// P1: подписанный signup через настоящий ключ
+	priv, npub := newTestIdentity(t)
+	ch1 := fetchChallenge(t, srv.URL, npub)
+	okBody := map[string]interface{}{
+		"npub": npub, "username": "alice", "challenge": ch1,
+		"event": makeAuthEvent(priv, ch1),
+	}
+	// второй валидный signup (без username)
+	priv2, npub2 := newTestIdentity(t)
+	ch2 := fetchChallenge(t, srv.URL, npub2)
+	okBody2 := map[string]interface{}{
+		"npub": npub2, "challenge": ch2, "event": makeAuthEvent(priv2, ch2),
+	}
+	// неподписанный — должен отвалиться
+	noSig := map[string]interface{}{"npub": strings.Repeat("cd", 32), "username": "mallory"}
+	// replay: тот же challenge+event второй раз → 401
+	replay := map[string]interface{}{
+		"npub": npub, "username": "alice2", "challenge": ch1,
+		"event": makeAuthEvent(priv, ch1),
+	}
 
 	cases := []struct {
 		name       string
@@ -131,9 +227,10 @@ func TestSignupTable(t *testing.T) {
 		wantStatus int
 		wantToken  bool
 	}{
-		{"ok_full_npub", "POST", map[string]string{"npub": longNpub, "username": "alice"}, 200, true},
-		{"ok_short_npub", "POST", map[string]string{"npub": "shortnpubvalue123", "username": "bob"}, 200, true},
-		{"ok_no_username", "POST", map[string]string{"npub": strings.Repeat("cd", 32)}, 200, true},
+		{"ok_signed", "POST", okBody, 200, true},
+		{"ok_signed_no_username", "POST", okBody2, 200, true},
+		{"replay_rejected", "POST", replay, 401, false},
+		{"unsigned_rejected", "POST", noSig, 401, false},
 		{"missing_npub", "POST", map[string]string{"username": "x"}, 400, false},
 		{"empty_json", "POST", map[string]string{}, 400, false},
 		{"get_not_allowed", "GET", nil, 405, false},
@@ -202,16 +299,9 @@ func TestProtectedMessagesRequireJWT(t *testing.T) {
 		t.Fatalf("GET messages without token status=%d want 401", resp.StatusCode)
 	}
 
-	// signup → token → GET 200
-	signupBody := map[string]string{"npub": strings.Repeat("ef", 32), "username": "carol"}
-	b, _ := json.Marshal(signupBody)
-	sresp, err := http.Post(srv.URL+"/api/auth/signup", "application/json", bytes.NewReader(b))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var tok map[string]string
-	json.NewDecoder(sresp.Body).Decode(&tok)
-	sresp.Body.Close()
+	// signup → token → GET 200 (P1: real challenge+signature)
+	token, _ := signupReal(t, srv.URL)
+	tok := map[string]string{"access_token": token}
 
 	req, _ := http.NewRequest("GET", srv.URL+"/api/messages?limit=10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok["access_token"])
@@ -241,23 +331,10 @@ func TestProtectedIdentityRequireJWT(t *testing.T) {
 
 func TestTwoSignupsIdentityIsolation(t *testing.T) {
 	srv, _, _ := setupAuthServer(t)
-	signup := func(npub, username string) string {
+	signup := func(username string) string {
 		t.Helper()
-		b, _ := json.Marshal(map[string]string{"npub": npub, "username": username})
-		resp, err := http.Post(srv.URL+"/api/auth/signup", "application/json", bytes.NewReader(b))
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != 200 {
-			t.Fatalf("signup %s status=%d", username, resp.StatusCode)
-		}
-		var tok map[string]string
-		json.NewDecoder(resp.Body).Decode(&tok)
-		if tok["access_token"] == "" {
-			t.Fatal("missing access_token")
-		}
-		return tok["access_token"]
+		token, _ := signupReal(t, srv.URL)
+		return token
 	}
 	getIdentity := func(token string) (int, map[string]interface{}) {
 		t.Helper()
@@ -273,15 +350,22 @@ func TestTwoSignupsIdentityIsolation(t *testing.T) {
 		return resp.StatusCode, body
 	}
 
-	a := signup(strings.Repeat("aa", 32), "alice")
+	a := signup("alice")
 	st, body := getIdentity(a)
 	if st != 200 {
 		t.Fatalf("alice identity status=%d", st)
 	}
-	if body["nsec"] == nil || body["nsec"] == "" {
-		t.Fatal("alice should receive nsec")
+	// P3: nsec/mnemonic never leave the server — npub only
+	if body["npub"] == nil || body["npub"] == "" {
+		t.Fatal("alice should receive npub")
 	}
-	b := signup(strings.Repeat("bb", 32), "bob")
+	if _, ok := body["nsec"]; ok {
+		t.Fatal("P3: nsec must never be returned")
+	}
+	if _, ok := body["mnemonic"]; ok {
+		t.Fatal("P3: mnemonic must never be returned")
+	}
+	b := signup("bob")
 	st, body = getIdentity(b)
 	if st != 403 {
 		t.Fatalf("bob identity status=%d want 403", st)

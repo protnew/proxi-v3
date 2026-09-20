@@ -199,14 +199,18 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 	http.HandleFunc("/api/federation/sync", apiChain(srv.handleFederationSync))
 
 	// Auth endpoints (D1 — JWT authentication)
+	// P1: challenge-response — signup/login require a signed kind:22242 event.
+	http.HandleFunc("/api/auth/challenge", publicApiChain(rateLimitMiddleware(srv.handleAuthChallenge)))
 	http.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
 		}
 		var body struct {
-			Npub     string `json:"npub"`
-			Username string `json:"username"`
+			Npub      string          `json:"npub"`
+			Username  string          `json:"username"`
+			Challenge string          `json:"challenge"`
+			Event     *nostrAuthEvent `json:"event"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -214,6 +218,10 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 		}
 		if body.Npub == "" {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
+			return
+		}
+		if err := verifyAuthEvent(body.Npub, body.Challenge, body.Event); err != nil {
+			writeError(w, http.StatusUnauthorized, "AUTH_FAILED", err.Error())
 			return
 		}
 		// SEC-002: shared validator (vpnroot.ValidateSignupInput)
@@ -251,10 +259,16 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 			return
 		}
 		var body struct {
-			Npub string `json:"npub"`
+			Npub      string          `json:"npub"`
+			Challenge string          `json:"challenge"`
+			Event     *nostrAuthEvent `json:"event"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
+			return
+		}
+		if err := verifyAuthEvent(body.Npub, body.Challenge, body.Event); err != nil {
+			writeError(w, http.StatusUnauthorized, "AUTH_FAILED", err.Error())
 			return
 		}
 		var userID, npub string

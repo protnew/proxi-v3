@@ -109,12 +109,15 @@ export function initIdentity(): string {
   if (demoRole === 'tester1') {
     const k1 = '1'.repeat(64);
     cachedIdentity = { pubkey: k1, privateKey: k1 };
+    // Demo keys are not valid secp256k1 — P5 NIP-44 would refuse every send.
+    e2eEnabled = false;
     exposeProxiDebug();
     return cachedIdentity.pubkey;
   }
   if (demoRole === 'tester2') {
     const k2 = '2'.repeat(64);
     cachedIdentity = { pubkey: k2, privateKey: k2 };
+    e2eEnabled = false;
     exposeProxiDebug();
     return cachedIdentity.pubkey;
   }
@@ -158,6 +161,7 @@ function exposeProxiDebug(): void {
     (window as any).__proxiPubkey = cachedIdentity?.pubkey || '';
     (window as any).__proxiUserId = cachedIdentity?.userId || '';
     (window as any).__proxiGetPubkey = () => cachedIdentity?.pubkey || '';
+    (window as any).__proxiGetStatus = () => lastStatus;
   } catch { /* ignore */ }
 }
 /** Async identity initialization — Go signup OPTIONAL (non-blocking). Keys stay local. */
@@ -169,9 +173,27 @@ export async function initIdentityAsync(): Promise<string> {
   console.log('[api] initIdentityAsync: local pubkey=' + signupNpub.slice(0, 16) + '...');
 
   try {
+    // P1: challenge-response — без подписи сервер JWT не выдаёт.
+    const ch = await request<{ challenge: string }>(
+      '/api/auth/challenge',
+      { method: 'POST', body: JSON.stringify({ npub: signupNpub }) }
+    );
+    if (!ch.data?.challenge || !cachedIdentity.privateKey) {
+      console.log('[api] initIdentityAsync: no challenge/privkey — local identity only');
+      return cachedIdentity.pubkey;
+    }
+    const { finalizeEvent } = await import('nostr-tools/pure');
+    const sk = new Uint8Array(cachedIdentity.privateKey.match(/.{2}/g)!.map(h => parseInt(h, 16)));
+    const event = finalizeEvent({
+      kind: 22242,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: [['challenge', ch.data.challenge]],
+      content: ch.data.challenge,
+    }, sk);
+
     const signupResp = await request<{ access_token: string; refresh_token: string; user_id: string }>(
       '/api/auth/signup',
-      { method: 'POST', body: JSON.stringify({ npub: signupNpub, username: 'user_' + signupNpub.slice(0, 8) }) }
+      { method: 'POST', body: JSON.stringify({ npub: signupNpub, username: 'user_' + signupNpub.slice(0, 8), challenge: ch.data.challenge, event }) }
     );
 
     if (signupResp.data?.access_token) {
@@ -207,13 +229,15 @@ let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastStatus: Record<string, any> = { connected: false, relays: 0 };
 
 function buildWsUrl(): string {
-  return `${WS_BASE}/ws`;
+  const base = `${WS_BASE}/ws`;
+  const token = getStoredToken();
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
 function wsProtocols(): string | string[] | undefined {
-  const token = getStoredToken();
-  if (!token) return undefined;
-  return ['access_token.' + token];
+  // Token rides on ?token= (see buildWsUrl). Do NOT send Sec-WebSocket-Protocol:
+  // Vite proxy + Chromium then fail with "HTTP Authentication failed".
+  return undefined;
 }
 
 function handleWsMessage(event: MessageEvent) {
@@ -288,11 +312,12 @@ export async function connectRelays(): Promise<number> {
   return new Promise<number>((resolve) => {
     let resolved = false;
     try {
-      const ws = new WebSocket(buildWsUrl(), wsProtocols());
+      const ws = new WebSocket(buildWsUrl());
       wsConnection = ws;
 
       ws.onopen = () => {
         lastStatus = { connected: true, relays: 1, mode: 'go-backend', url: buildWsUrl() };
+        exposeProxiDebug();
         if (!resolved) { resolved = true; resolve(1); }
 
         // Send join broadcast
