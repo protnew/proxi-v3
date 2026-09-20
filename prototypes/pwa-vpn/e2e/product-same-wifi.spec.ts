@@ -4,7 +4,7 @@
  */
 import { test, expect } from '@playwright/test'
 
-const BASE = process.env.APP_URL || 'http://127.0.0.1:8090'
+const BASE = process.env.APP_URL || 'http://127.0.0.1:5173'
 const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
 test.describe('Product same-WiFi path', () => {

@@ -1,29 +1,29 @@
 import { test, expect, Page } from '@playwright/test'
 
-const APP_URL = process.env.APP_URL || 'http://127.0.0.1:8090'
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5173'
 
 async function waitForApp(page: Page) {
+  await page.addInitScript(() => localStorage.setItem('proxi_demo_role', 'tester1'))
   await page.goto(APP_URL + '?role=alice', { waitUntil: 'domcontentloaded' })
-  await page.getByRole('heading', { name: 'Proxi', level: 2 }).waitFor({ timeout: 20000 })
-  // identity/signup + ws
-  await page.waitForTimeout(2500)
+  // Empty-state brand OR already in chat UI with new-chat button
+  const brand = page.getByTestId('chat-empty-brand').or(page.getByRole('heading', { name: 'Proxi' }))
+  const newBtn = page.locator('button.new-btn')
+  await expect(brand.or(newBtn).first()).toBeVisible({ timeout: 20000 })
+  await page.waitForTimeout(1500)
 }
 
 async function openNewChat(page: Page) {
-  const btn = page.getByRole('button', { name: '✏️' })
-  await btn.click()
+  await page.locator('button.new-btn').click()
   await expect(page.getByRole('heading', { name: 'Новый чат' })).toBeVisible({ timeout: 5000 })
 }
 
 async function startChat(page: Page, userId: string, name: string) {
   await openNewChat(page)
-  // UI: textbox "User ID" + optional name (not old textarea pubkey)
   const idBox = page.getByRole('textbox', { name: /User ID|pubkey|Pubkey|Адрес друга/i }).or(
     page.locator('input[placeholder*="User"], input[placeholder*="pubkey" i], input[placeholder*="ID"]').first()
   )
-  // fallback: first textbox in dialog after heading
   if (await idBox.count() === 0) {
-    await page.locator('heading:has-text("Новый чат")').locator('..').locator('input, textarea').first().fill(userId)
+    await page.getByRole('heading', { name: 'Новый чат' }).locator('..').locator('input, textarea').first().fill(userId)
   } else {
     await idBox.first().fill(userId)
   }
@@ -44,20 +44,22 @@ async function sendText(page: Page, text: string) {
   await box.fill(text)
   await box.press('Enter')
   await page.waitForTimeout(400)
-  await expect(page.locator('.msg-text', { hasText: text }).first()).toBeVisible({ timeout: 8000 })
+  await expect(page.getByText(text).first()).toBeVisible({ timeout: 8000 })
 }
 
 test.describe('Messenger UI (native)', () => {
   test('loads and shows title', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('proxi_demo_role', 'tester1'))
     await page.goto(APP_URL + '?role=alice')
-    await expect(page.getByRole('heading', { name: 'Proxi', level: 2 })).toBeVisible({ timeout: 15000 })
+    await expect(
+      page.getByTestId('chat-empty-brand').or(page.getByRole('heading', { name: 'Proxi' })).first()
+    ).toBeVisible({ timeout: 15000 })
   })
 
   test('opens new chat dialog with User ID field', async ({ page }) => {
     await waitForApp(page)
     await openNewChat(page)
     await expect(page.getByRole('button', { name: /Начать чат/i })).toBeVisible()
-    // must NOT rely on old textarea placeholder
     const legacy = page.locator('textarea[placeholder="Вставь pubkey друга"]')
     expect(await legacy.count()).toBe(0)
   })
@@ -73,8 +75,7 @@ test.describe('Messenger UI (native)', () => {
   test('emoji picker opens', async ({ page }) => {
     await waitForApp(page)
     await startChat(page, 'b'.repeat(64), `Emoji${Date.now().toString().slice(-4)}`)
-    await page.getByRole('button', { name: '😊' }).click()
-    // picker visible somehow
+    await page.getByRole('button', { name: 'Смайлики' }).click()
     await page.waitForTimeout(300)
     const picker = page.locator('.emoji-picker, .eb').first()
     await expect(picker).toBeVisible({ timeout: 5000 })

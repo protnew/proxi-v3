@@ -71,8 +71,9 @@ async function startVPNSignaling(targetPubkey: string) {
   let tunnelBusy = $state(false)
   let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
   let dismissedFrom = $state<Record<string, number>>({})
-  const DEMO_ALICE = '1'.repeat(64)
-  const DEMO_BOB = '2'.repeat(64)
+  // Real x-only pubkeys of demo secrets '1'*64 / '2'*64 (P1 signed auth)
+  const DEMO_ALICE = '4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa'
+  const DEMO_BOB = '466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27'
   let lanPhoneUrl = $state('')
   let demoPartnerLabel = $state('')
   function applyDemoPartner() {

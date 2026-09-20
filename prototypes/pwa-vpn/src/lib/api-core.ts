@@ -105,20 +105,17 @@ export function initIdentity(): string {
     return cachedIdentity.pubkey;
   }
 
-  // Demo mode: check for fixed test identities (Alice/Bob)
+  // Demo mode: check for fixed test identities (Alice/Bob).
+  // P1: pubkey must be the REAL x-only secp256k1 pubkey of the demo secret,
+  // otherwise challenge signature verification fails (401 on signup/ws).
   const demoRole = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_demo_role') : null;
-  if (demoRole === 'tester1') {
-    const k1 = '1'.repeat(64);
-    cachedIdentity = { pubkey: k1, privateKey: k1 };
-    // Demo keys are not valid secp256k1 — P5 NIP-44 would refuse every send.
-    e2eEnabled = false;
-    exposeProxiDebug();
-    return cachedIdentity.pubkey;
-  }
-  if (demoRole === 'tester2') {
-    const k2 = '2'.repeat(64);
-    cachedIdentity = { pubkey: k2, privateKey: k2 };
-    e2eEnabled = false;
+  if (demoRole === 'tester1' || demoRole === 'tester2') {
+    const sk = demoRole === 'tester1' ? '1'.repeat(64) : '2'.repeat(64);
+    const skBytes = new Uint8Array(sk.match(/.{2}/g)!.map(h => parseInt(h, 16)));
+    const pub = Array.from(secp.getPublicKey(skBytes, true).slice(1))
+      .map(b => b.toString(16).padStart(2, '0')).join('');
+    cachedIdentity = { pubkey: pub, privateKey: sk };
+    try { localStorage.setItem('indestructible-pubkey', pub) } catch { /* */ }
     exposeProxiDebug();
     return cachedIdentity.pubkey;
   }

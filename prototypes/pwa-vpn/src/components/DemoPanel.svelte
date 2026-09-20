@@ -3,9 +3,12 @@
   import * as stores from '../stores/messenger';
   import { onMount, onDestroy } from 'svelte';
 
-  // Fixed test identities (64-char hex)
-  const TESTER_1 = '1'.repeat(64);
-  const TESTER_2 = '2'.repeat(64);
+  // Fixed test identities — REAL x-only pubkeys of demo secrets
+  // '1'*64 / '2'*64 (P1 signed auth requires pubkey↔sk match)
+  const TESTER_1_SK = '1'.repeat(64);
+  const TESTER_2_SK = '2'.repeat(64);
+  const TESTER_1 = '4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa';
+  const TESTER_2 = '466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27';
 
   let currentKey = $state('');
   let myIP = $state('detecting...');
@@ -68,12 +71,11 @@
   }
 
   function loginAs(role: 'tester1' | 'tester2') {
-    const key = role === 'tester1' ? TESTER_1 : TESTER_2;
-    // Store the key in localStorage so initIdentity picks it up
+    const sk = role === 'tester1' ? TESTER_1_SK : TESTER_2_SK;
+    const pub = role === 'tester1' ? TESTER_1 : TESTER_2;
+    // Store the role so initIdentity derives the same pair after reload
     localStorage.setItem('proxi_demo_role', role);
-    // Also set it directly
-    setIdentity(key, key); // pubkey=privateKey (test mode)
-    // Reload to re-init WS + identity
+    setIdentity(pub, sk); // (pubkey, secretKey) — real pair
     window.location.reload();
   }
 

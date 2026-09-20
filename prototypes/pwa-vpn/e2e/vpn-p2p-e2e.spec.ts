@@ -1,10 +1,11 @@
-/**
+﻿/**
  * VPN-P2P-E2E: Dual-context give->accept->connected WebRTC flow
  * Replaces false SIG-003/WT full-chain DONE claims.
  */
 import { test, expect, type Page } from '@playwright/test'
 
-const BASE = 'http://127.0.0.1:8090'
+const BASE = process.env.APP_URL || 'http://127.0.0.1:5173'
+const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
 async function waitForApp(page: Page, role: string) {
   await page.goto(`${BASE}/?role=${role}`, { waitUntil: 'domcontentloaded' })
@@ -47,11 +48,15 @@ test.describe('VPN P2P E2E - give/accept product flow', () => {
   })
 
   test('LAN API provides phone URL', async ({ request }) => {
-    const r = await request.get(`${BASE}/api/network/lan`)
-    expect(r.status()).toBe(200)
+    const r = await request.get(`${API}/api/network/lan`)
+    expect(r.ok()).toBeTruthy()
     const j = await r.json()
-    expect(j.bind).toContain('0.0.0.0')
-    expect(j.phone_urls).toBeDefined()
+    expect(j.ok).toBeTruthy()
+    expect(String(j.bind)).toMatch(/:\d+$/)
     expect(Array.isArray(j.phone_urls)).toBeTruthy()
+    // loopback bind ⇒ empty phone_urls is OK (same as product-same-wifi)
+    if (j.reachable_from_lan === false) {
+      expect(j.phone_urls.length).toBe(0)
+    }
   })
 })

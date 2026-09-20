@@ -59,8 +59,9 @@ var stickerMgr = bot.NewStickerManager()
 var perUserLimiter = middleware.NewRateLimiter(100, 200) // 100 req/s, burst 200
 
 // P19: strict limiter for auth endpoints — 100 req/s does not stop
-// signup spam. 1 req per 5s sustained, burst 5 (per IP).
-var authLimiter = middleware.NewRateLimiter(0.2, 5)
+// signup spam. 1 req/s sustained, burst 10 (per IP) — blocks floods
+// without starving legit multi-context flows (e2e, tab reloads).
+var authLimiter = middleware.NewRateLimiter(1.0, 10)
 
 // ========== CORS Policy ==========
 

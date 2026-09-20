@@ -161,7 +161,12 @@ if (initialView === 'newchat') {
     let browserId: Identity;
     if (demoRole === 'tester1' || demoRole === 'tester2') {
       const demoKey = demoRole === 'tester1' ? '1'.repeat(64) : '2'.repeat(64);
-      browserId = { privateKey: demoKey, publicKey: demoKey, npub: 'npub1demo' + demoKey.slice(0, 16), nsec: 'nsec1demo', createdAt: Date.now() };
+      // P1: derive the REAL x-only pubkey — signed auth requires pubkey↔sk match
+      const { getPublicKey } = await import('@noble/secp256k1')
+      const skBytes = new Uint8Array(demoKey.match(/.{2}/g)!.map(h => parseInt(h, 16)))
+      const demoPub = Array.from(getPublicKey(skBytes, true).slice(1))
+        .map(b => b.toString(16).padStart(2, '0')).join('')
+      browserId = { privateKey: demoKey, publicKey: demoPub, npub: 'npub1demo' + demoPub.slice(0, 16), nsec: 'nsec1demo', createdAt: Date.now() };
       console.log('[app] Demo mode identity:', demoRole);
     } else {
       const { loadIdentityAsync, getIdentity, loadStoredPubkey } = await import('./lib/identity')
@@ -275,8 +280,9 @@ if (initialView === 'newchat') {
     sendPresence(true)
 
     // Auto-setup demo contacts: Alice and Bob pre-linked
-    const DEMO_ALICE = '1'.repeat(64);
-    const DEMO_BOB = '2'.repeat(64);
+    // Real x-only pubkeys of demo secrets '1'*64 / '2'*64 (P1 signed auth)
+    const DEMO_ALICE = '4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa';
+    const DEMO_BOB = '466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27';
     const myPk = pk || browserId.publicKey; // prefer demo key from initIdentity
     if (myPk === DEMO_ALICE || myPk === DEMO_BOB) {
       const isAlice = myPk === DEMO_ALICE;

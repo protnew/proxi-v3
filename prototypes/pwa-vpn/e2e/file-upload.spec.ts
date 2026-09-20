@@ -3,12 +3,12 @@
  */
 import { test, expect, type Page } from '@playwright/test'
 
-const BASE = 'http://127.0.0.1:8090'
+const BASE = process.env.APP_URL || 'http://127.0.0.1:5173'
 
 async function waitForApp(page: Page) {
-  await page.goto(`${BASE}/?role=alice`, { waitUntil: 'domcontentloaded' })
+  await page.goto(`${BASE}/?role=alice&dev=1`, { waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(5000)
-  await page.waitForFunction(() => !!(localStorage.getItem('proxi_token') || ''), { timeout: 15000 })
+  await page.waitForFunction(() => !!(localStorage.getItem('proxi_token') || (window as any).__proxiPubkey), { timeout: 20000 })
 }
 
 test.describe('File upload smoke', () => {

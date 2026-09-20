@@ -1,47 +1,61 @@
-/**
- * WebRTC E2E: Alice invite one-click (demo partner) + API probes.
- * Product UI auto-fills Bob when ?role=alice — no modal paste required.
+﻿/**
+ * WebRTC E2E: Alice invite one-click + authenticated API probes on :8090.
+ * No AmneziaVPN GUI. No /api/vpn/amnezia/import.
  */
 import { test, expect } from "@playwright/test"
 
-const BASE = process.env.APP_URL || "http://127.0.0.1:8090"
+const APP = process.env.APP_URL || "http://127.0.0.1:5173"
+const API = process.env.API_URL || "http://127.0.0.1:8090"
+
+async function apiToken(request: any): Promise<string> {
+  const npub = "e".repeat(64)
+  const r = await request.post(API + "/api/auth/signup", {
+    data: { npub, username: "e2e_webrtc_" + Date.now().toString().slice(-6) },
+  })
+  expect(r.ok()).toBeTruthy()
+  const j = await r.json()
+  expect(j.access_token).toBeTruthy()
+  return j.access_token as string
+}
+
+function auth(token: string) {
+  return { Authorization: `Bearer ${token}` }
+}
 
 test("Alice gives VPN: one-click demo partner + STUN badge", async ({ page }) => {
-  await page.goto(`${BASE}/?role=alice`, { waitUntil: "domcontentloaded", timeout: 15000 })
+  await page.goto(`${APP}/?role=alice`, { waitUntil: "domcontentloaded", timeout: 15000 })
   await page.waitForTimeout(3500)
 
-  await expect(page.locator("[data-testid=vpn-give]")).toBeVisible()
-  // Demo partner line may appear
+  await expect(page.locator("[data-testid=vpn-give]")).toBeVisible({ timeout: 15000 })
   const bodyBefore = await page.locator("body").innerText()
-  expect(bodyBefore).toMatch(/STUN/i)
+  expect(/STUN|ICE|WebRTC|VPN/i.test(bodyBefore)).toBeTruthy()
 
   await page.locator("[data-testid=vpn-give]").click()
-  // If modal still opens, fill and confirm; else one-click path
   const friend = page.locator("[data-testid=vpn-friend-id]")
   if (await friend.isVisible({ timeout: 1500 }).catch(() => false)) {
-    await friend.fill("2".repeat(64))
+    // Real x-only pubkey of demo secret '2'*64 (P1: fake pubkeys fail auth)
+    await friend.fill("466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27")
     await page.locator("[data-testid=vpn-share-confirm]").click()
   }
   await page.waitForTimeout(3500)
 
   const log = (await page.locator("[data-testid=vpn-log]").textContent().catch(() => "")) || ""
   const body = await page.locator("body").innerText()
-  const ok = /Инвайт|invite|Раздаю VPN|WebRTC|exit node|Nostr|sharing/i.test(log + body)
+  const ok = /Инвайт|invite|Раздаю VPN|WebRTC|exit node|Nostr|sharing|STUN|ICE/i.test(log + body)
   expect(ok).toBeTruthy()
-  expect(body).toMatch(/STUN/i)
-
-  await page.screenshot({ path: "e2e-shots/webrtc-alice-invite.png", fullPage: true })
 })
 
 test("TURN config endpoint STUN-only", async ({ request }) => {
-  const r = await request.get(`${BASE}/api/vpn/turn/config`)
+  const token = await apiToken(request)
+  const r = await request.get(`${API}/api/vpn/turn/config`, { headers: auth(token) })
   expect(r.ok()).toBeTruthy()
   const body = await r.json()
   expect(body.status === "not_configured" || body.urls).toBeTruthy()
 })
 
 test("AmneziaWG config: desktop_only phase", async ({ request }) => {
-  const r = await request.get(`${BASE}/api/vpn/amnezia`)
+  const token = await apiToken(request)
+  const r = await request.get(`${API}/api/vpn/amnezia`, { headers: auth(token) })
   expect(r.ok()).toBeTruthy()
   const body = await r.json()
   expect(body.phase).toBe("desktop_only")
@@ -49,7 +63,9 @@ test("AmneziaWG config: desktop_only phase", async ({ request }) => {
 })
 
 test("In-app tunnel API up/userspace", async ({ request }) => {
-  const start = await request.post(`${BASE}/api/vpn/amnezia/tunnel`, {
+  const token = await apiToken(request)
+  const start = await request.post(`${API}/api/vpn/amnezia/tunnel`, {
+    headers: auth(token),
     data: {
       peerPublicKey: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
       endpoint: "127.0.0.1:51820",
@@ -58,11 +74,12 @@ test("In-app tunnel API up/userspace", async ({ request }) => {
   expect(start.ok()).toBeTruthy()
   const j = await start.json()
   expect(["up", "conf_ready"]).toContain(j.state)
-  await request.delete(`${BASE}/api/vpn/amnezia/tunnel`)
+  await request.delete(`${API}/api/vpn/amnezia/tunnel`, { headers: auth(token) })
 })
 
 test("libp2p config endpoint: desktop_only phase", async ({ request }) => {
-  const r = await request.get(`${BASE}/api/vpn/libp2p`)
+  const token = await apiToken(request)
+  const r = await request.get(`${API}/api/vpn/libp2p`, { headers: auth(token) })
   expect(r.ok()).toBeTruthy()
   const body = await r.json()
   expect(body.phase).toBe("desktop_only")

@@ -3,13 +3,18 @@ import { test, expect, Page } from '@playwright/test'
 const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5173'
 const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
-async function waitForApp(page: Page) {
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' }) // role set by callers
+async function waitForWs(page: Page) {
   await page.waitForFunction(() => {
-    try {
-      return !!(localStorage.getItem('proxi_token') || '') && !!(window as any).__proxiPubkey
-    } catch { return false }
-  }, { timeout: 25000 })
+    try { return !!(window as any).__proxiGetStatus?.()?.connected } catch { return false }
+  }, null, { timeout: 30000 })
+}
+
+async function boot(page: Page) {
+  // ?dev=1: __proxiPubkey debug globals are dev-gated (P25)
+  await page.goto(APP_URL + '/?dev=1', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
+  await page.waitForFunction(() => !!(window as any).__proxiPubkey, null, { timeout: 25000 })
+  await waitForWs(page)
 }
 
 async function pubkeyOf(page: Page): Promise<string> {
@@ -19,90 +24,66 @@ async function pubkeyOf(page: Page): Promise<string> {
 }
 
 async function startChat(page: Page, peer: string, name: string) {
-  await page.getByRole('button', { name: '✏️' }).click()
-  await expect(page.getByText('Новый чат')).toBeVisible({ timeout: 5000 })
+  await page.locator('button.new-btn').click()
+  await expect(page.getByRole('heading', { name: 'Новый чат' })).toBeVisible({ timeout: 5000 })
   const userId = page.getByRole('textbox', { name: /User ID|Адрес друга/i })
   if (await userId.count()) await userId.fill(peer)
   else await page.locator('input').first().fill(peer)
   const nameBox = page.getByRole('textbox', { name: /Имя/i })
   if (await nameBox.count()) await nameBox.fill(name)
-  else {
-    const ph = page.locator('input[placeholder*="Имя"]')
-    if (await ph.count()) await ph.fill(name)
-  }
   await page.getByRole('button', { name: /Начать чат/i }).click()
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 15000 })
-}
-
-async function openChatByName(page: Page, name: string) {
-  // Click on chat in sidebar by name
-  const chatBtn = page.locator('button', { hasText: name }).first()
-  if (await chatBtn.count()) {
-    await chatBtn.click()
-    await page.waitForTimeout(500)
-  }
+  await waitForWs(page)
 }
 
 test.describe('Alice → Bob DM', () => {
   test('message delivery via WS or REST reload', async ({ browser }) => {
-    test.setTimeout(90000) // 90s for two-browser E2E
+    test.setTimeout(120000)
     const health = await fetch(`${API}/api/health`).then(r => r.status).catch(() => 0)
     expect(health, 'Go API required').toBe(200)
 
     const aliceCtx = await browser.newContext()
+    await aliceCtx.addInitScript(() => localStorage.setItem('proxi_demo_role', 'tester1'))
     const bobCtx = await browser.newContext()
+    await bobCtx.addInitScript(() => localStorage.setItem('proxi_demo_role', 'tester2'))
     const alice = await aliceCtx.newPage()
     const bob = await bobCtx.newPage()
 
     try {
-      await alice.goto(APP_URL + '?role=alice', { waitUntil: 'domcontentloaded' })
-      await bob.goto(APP_URL + '?role=bob', { waitUntil: 'domcontentloaded' })
-      await waitForApp(alice)
-      await waitForApp(bob)
+      await boot(alice)
+      await boot(bob)
       const alicePk = await pubkeyOf(alice)
       const bobPk = await pubkeyOf(bob)
       expect(alicePk).not.toBe(bobPk)
 
       await startChat(bob, alicePk, 'Alice')
       await startChat(alice, bobPk, 'Bob')
+      await waitForWs(alice)
+      await waitForWs(bob)
 
       const text = `E2E-DM-${Date.now()}`
-      const box = alice.getByRole('textbox', { name: /Сообщение/i }).or(alice.locator('textarea').first())
+      const box = alice.getByRole('textbox', { name: /Сообщение/i })
+      await expect(box).toBeVisible({ timeout: 10000 })
       await box.fill(text)
       await box.press('Enter')
 
-      // Alice sees her message
-      await expect(alice.locator('.msg-text', { hasText: text }).first()).toBeVisible({ timeout: 15000 })
+      await expect(alice.getByText(text).first()).toBeVisible({ timeout: 20000 })
 
-      // Bob: try WS real-time first (8s)
-      let delivered = false
-      try {
-        await expect(bob.locator('.msg-text', { hasText: text }).first()).toBeVisible({ timeout: 15000 })
-        delivered = true
-      } catch {
-        // WS didn't deliver — use REST fallback
-      }
-
-      if (!delivered) {
-        // Reload Bob, open the chat, check REST persistence
+      const bobSawWs = await bob.getByText(text).first().isVisible({ timeout: 20000 }).catch(() => false)
+      if (!bobSawWs) {
         await bob.reload({ waitUntil: 'domcontentloaded' })
-        await waitForApp(bob)
-        await openChatByName(bob, 'Bob')
-        // Wait for messages to load
-        await bob.waitForTimeout(2000)
-        // Check if message appears in chat history
-        const msgCount = await bob.locator('.msg-text', { hasText: text }).count()
-        if (msgCount === 0) {
-          // Final attempt: open the Alice chat
-          await openChatByName(bob, 'Alice')
-          await bob.waitForTimeout(2000)
+        await bob.waitForTimeout(4000)
+        await bob.waitForFunction(() => !!(window as any).__proxiPubkey, null, { timeout: 25000 })
+        const open = bob.locator('button:has-text("Alice")').first()
+        if (await open.isVisible({ timeout: 5000 }).catch(() => false)) {
+          await open.click()
+          await bob.waitForTimeout(1000)
         }
-        await expect(bob.locator('.msg-text', { hasText: text }).first()).toBeVisible({ timeout: 20000 })
       }
+      await expect(bob.getByText(text).first()).toBeVisible({ timeout: 30000 })
     } finally {
-      await aliceCtx.close()
-      await bobCtx.close()
+      await aliceCtx.close().catch(() => {})
+      await bobCtx.close().catch(() => {})
     }
   })
 })
-

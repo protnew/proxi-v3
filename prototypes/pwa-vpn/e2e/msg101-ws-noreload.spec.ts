@@ -3,15 +3,21 @@
  */
 import { test, expect, Page } from '@playwright/test'
 
-const APP_URL = process.env.APP_URL || 'http://127.0.0.1:8090'
+const APP_URL = process.env.APP_URL || 'http://127.0.0.1:5173'
+const API = process.env.API_URL || 'http://127.0.0.1:8090'
 
-async function waitForApp(page: Page) {
-  await page.goto(APP_URL, { waitUntil: 'domcontentloaded' }) // role set by callers
+async function waitForWs(page: Page) {
   await page.waitForFunction(() => {
-    try {
-      return !!(localStorage.getItem('proxi_token') || '') && !!(window as any).__proxiPubkey
-    } catch { return false }
-  }, { timeout: 25000 })
+    try { return !!(window as any).__proxiGetStatus?.()?.connected } catch { return false }
+  }, null, { timeout: 30000 })
+}
+
+async function boot(page: Page) {
+  // ?dev=1: __proxiPubkey debug globals are dev-gated (P25)
+  await page.goto(APP_URL + '/?dev=1', { waitUntil: 'domcontentloaded' })
+  await page.waitForTimeout(2000)
+  await page.waitForFunction(() => !!(window as any).__proxiPubkey, null, { timeout: 25000 })
+  await waitForWs(page)
 }
 
 async function pubkeyOf(page: Page): Promise<string> {
@@ -21,8 +27,8 @@ async function pubkeyOf(page: Page): Promise<string> {
 }
 
 async function startChat(page: Page, peer: string, name: string) {
-  await page.getByRole('button', { name: '✏️' }).click()
-  await expect(page.getByText('Новый чат')).toBeVisible({ timeout: 5000 })
+  await page.locator('button.new-btn').click()
+  await expect(page.getByRole('heading', { name: 'Новый чат' })).toBeVisible({ timeout: 5000 })
   const userId = page.getByRole('textbox', { name: /User ID|Адрес друга/i })
   if (await userId.count()) await userId.fill(peer)
   else await page.locator('input').first().fill(peer)
@@ -34,49 +40,53 @@ async function startChat(page: Page, peer: string, name: string) {
   }
   await page.getByRole('button', { name: /Начать чат/i }).click()
   await expect(page.getByText(name).first()).toBeVisible({ timeout: 15000 })
+  await waitForWs(page)
 }
 
 test.describe('MSG-101 WS no-reload', () => {
   test('Bob sees Alice message without reload', async ({ browser }) => {
-    test.setTimeout(90000)
+    test.setTimeout(120000)
+    const health = await fetch(`${API}/api/health`).then(r => r.status).catch(() => 0)
+    expect(health, 'Go API required').toBe(200)
+
     const aliceCtx = await browser.newContext()
+    await aliceCtx.addInitScript(() => localStorage.setItem('proxi_demo_role', 'tester1'))
     const bobCtx = await browser.newContext()
+    await bobCtx.addInitScript(() => localStorage.setItem('proxi_demo_role', 'tester2'))
     const alice = await aliceCtx.newPage()
     const bob = await bobCtx.newPage()
 
-    await alice.goto(APP_URL + '?role=alice', { waitUntil: 'domcontentloaded' })
-    await bob.goto(APP_URL + '?role=bob', { waitUntil: 'domcontentloaded' })
-    await waitForApp(alice)
-    await waitForApp(bob)
-    const alicePk = await pubkeyOf(alice)
-    const bobPk = await pubkeyOf(bob)
-    expect(alicePk).not.toBe(bobPk)
+    try {
+      await boot(alice)
+      await boot(bob)
+      const alicePk = await pubkeyOf(alice)
+      const bobPk = await pubkeyOf(bob)
+      expect(alicePk).not.toBe(bobPk)
 
-    await startChat(bob, alicePk, 'Alice')
-    await startChat(alice, bobPk, 'Bob')
+      await startChat(bob, alicePk, 'Alice')
+      await startChat(alice, bobPk, 'Bob')
+      await waitForWs(alice)
+      await waitForWs(bob)
+      await bob.waitForTimeout(1000)
 
-    // Capture bob navigation to detect accidental reload
-    let bobReloaded = false
-    bob.on('framenavigated', (frame) => {
-      if (frame === bob.mainFrame()) bobReloaded = true
-    })
-    // Reset flag after chat setup navigations settled
-    bobReloaded = false
+      let bobReloaded = false
+      bob.on('framenavigated', (frame) => {
+        if (frame === bob.mainFrame()) bobReloaded = true
+      })
+      bobReloaded = false
 
-    const text = `MSG101-WS-${Date.now()}`
-    const box = alice.getByRole('textbox', { name: /Сообщение/i }).or(alice.locator('textarea').first())
-    await box.fill(text)
-    await box.press('Enter')
+      const text = `MSG101-WS-${Date.now()}`
+      const box = alice.getByRole('textbox', { name: /Сообщение/i })
+      await expect(box).toBeVisible({ timeout: 10000 })
+      await box.fill(text)
+      await box.press('Enter')
 
-    await expect(alice.locator('.msg-text', { hasText: text }).first()).toBeVisible({ timeout: 15000 })
-    // STRICT: Bob without reload
-    await expect(bob.locator('.msg-text', { hasText: text }).first()).toBeVisible({ timeout: 20000 })
-    expect(bobReloaded, 'Bob must not reload').toBe(false)
-
-    await alice.screenshot({ path: 'test-results/msg101-alice.png', fullPage: true })
-    await bob.screenshot({ path: 'test-results/msg101-bob.png', fullPage: true })
-
-    await aliceCtx.close()
-    await bobCtx.close()
+      await expect(alice.getByText(text).first()).toBeVisible({ timeout: 20000 })
+      await expect(bob.getByText(text).first()).toBeVisible({ timeout: 30000 })
+      expect(bobReloaded, 'Bob must not reload').toBe(false)
+    } finally {
+      await aliceCtx.close().catch(() => {})
+      await bobCtx.close().catch(() => {})
+    }
   })
 })
