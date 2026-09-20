@@ -15,7 +15,6 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/auth"
-	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/federation"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
@@ -116,8 +115,7 @@ func run() error {
 		db: db,
 	}
 
-	// Start Dead Man's Switch worker
-	go startDeadMansSwitchWorker(context.Background(), srv)
+	// P8 (2026-09-20): DMS worker один — deadMansSwitchLoop ниже (после initHub).
 
 	var spErr error
 	storageProvider, spErr = storage.NewLocalStore(filepath.Join(dataDir, "uploads"))
@@ -226,26 +224,9 @@ func run() error {
 		log.Printf("🔑 Identity loaded from DB: %s", npub)
 	}
 
-	// Initialize chat hub with message persistence callback (M-002)
-	srv.initHub()
-	if srv.hub != nil && srv.db != nil {
-		srv.hub.OnMessage = func(msg *chat.Message) {
-			msgID := msg.ID
-			if msgID == "" {
-				msgID = fmt.Sprintf("msg-%d-%s", msg.Ts, msg.From[:min(len(msg.From), 8)])
-			}
-			srv.db.SaveMessage(store.Message{
-				ID:        msgID,
-				From:      msg.From,
-				To:        msg.To,
-				Text:      msg.Text,
-				Timestamp: msg.Ts,
-				Encrypted: msg.IsE2E,
-				ReplyTo:   msg.ReplyTo,
-				ForwardedFrom: msg.ForwardedFrom,
-			})
-		}
-	}
+	// P7 (2026-09-20): второй initHub удалён — пересоздавал hub и затирал
+	// hardened OnMessage (P5 fail-closed + reply-enrich) наивным persist'ом.
+	// Hub инициализируется один раз выше (initHub содержит persist-логику).
 
 	// Auto-connect VPN peers on startup
 	go srv.autoConnectPeers()

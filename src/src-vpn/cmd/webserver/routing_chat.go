@@ -5,7 +5,6 @@ package main
 
 import (
 	vpnroot "github.com/unkillable-messenger/vpn"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -300,41 +299,6 @@ func (s *Server) handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
 // handleSwitchSetup — POST /api/switch/setup
 
 
-func startDeadMansSwitchWorker(ctx context.Context, s *Server) {
-	ticker := time.NewTicker(1 * time.Hour)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			switches, err := s.db.GetExpiredSwitches()
-			if err != nil {
-				zap.S().Errorf("Failed to check expired switches: %v", err)
-				continue
-			}
-
-			for _, dms := range switches {
-				zap.S().Infof("💀 Triggering Dead Man's Switch %s for user %s", dms.ID, dms.UserNpub)
-				// Broadcast via hub if possible, or save as a system message to recipient
-				msg := store.Message{
-					ID:        fmt.Sprintf("dms-%d", time.Now().UnixNano()),
-					From:      dms.UserNpub,
-					To:        dms.Recipient,
-					Text:      dms.MessageText,
-					Timestamp: time.Now().Unix(),
-				}
-				s.db.SaveMessage(msg)
-
-				if s.hub != nil {
-					s.hub.RawBroadcastJSON(msg, "")
-				}
-
-				dms.Triggered = true
-				s.db.SaveDeadMansSwitch(dms)
-			}
-		}
-	}
-}
+// P8 (2026-09-20): startDeadMansSwitchWorker удалён — был вторым DMS-воркером
+// (дубль-триггеры + broadcast всем = утечка). Остаётся deadMansSwitchLoop.
 

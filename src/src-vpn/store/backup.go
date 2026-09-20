@@ -103,6 +103,24 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 		return fmt.Errorf("store: close staged restore: %w", err)
 	}
 
+	// P14 (2026-09-20): integrity_check на СТЕЙДЖ-файле до подмены живой БД —
+	// битый бэкап не должен убивать рабочую базу.
+	{
+		stage, err := sql.Open("sqlite", tmpPath+"?mode=ro&_journal_mode=DELETE")
+		if err != nil {
+			return fmt.Errorf("store: open staged restore: %w", err)
+		}
+		var stageIntegrity string
+		scanErr := stage.QueryRow("PRAGMA integrity_check").Scan(&stageIntegrity)
+		stage.Close()
+		if scanErr != nil {
+			return fmt.Errorf("store: staged integrity check: %w", scanErr)
+		}
+		if stageIntegrity != "ok" {
+			return fmt.Errorf("store: staged integrity check failed: %s", stageIntegrity)
+		}
+	}
+
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("store: close db: %w", err)
 	}
