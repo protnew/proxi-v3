@@ -14,6 +14,7 @@ data class ChatEntity(
     val unread: Int = 0,
     val lastMessageText: String? = null,
     val peerPubKey: String? = null,      // DM peer pubkey for display/search
+    val members: String? = null,         // GROUP: comma-separated member pubkeys
 )
 
 @Entity(

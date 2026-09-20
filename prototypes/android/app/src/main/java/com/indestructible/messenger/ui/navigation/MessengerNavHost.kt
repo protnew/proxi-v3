@@ -91,7 +91,11 @@ fun MessengerNavHost() {
                 onCreateChat = { pubkey, name ->
                     chatVM.createDmChat(pubkey, name)
                     navController.popBackStack()
-                }
+                },
+                onCreateGroup = { name, members ->
+                    chatVM.createGroupChat(name, members)
+                    navController.popBackStack()
+                },
             )
         }
     }

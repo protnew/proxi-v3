@@ -38,6 +38,29 @@ class ChatViewModel(
     // Presence: peers observed via WS join events.
     val onlinePeers = mutableStateOf<Set<String>>(emptySet())
 
+    // Typing: peers currently composing in a DM with us.
+    val typingPeers = mutableStateOf<Set<String>>(emptySet())
+    private var lastTypingSent = 0L
+
+    /** Throttled typing event — wire-compatible with PWA ("type":"typing"). */
+    fun sendTyping(to: String) {
+        val now = System.currentTimeMillis()
+        if (now - lastTypingSent < 3000) return
+        lastTypingSent = now
+        webSocket?.send(JSONObject().apply {
+            put("type", "typing"); put("to", to); put("ts", now / 1000)
+        }.toString())
+    }
+
+    private fun noteTyping(from: String) {
+        if (from == myPubKey || from.isEmpty()) return
+        typingPeers.value = typingPeers.value + from
+        // Auto-expire after 4s of silence.
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            typingPeers.value = typingPeers.value - from
+        }, 4000)
+    }
+
     fun setPrivateKey(hex: String) { myPrivKeyHex = hex }
 
     fun isOnline(pubkey: String) = onlinePeers.value.contains(pubkey)
@@ -62,6 +85,7 @@ class ChatViewModel(
         lastActivity = lastActivity,
         lastMessageText = lastMessageText,
         peerPubKey = peerPubKey,
+        members = members?.split(",")?.filter { it.isNotBlank() },
     )
 
     private fun MessageEntity.toModel() = Message(
@@ -86,21 +110,26 @@ class ChatViewModel(
         Thread { db.chats().upsert(e) }.start()
     }
 
-    /** Incoming DM from `fromPub`: ensure a chat row exists and bump unread. */
-    private fun ensureIncomingChat(fromPub: String, preview: String, ts: Long) {
-        val chatId = "dm:$fromPub"
+    /** Incoming message: ensure a chat row exists (DM or group) and bump unread. */
+    private fun ensureIncomingChat(fromPub: String, preview: String, ts: Long, chatId: String? = null) {
+        val cid = chatId ?: "dm:$fromPub"
         Thread {
-            val existing = db.chats().byId(chatId)
+            val existing = db.chats().byId(cid)
             val displayName = db.contacts().byPubkey(fromPub)?.name
                 ?: "${fromPub.take(8)}…${fromPub.takeLast(4)}"
             if (existing == null) {
+                val isGroup = cid.startsWith("group:")
                 db.chats().upsert(ChatEntity(
-                    id = chatId, name = displayName, avatar = displayName.take(1),
-                    type = "DM", lastActivity = ts, unread = 1,
-                    lastMessageText = preview, peerPubKey = fromPub,
+                    id = cid,
+                    name = if (isGroup) "Группа ${cid.removePrefix("group:").take(12)}" else displayName,
+                    avatar = if (isGroup) "👥" else displayName.take(1),
+                    type = if (isGroup) "GROUP" else "DM",
+                    lastActivity = ts, unread = 1,
+                    lastMessageText = preview,
+                    peerPubKey = if (isGroup) null else fromPub,
                 ))
             } else {
-                db.chats().bumpIncoming(chatId, ts, preview)
+                db.chats().bumpIncoming(cid, ts, preview)
             }
             val fresh = db.chats().all().map { it.toModel() }
             android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -114,6 +143,21 @@ class ChatViewModel(
         .pingInterval(30, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
         .build()
+
+    init {
+        // Call signaling rides key_exchange messages (PWA wire format).
+        CallManager.sendSignal = { peer, signalJson ->
+            webSocket?.send(JSONObject().apply {
+                put("type", "key_exchange")
+                put("to", peer)
+                put("publicKey", signalJson.toString())
+                put("ts", System.currentTimeMillis() / 1000)
+            }.toString())
+        }
+    }
+
+    fun startAudioCall(peer: String) = CallManager.startCall(appContext, peer, video = false)
+    fun startVideoCall(peer: String) = CallManager.startCall(appContext, peer, video = true)
 
     fun connect(myPubKey: String) {
         if (connecting) return // WS-failure retry loop + NavHost re-entry must not stack auth threads
@@ -242,6 +286,8 @@ class ChatViewModel(
     fun debugPubKey(): String = myPubKey
 
     fun sendMessage(from: String, to: String, text: String, replyTo: String? = null) {
+        val isGroup = to.startsWith("group:")
+        val chatId = if (isGroup) to else "dm:$to"
         val msg = Message(
             id = "msg_${System.currentTimeMillis()}",
             from = from, to = to, text = text,
@@ -250,7 +296,6 @@ class ChatViewModel(
         )
         messages.add(msg)
 
-        val chatId = "dm:$to"
         persistMessage(MessageEntity(
             id = msg.id, chatId = chatId, fromPub = from, toPub = to,
             text = text, timestamp = msg.timestamp,
@@ -262,8 +307,44 @@ class ChatViewModel(
             }
         }.start()
 
-        // P24 (2026-09-20): E2E by default for DMs when a key is set —
-        // real NIP-44 v2, wire-compatible with PWA nostr-tools and Go.
+        if (isGroup) {
+            // E2E group fanout: NIP-44 per member, `group` field marks the room.
+            Thread {
+                val members = db.chats().byId(chatId)?.members
+                    ?.split(",")?.filter { it.isNotBlank() && it != myPubKey } ?: emptyList()
+                var allOk = true
+                for (m in members) {
+                    if (!sendEncryptedDm(m, text, group = to, replyTo = replyTo, msgId = msg.id)) {
+                        allOk = false
+                    }
+                }
+                markDeliveredLocal(msg.id, allOk)
+            }.start()
+            return
+        }
+
+        val sent = sendEncryptedDm(to, text, replyTo = replyTo, msgId = msg.id)
+        if (sent) markDeliveredLocal(msg.id, true)
+    }
+
+    private fun markDeliveredLocal(msgId: String, ok: Boolean) {
+        if (!ok) return
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            val idx = messages.indexOfFirst { it.id == msgId }
+            if (idx >= 0) messages[idx] = messages[idx].copy(delivered = true)
+        }
+        Thread { db.messages().markDelivered(msgId) }.start()
+    }
+
+    /**
+     * P24: E2E-encrypt `text` for `to` and send over WS. Fails CLOSED —
+     * returns false instead of ever downgrading to plaintext.
+     * `group` marks group-fanout copies so the peer files them under the room.
+     */
+    private fun sendEncryptedDm(
+        to: String, text: String,
+        group: String? = null, replyTo: String? = null, msgId: String? = null,
+    ): Boolean {
         var payload = text
         var isE2E = false
         if (to.isNotEmpty() && to != "broadcast" && myPrivKeyHex.isNotEmpty()) {
@@ -276,7 +357,7 @@ class ChatViewModel(
                 isE2E = true
             } catch (e: Exception) {
                 Log.e("ChatVM", "E2E encrypt failed — NOT sending plaintext", e)
-                return // fail closed: never downgrade to plaintext
+                return false // fail closed: never downgrade to plaintext
             }
         }
         val json = JSONObject().apply {
@@ -284,16 +365,42 @@ class ChatViewModel(
             put("to", to)
             put("text", payload)
             if (isE2E) { put("encrypted", true); put("is_e2e", true) }
+            if (group != null) put("group", group)
+            if (replyTo != null) put("replyTo", replyTo)
             put("ts", System.currentTimeMillis() / 1000)
-            put("id", msg.id)
+            put("id", msgId ?: "msg_${System.currentTimeMillis()}")
         }
         val sent = webSocket?.send(json.toString()) ?: false
-        if (sent) {
-            val idx = messages.indexOfFirst { it.id == msg.id }
-            if (idx >= 0) messages[idx] = messages[idx].copy(delivered = true)
-            Thread { db.messages().markDelivered(msg.id) }.start()
-        }
-        Log.i("ChatVM", "Send: ${json.optString("id")} text='${text.take(20)}' sent=$sent")
+        Log.i("ChatVM", "Send: ${json.optString("id")} to=${to.take(8)} sent=$sent")
+        return sent
+    }
+
+    /**
+     * Create a group chat locally and invite members via E2E `groupmeta` DM.
+     * Signal-style client fanout — no server-side group routing needed.
+     */
+    fun createGroupChat(name: String, memberPubs: List<String>) {
+        val gid = "grp-${System.currentTimeMillis()}"
+        val chatId = "group:$gid"
+        val all = (memberPubs + myPubKey).distinct()
+        upsertChatEntity(ChatEntity(
+            id = chatId, name = name, avatar = "👥", type = "GROUP",
+            lastActivity = System.currentTimeMillis(),
+            members = all.joinToString(","),
+        ))
+        val meta = "groupmeta:" + JSONObject().apply {
+            put("id", gid); put("name", name)
+            put("members", org.json.JSONArray(all))
+        }.toString()
+        Thread {
+            for (m in memberPubs.filter { it != myPubKey }) {
+                sendEncryptedDm(m, meta)
+            }
+            val fresh = db.chats().all().map { it.toModel() }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                chats.clear(); chats.addAll(fresh)
+            }
+        }.start()
     }
 
     /**
@@ -409,11 +516,36 @@ class ChatViewModel(
                 val left = json.optString("from", "")
                 if (left.isNotEmpty()) onlinePeers.value = onlinePeers.value - left
             }
+            if (type == "typing") {
+                noteTyping(json.optString("from", ""))
+            }
+            if (type == "key_exchange") {
+                // Call signaling envelope (PWA compat): signal JSON in publicKey.
+                val sig = json.optString("publicKey", "")
+                val from = json.optString("from", "")
+                if (sig.isNotEmpty() && from.isNotEmpty() && from != myPubKey) {
+                    CallManager.handleSignal(from, sig)
+                }
+            }
+            if (type == "message_deleted") {
+                val delId = json.optString("id", "")
+                if (delId.isNotEmpty()) {
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        messages.removeAll { it.id == delId }
+                    }
+                    Thread { db.messages().delete(delId) }.start()
+                }
+            }
 
             if ((type == "message" || type == "chat") && json.optString("text", "") != "connected") {
                 val from = json.optString("from", json.optString("sender", ""))
                 val to = json.optString("to", json.optString("recipient", ""))
                 val text = json.optString("text", json.optString("content", ""))
+
+                // Self-echo (server sends our own copies back for multi-device
+                // sync): skip early — E2E-decrypting our own outbound copy is
+                // keyed to the recipient, not us, and always fails MAC.
+                if (from == myPubKey) return
 
                 // P24: real NIP-44 decrypt. "nip44:" prefix marks client ciphertext.
                 val rawText = text
@@ -433,9 +565,44 @@ class ChatViewModel(
                 }
 
                 if (finalText.isNotEmpty() && from != myPubKey) {
-                    val ts = json.optLong("timestamp", System.currentTimeMillis())
+                    val ts = json.optLong("timestamp", json.optLong("ts", System.currentTimeMillis()))
                     val msgId = json.optString("id", "msg_${ts}")
-                    val chatId = "dm:$from"
+                    val replyToId = json.optString("replyTo", "").ifEmpty { null }
+                    val groupField = json.optString("group", "")
+
+                    // groupmeta:{json} — E2E group invite descriptor.
+                    if (finalText.startsWith("groupmeta:")) {
+                        try {
+                            val gm = JSONObject(finalText.removePrefix("groupmeta:"))
+                            val gid = gm.getString("id")
+                            val gname = gm.optString("name", "Группа")
+                            val arr = gm.optJSONArray("members")
+                            val members = mutableListOf<String>()
+                            if (arr != null) for (i in 0 until arr.length()) {
+                                members.add(arr.getString(i))
+                            }
+                            if (myPubKey.isNotEmpty() && !members.contains(myPubKey)) {
+                                members.add(myPubKey)
+                            }
+                            val gChatId = "group:$gid"
+                            Thread {
+                                db.chats().upsert(ChatEntity(
+                                    id = gChatId, name = gname, avatar = "👥",
+                                    type = "GROUP", lastActivity = ts,
+                                    members = members.joinToString(","),
+                                ))
+                                val fresh = db.chats().all().map { it.toModel() }
+                                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                    chats.clear(); chats.addAll(fresh)
+                                }
+                            }.start()
+                        } catch (e: Exception) {
+                            Log.e("ChatVM", "bad groupmeta", e)
+                        }
+                        return
+                    }
+
+                    val chatId = if (groupField.isNotEmpty()) groupField else "dm:$from"
 
                     // filemeta:{json} — decrypted attachment descriptor.
                     var mType = Message.Type.TEXT
@@ -464,8 +631,9 @@ class ChatViewModel(
                         text = mText, timestamp = ts, outgoing = false,
                         type = mType.name, fileUrl = fileUrl, fileName = fileName,
                         fileSize = fileSize, voiceDuration = voiceDur,
+                        replyTo = replyToId,
                     ))
-                    ensureIncomingChat(from, mText, ts)
+                    ensureIncomingChat(from, mText, ts, chatId)
                     Thread {
                         val senderName = db.contacts().byPubkey(from)?.name
                             ?: "${from.take(8)}…${from.takeLast(4)}"
@@ -477,6 +645,7 @@ class ChatViewModel(
                             text = mText, timestamp = ts, type = mType,
                             fileUrl = fileUrl, fileName = fileName,
                             fileSize = fileSize, voiceDuration = voiceDur,
+                            replyTo = replyToId,
                         ))
                         Thread { db.messages().markIncomingRead(chatId); db.chats().markRead(chatId) }.start()
                     }

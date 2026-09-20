@@ -29,6 +29,7 @@ import com.indestructible.messenger.messenger.Message
 import com.indestructible.messenger.messenger.ChatViewModel
 import com.indestructible.messenger.ui.theme.MessengerColors
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -46,6 +47,14 @@ fun MainScreen(
     var inputText by remember { mutableStateOf("") }
     var replyTo by remember { mutableStateOf<Message?>(null) }
     var searchQuery by remember { mutableStateOf("") }
+
+    // System back returns to the chat list instead of exiting the app.
+    BackHandler(enabled = selectedChat != null) {
+        selectedChat = null
+        inputText = ""
+        replyTo = null
+        chatVM?.closeActiveChat()
+    }
 
     @Composable
     fun SidebarPane(modifier: Modifier = Modifier) {
@@ -166,14 +175,21 @@ fun MainScreen(
     @Composable
     fun ActiveChatPane(showBack: Boolean) {
         val chat = selectedChat ?: return
+        val context = androidx.compose.ui.platform.LocalContext.current
         val vmMessages = chatVM?.messages ?: chat.messages
         ChatArea(
             chat = chat,
             messages = vmMessages,
             myPubKey = myPubKey,
             isOnline = chat.peerPubKey?.let { chatVM?.isOnline(it) } == true,
+            isTyping = chat.peerPubKey?.let { chatVM?.typingPeers?.value?.contains(it) } == true,
             inputText = inputText,
-            onInputTextChange = { inputText = it },
+            onInputTextChange = {
+                inputText = it
+                if (it.isNotBlank()) {
+                    chat.peerPubKey?.let { p -> chatVM?.sendTyping(p) }
+                }
+            },
             replyTo = replyTo,
             onReplyTo = { replyTo = it },
             onDeleteMessage = { chatVM?.deleteMessage(it.id) },
@@ -187,6 +203,19 @@ fun MainScreen(
                 }
             },
             onBack = if (showBack) {{ selectedChat = null; inputText = ""; replyTo = null; chatVM?.closeActiveChat() }} else null,
+            onAudioCall = {
+                val peer = chat.peerPubKey ?: return@ChatArea
+                if (android.os.Build.VERSION.SDK_INT >= 23 &&
+                    context.checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
+                        android.content.pm.PackageManager.PERMISSION_GRANTED
+                ) {
+                    (context as? android.app.Activity)?.requestPermissions(
+                        arrayOf(android.Manifest.permission.RECORD_AUDIO), 44
+                    )
+                } else {
+                    chatVM?.startAudioCall(peer)
+                }
+            },
         )
     }
 
@@ -206,6 +235,83 @@ fun MainScreen(
                     ActiveChatPane(showBack = false)
                 } else {
                     EmptyState(onNewChat = onNavigateToNewChat)
+                }
+            }
+        }
+    }
+
+    // Call overlay — drawn last so it floats above everything.
+    CallOverlay()
+}
+
+/** Full-screen call UI driven by CallManager.state. */
+@Composable
+fun CallOverlay() {
+    val st = com.indestructible.messenger.messenger.CallManager.state.value
+    if (st == com.indestructible.messenger.messenger.CallManager.State.IDLE) return
+    val peer = com.indestructible.messenger.messenger.CallManager.peerPub.value
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xCC0E1621)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                modifier = Modifier.size(96.dp).clip(RoundedCornerShape(48.dp))
+                    .background(MessengerColors.UserAvatarBg),
+                contentAlignment = Alignment.Center
+            ) { Text("📞", fontSize = 40.sp) }
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                peer.take(12) + "…",
+                color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                when (st) {
+                    com.indestructible.messenger.messenger.CallManager.State.INCOMING -> "Входящий звонок"
+                    com.indestructible.messenger.messenger.CallManager.State.OUTGOING -> "Вызов…"
+                    com.indestructible.messenger.messenger.CallManager.State.CONNECTING -> "Соединение…"
+                    com.indestructible.messenger.messenger.CallManager.State.CONNECTED -> "В разговоре"
+                    else -> "Завершён"
+                },
+                color = Color.Gray, fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(32.dp))
+            Row {
+                when (st) {
+                    com.indestructible.messenger.messenger.CallManager.State.INCOMING -> {
+                        Button(
+                            onClick = { com.indestructible.messenger.messenger.CallManager.acceptCall(context) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                        ) { Text("Принять", color = Color.White) }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Button(
+                            onClick = { com.indestructible.messenger.messenger.CallManager.rejectCall() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
+                        ) { Text("Отклонить", color = Color.White) }
+                    }
+                    com.indestructible.messenger.messenger.CallManager.State.CONNECTED -> {
+                        val muted = com.indestructible.messenger.messenger.CallManager.muted.value
+                        OutlinedButton(
+                            onClick = { com.indestructible.messenger.messenger.CallManager.toggleMute() },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                        ) { Text(if (muted) "🔇 Вкл. микрофон" else "🎙 Мьют") }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Button(
+                            onClick = { com.indestructible.messenger.messenger.CallManager.endCall() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
+                        ) { Text("Завершить", color = Color.White) }
+                    }
+                    else -> {
+                        Button(
+                            onClick = { com.indestructible.messenger.messenger.CallManager.endCall() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF5350))
+                        ) { Text("Отмена", color = Color.White) }
+                    }
                 }
             }
         }
@@ -283,6 +389,7 @@ fun ChatArea(
     messages: List<Message>,
     myPubKey: String,
     isOnline: Boolean,
+    isTyping: Boolean = false,
     inputText: String,
     onInputTextChange: (String) -> Unit,
     replyTo: Message?,
@@ -290,6 +397,7 @@ fun ChatArea(
     onDeleteMessage: (Message) -> Unit,
     onSend: () -> Unit,
     onBack: (() -> Unit)? = null,
+    onAudioCall: (() -> Unit)? = null,
     chatVM: ChatViewModel? = null,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(MessengerColors.ChatBg)) {
@@ -313,10 +421,16 @@ fun ChatArea(
             Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(chat.name, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (isOnline) "в сети" else "не в сети",
-                    color = if (isOnline) Color(0xFF4CAF50) else Color.Gray,
+                    if (isTyping) "печатает…"
+                    else if (isOnline) "в сети" else "не в сети",
+                    color = if (isTyping || isOnline) Color(0xFF4CAF50) else Color.Gray,
                     fontSize = 12.sp
                 )
+            }
+            if (onAudioCall != null && chat.type == Chat.Type.DM) {
+                TextButton(onClick = onAudioCall, modifier = Modifier.testTag("chat_call")) {
+                    Text("📞", fontSize = 20.sp)
+                }
             }
         }
 
@@ -334,6 +448,7 @@ fun ChatArea(
                     MessageBubble(
                         msg = msg,
                         isMine = msg.from == myPubKey,
+                        isGroup = chat.type == Chat.Type.GROUP,
                         allMessages = messages,
                         chatVM = chatVM,
                         onReply = { onReplyTo(msg) },
@@ -488,6 +603,7 @@ fun VoiceButton(chatVM: ChatViewModel, to: String) {
 fun MessageBubble(
     msg: Message,
     isMine: Boolean,
+    isGroup: Boolean = false,
     allMessages: List<Message>,
     chatVM: ChatViewModel?,
     onReply: () -> Unit,
@@ -549,6 +665,15 @@ fun MessageBubble(
                     .padding(horizontal = 12.dp, vertical = 8.dp)
             ) {
                 Column {
+                    if (isGroup && !isMine) {
+                        Text(
+                            msg.from.take(8),
+                            color = Color(0xFF5EB5F7),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                    }
                     if (quoted != null) {
                         Column(
                             modifier = Modifier

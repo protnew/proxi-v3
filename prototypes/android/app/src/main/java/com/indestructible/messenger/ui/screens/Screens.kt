@@ -90,10 +90,13 @@ fun SettingsScreen(
 @Composable
 fun NewChatScreen(
     onBack: () -> Unit,
-    onCreateChat: (pubkey: String, name: String) -> Unit
+    onCreateChat: (pubkey: String, name: String) -> Unit,
+    onCreateGroup: (name: String, members: List<String>) -> Unit = { _, _ -> },
 ) {
     var pubkey by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
+    var groupName by remember { mutableStateOf("") }
+    var groupMembers by remember { mutableStateOf("") }
 
     Column(
         modifier = Modifier.fillMaxSize().background(Color(0xFF17212B)).padding(16.dp)
@@ -145,5 +148,60 @@ fun NewChatScreen(
                 disabledContainerColor = Color(0xFF2A3A4D)
             )
         ) { Text("Начать чат") }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        Divider(color = Color(0xFF242F3D))
+        Spacer(modifier = Modifier.height(16.dp))
+        Text("👥 Новая группа", color = Color.White, fontSize = 16.sp)
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = groupName,
+            onValueChange = { groupName = it },
+            label = { Text("Название группы") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = Color(0xFF242F3D),
+                focusedContainerColor = Color(0xFF242F3D),
+            )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        OutlinedTextField(
+            value = groupMembers,
+            onValueChange = { groupMembers = it },
+            label = { Text("Участники (npub/hex, через запятую)") },
+            modifier = Modifier.fillMaxWidth(),
+            minLines = 2,
+            colors = OutlinedTextFieldDefaults.colors(
+                unfocusedContainerColor = Color(0xFF242F3D),
+                focusedContainerColor = Color(0xFF242F3D),
+            )
+        )
+        Spacer(modifier = Modifier.height(16.dp))
+        Button(
+            onClick = {
+                val members = groupMembers.split(",", "\n", " ")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .mapNotNull { raw ->
+                        try {
+                            if (raw.startsWith("npub1")) {
+                                com.indestructible.messenger.crypto.Bech32.decodeNpub(raw)
+                                    .joinToString("") { "%02x".format(it) }
+                            } else if (raw.length == 64 && raw.all { c -> c in '0'..'9' || c in 'a'..'f' || c in 'A'..'F' }) raw.lowercase()
+                            else null
+                        } catch (e: Exception) { null }
+                    }
+                if (groupName.isNotBlank() && members.isNotEmpty()) {
+                    onCreateGroup(groupName.trim(), members)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = groupName.isNotBlank() && groupMembers.isNotBlank(),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFF3A7BD5),
+                disabledContainerColor = Color(0xFF2A3A4D)
+            )
+        ) { Text("Создать группу (E2E fanout)") }
     }
 }

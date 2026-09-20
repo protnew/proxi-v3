@@ -86,6 +86,10 @@ dependencies {
     implementation("androidx.room:room-ktx:2.6.1")
     ksp("androidx.room:room-compiler:2.6.1")
 
+    // WebRTC — audio/video calls, signaling rides key_exchange WS messages.
+    // org.webrtc:google-webrtc is gone from Central; webrtc-sdk mirror tracks upstream.
+    implementation("io.github.webrtc-sdk:android:137.7151.04")
+
     // Testing — JVM unit tests (no emulator) for T42-B control plane
     testImplementation("junit:junit:4.13.2")
 
