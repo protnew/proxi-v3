@@ -156,13 +156,13 @@ object Nip44 {
         System.arraycopy(mac, 0, packed, 1 + NONCE_BYTES + ciphertext.size, MAC_BYTES)
         zeroBuffer(chachaKey); zeroBuffer(chachaNonce); zeroBuffer(hmacKey); zeroBuffer(padded)
 
-        return android.util.Base64.encodeToString(packed, android.util.Base64.NO_WRAP)
+        return java.util.Base64.getEncoder().encodeToString(packed)
     }
 
     /** Decrypt base64 NIP-44 v2 payload with the conversation key. */
     fun decrypt(ciphertextB64: String, key: ByteArray): String {
         require(key.size == KEY_BYTES) { "Key must be 32 bytes" }
-        val packed = android.util.Base64.decode(ciphertextB64, android.util.Base64.NO_WRAP)
+        val packed = java.util.Base64.getDecoder().decode(ciphertextB64)
         require(packed.size >= 1 + NONCE_BYTES + 2 + MIN_PADDED + MAC_BYTES) { "nip44: payload too short" }
         require(packed[0] == 0x02.toByte()) { "nip44: unsupported version ${packed[0]}" }
 

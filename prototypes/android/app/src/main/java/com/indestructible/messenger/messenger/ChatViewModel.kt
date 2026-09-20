@@ -21,6 +21,7 @@ class ChatViewModel(
 
     private var webSocket: WebSocket? = null
     private var jwtToken: String = ""
+    @Volatile private var connecting = false
     private var myPubKey: String = ""
     // P24: held for E2E only, never sent anywhere.
     private var myPrivKeyHex: String = ""
@@ -34,6 +35,8 @@ class ChatViewModel(
         .build()
 
     fun connect(myPubKey: String) {
+        if (connecting) return // WS-failure retry loop + NavHost re-entry must not stack auth threads
+        connecting = true
         this.myPubKey = myPubKey
         connectionStatus.value = "authenticating"
 
@@ -111,6 +114,12 @@ class ChatViewModel(
             } catch (e: Exception) {
                 Log.e("ChatVM", "Auth error", e)
                 connectionStatus.value = "error: ${e.message}"
+            } finally {
+                // connectWebSocket resets the flag on open/failure; every
+                // other exit path leaves here and must release the guard.
+                if (connectionStatus.value != "connecting" && connectionStatus.value != "connected") {
+                    connecting = false
+                }
             }
         }.start()
     }
@@ -125,6 +134,7 @@ class ChatViewModel(
 
         webSocket = client.newWebSocket(req, object : WebSocketListener() {
             override fun onOpen(ws: WebSocket, response: Response) {
+                connecting = false
                 connectionStatus.value = "connected"
                 Log.i("ChatVM", "WS connected as $pubKey")
             }
@@ -140,6 +150,7 @@ class ChatViewModel(
             }
 
             override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
+                connecting = false
                 connectionStatus.value = "error: ${t.message}"
                 Log.e("ChatVM", "WS failure", t)
                 Thread { Thread.sleep(3000); connect(pubKey) }.start()
@@ -233,6 +244,7 @@ class ChatViewModel(
     }
 
     fun disconnect() {
+        connecting = false
         webSocket?.close(1000, "disconnect")
         webSocket = null
         connectionStatus.value = "disconnected"

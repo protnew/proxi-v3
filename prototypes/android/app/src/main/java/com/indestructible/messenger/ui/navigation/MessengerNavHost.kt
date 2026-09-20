@@ -1,6 +1,7 @@
 ﻿package com.indestructible.messenger.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,13 +19,27 @@ import com.indestructible.messenger.nostr.NostrIdentity
 @Composable
 fun MessengerNavHost() {
     val navController = rememberNavController()
+    val context = androidx.compose.ui.platform.LocalContext.current
     val chats = remember { mutableStateListOf<Chat>() }
     var identity by remember { mutableStateOf<NostrIdentity?>(null) }
+    var identityLoaded by remember { mutableStateOf(false) }
     val chatVM = remember {
         val vm = ChatViewModel()
         ChatViewModelHolder.instance = vm
         vm
     }
+
+    // Keystore-wrapped nsec: returning users skip onboarding entirely.
+    LaunchedEffect(Unit) {
+        val saved = com.indestructible.messenger.nostr.IdentityStore.load(context)
+        if (saved != null) {
+            identity = saved
+            chatVM.setPrivateKey(saved.privateKey.joinToString("") { "%02x".format(it) })
+            chatVM.connect(saved.publicKey)
+        }
+        identityLoaded = true
+    }
+    if (!identityLoaded) return // brief splash — avoids auth flash for saved users
 
     val startDest = if (identity == null) "auth" else "main"
 
@@ -35,6 +50,7 @@ fun MessengerNavHost() {
         composable("auth") {
             AuthScreen(onDone = { id ->
                 identity = id
+                com.indestructible.messenger.nostr.IdentityStore.save(context, id)
                 chatVM.setPrivateKey(id.privateKey.joinToString("") { "%02x".format(it) })
                 chatVM.connect(id.publicKey)
                 navController.navigate("main") {
