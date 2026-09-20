@@ -2,6 +2,7 @@ package store
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"os"
@@ -15,36 +16,57 @@ import (
 // Plaintext legacy rows lack this prefix and are migrated on open.
 const encPrefix = "enc1:"
 
-// identityKeyFileSuffix is appended to the SQLite path for the at-rest key
-// (lives outside the DB file on purpose).
+// identityKeyFileSuffix was the pre-P27 sidecar name (dbPath + suffix).
+// P27: the key moved OUT of the data dir — see identityKeyPath.
 const identityKeyFileSuffix = ".identity.key"
+
+// identityKeyPath returns the P27 key location: per-DB key inside the
+// user config dir, keyed by the absolute DB path — outside the data dir
+// so a leaked DB file alone does not decrypt.
+func identityKeyPath(dbPath string) (string, error) {
+	abs, err := filepath.Abs(dbPath)
+	if err != nil {
+		abs = dbPath
+	}
+	sum := sha256.Sum256([]byte(abs))
+	cfgDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("user config dir: %w", err)
+	}
+	return filepath.Join(cfgDir, "proxi", "keys", "identity-"+hex.EncodeToString(sum[:8])+".key"), nil
+}
 
 // loadOrCreateIdentityKey resolves the 32-byte AES key used to encrypt
 // identity.nsec / seed_phrase at rest.
 //
 // Priority:
-//  1. UNKILLABLE_IDENTITY_KEY env (64 hex chars)
-//  2. UNKILLABLE_IDENTITY_KEY_FILE env (raw 32 bytes or 64 hex)
-//  3. sidecar file next to dbPath (created 0600 if missing)
+//  1. PROXI_IDENTITY_KEY env (64 hex chars); legacy UNKILLABLE_IDENTITY_KEY
+//  2. PROXI_IDENTITY_KEY_FILE env; legacy UNKILLABLE_IDENTITY_KEY_FILE
+//  3. per-DB file under user config dir (outside data dir); a legacy
+//     sidecar next to the DB is migrated there on first open
 //  4. ephemeral random key for :memory: / empty path
 func loadOrCreateIdentityKey(dbPath string) ([32]byte, string, error) {
 	var key [32]byte
 
-	if hexKey := strings.TrimSpace(os.Getenv("UNKILLABLE_IDENTITY_KEY")); hexKey != "" {
-		raw, err := hex.DecodeString(hexKey)
-		if err != nil || len(raw) != 32 {
-			return key, "", fmt.Errorf("UNKILLABLE_IDENTITY_KEY must be 64 hex chars")
+	for _, env := range []string{"PROXI_IDENTITY_KEY", "UNKILLABLE_IDENTITY_KEY"} {
+		if hexKey := strings.TrimSpace(os.Getenv(env)); hexKey != "" {
+			raw, err := hex.DecodeString(hexKey)
+			if err != nil || len(raw) != 32 {
+				return key, "", fmt.Errorf("%s must be 64 hex chars", env)
+			}
+			copy(key[:], raw)
+			return key, "env:" + env, nil
 		}
-		copy(key[:], raw)
-		return key, "env:UNKILLABLE_IDENTITY_KEY", nil
 	}
 
-	if file := strings.TrimSpace(os.Getenv("UNKILLABLE_IDENTITY_KEY_FILE")); file != "" {
-		k, err := readIdentityKeyFile(file)
-		if err != nil {
-			return key, "", err
+	for _, env := range []string{"PROXI_IDENTITY_KEY_FILE", "UNKILLABLE_IDENTITY_KEY_FILE"} {
+		if file := strings.TrimSpace(os.Getenv(env)); file != "" {
+			k, err := readIdentityKeyFile(file)
+			if err != nil {
+				return key, "", err
+			}
+			return k, file, nil
 		}
-		return k, file, nil
 	}
 
 	if dbPath == "" || dbPath == ":memory:" {
@@ -54,15 +76,27 @@ func loadOrCreateIdentityKey(dbPath string) ([32]byte, string, error) {
 		return key, ":memory:", nil
 	}
 
-	keyPath := dbPath + identityKeyFileSuffix
-	if abs, err := filepath.Abs(dbPath); err == nil {
-		keyPath = abs + identityKeyFileSuffix
+	keyPath, err := identityKeyPath(dbPath)
+	if err != nil {
+		return key, "", err
 	}
 
-	if _, err := os.Stat(keyPath); err == nil {
-		k, err := readIdentityKeyFile(keyPath)
-		if err != nil {
-			return key, "", err
+	// Migrate a pre-P27 sidecar key if present.
+	legacyPath := dbPath + identityKeyFileSuffix
+	if abs, aerr := filepath.Abs(dbPath); aerr == nil {
+		legacyPath = abs + identityKeyFileSuffix
+	}
+	if _, err := os.Stat(keyPath); os.IsNotExist(err) {
+		if k, rerr := readIdentityKeyFile(legacyPath); rerr == nil {
+			if werr := writeIdentityKeyFile(keyPath, k); werr == nil {
+				_ = os.Remove(legacyPath)
+			}
+			return k, keyPath, nil
+		}
+	} else if err == nil {
+		k, rerr := readIdentityKeyFile(keyPath)
+		if rerr != nil {
+			return key, "", rerr
 		}
 		return k, keyPath, nil
 	}
@@ -70,13 +104,20 @@ func loadOrCreateIdentityKey(dbPath string) ([32]byte, string, error) {
 	if _, err := rand.Read(key[:]); err != nil {
 		return key, "", fmt.Errorf("generate identity key: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Dir(keyPath), 0o700); err != nil {
-		return key, "", fmt.Errorf("mkdir for identity key: %w", err)
-	}
-	if err := os.WriteFile(keyPath, key[:], 0o600); err != nil {
-		return key, "", fmt.Errorf("write identity key file: %w", err)
+	if err := writeIdentityKeyFile(keyPath, key); err != nil {
+		return key, "", err
 	}
 	return key, keyPath, nil
+}
+
+func writeIdentityKeyFile(path string, key [32]byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return fmt.Errorf("mkdir for identity key: %w", err)
+	}
+	if err := os.WriteFile(path, key[:], 0o600); err != nil {
+		return fmt.Errorf("write identity key file: %w", err)
+	}
+	return nil
 }
 
 func readIdentityKeyFile(path string) ([32]byte, error) {

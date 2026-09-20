@@ -1,14 +1,26 @@
 package store
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
+// setTempConfigDir points os.UserConfigDir (AppData / XDG_CONFIG_HOME)
+// at a temp dir so key files never touch the real user profile in tests.
+func setTempConfigDir(t *testing.T) string {
+	t.Helper()
+	cfg := t.TempDir()
+	t.Setenv("AppData", cfg)
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	return cfg
+}
+
 func TestIdentityEncryptedAtRest(t *testing.T) {
 	dir := t.TempDir()
+	cfgDir := setTempConfigDir(t)
 	dbPath := filepath.Join(dir, "test.db")
 
 	s, err := NewStore(dbPath)
@@ -61,15 +73,54 @@ func TestIdentityEncryptedAtRest(t *testing.T) {
 		t.Fatalf("stored seed missing enc prefix: %q", truncate(storedSeed, 20))
 	}
 
-	// Key file exists outside DB.
-	keyPath := dbPath + identityKeyFileSuffix
+	// P27: key file exists OUTSIDE the data dir (user config dir).
+	keyPath := s.keyPath
+	if keyPath == "" || strings.HasPrefix(keyPath, dir) {
+		t.Fatalf("key must live outside data dir, got %q", keyPath)
+	}
+	if !strings.HasPrefix(keyPath, cfgDir) {
+		t.Fatalf("expected key under config dir %s, got %q", cfgDir, keyPath)
+	}
 	if _, err := os.Stat(keyPath); err != nil {
 		t.Fatalf("expected identity key file at %s: %v", keyPath, err)
+	}
+	if _, err := os.Stat(dbPath + identityKeyFileSuffix); err == nil {
+		t.Fatal("legacy sidecar key still present next to DB")
+	}
+}
+
+func TestIdentityKeySidecarMigration(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := setTempConfigDir(t)
+	dbPath := filepath.Join(dir, "migrate.db")
+
+	// Simulate a pre-P27 deployment: sidecar key next to the DB.
+	legacyKey := bytes.Repeat([]byte{0xAB}, 32)
+	legacyPath := dbPath + identityKeyFileSuffix
+	if err := os.WriteFile(legacyPath, legacyKey, 0o600); err != nil {
+		t.Fatalf("write legacy sidecar: %v", err)
+	}
+
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+	defer s.Close()
+
+	if !strings.HasPrefix(s.keyPath, cfgDir) {
+		t.Fatalf("key not migrated to config dir: %q", s.keyPath)
+	}
+	if s.identityKey != [32]byte(legacyKey) {
+		t.Fatal("migrated key bytes differ from legacy sidecar")
+	}
+	if _, err := os.Stat(legacyPath); err == nil {
+		t.Fatal("legacy sidecar not removed after migration")
 	}
 }
 
 func TestIdentityPlaintextMigration(t *testing.T) {
 	dir := t.TempDir()
+	setTempConfigDir(t)
 	dbPath := filepath.Join(dir, "legacy.db")
 
 	// Create store, then inject plaintext directly to simulate pre-P6 row.
@@ -119,15 +170,15 @@ func TestIdentityPlaintextMigration(t *testing.T) {
 
 func TestIdentityKeyFromEnv(t *testing.T) {
 	hexKey := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	t.Setenv("UNKILLABLE_IDENTITY_KEY", hexKey)
-	defer t.Setenv("UNKILLABLE_IDENTITY_KEY", "")
+	t.Setenv("PROXI_IDENTITY_KEY", hexKey)
+	defer t.Setenv("PROXI_IDENTITY_KEY", "")
 
 	s, err := NewStore(":memory:")
 	if err != nil {
 		t.Fatalf("NewStore: %v", err)
 	}
 	defer s.Close()
-	if s.keyPath != "env:UNKILLABLE_IDENTITY_KEY" {
+	if s.keyPath != "env:PROXI_IDENTITY_KEY" {
 		t.Fatalf("expected env key path, got %q", s.keyPath)
 	}
 	if err := s.SaveIdentity("npub1", "nsec1abc", "seed"); err != nil {

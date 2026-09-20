@@ -203,20 +203,9 @@ if (initialView === 'newchat') {
         playIncoming()
       })()
     })
-    let nostrRelays = 0
-    try {
-      // Timeout external relay connections — don't let them block the UI
-      nostrRelays = await Promise.race([
-        nostrChat.connect(),
-        new Promise<number>((resolve) => setTimeout(() => resolve(0), 10000)),
-      ])
-    } catch (e) {
-      console.warn('[app] Nostr connect failed:', e)
-      nostrRelays = 0
-    }
-    if (nostrRelays === 0) { nostrChat = null; setActiveChat(null) }
-
-    // Go hub — always attempt (signup JWT + /ws). Independent of Nostr.
+    // Go hub first — signup JWT lands in localStorage, then Nostr
+    // connects to /nostr with ?token= (BAG-30: was connecting before
+    // the token existed → guaranteed 401 on first attempt).
     let goRelays = 0
     try {
       // Probe health first (same-origin or VITE_API_URL)
@@ -239,6 +228,19 @@ if (initialView === 'newchat') {
       console.warn('[app] Go transport failed:', e)
       goRelays = 0
     }
+
+    let nostrRelays = 0
+    try {
+      // Timeout relay connection — don't let it block the UI
+      nostrRelays = await Promise.race([
+        nostrChat.connect(),
+        new Promise<number>((resolve) => setTimeout(() => resolve(0), 10000)),
+      ])
+    } catch (e) {
+      console.warn('[app] Nostr connect failed:', e)
+      nostrRelays = 0
+    }
+    if (nostrRelays === 0) { nostrChat = null; setActiveChat(null) }
 
     const parts: string[] = []
     if (goRelays > 0) parts.push(`Go WS: ${goRelays}`)

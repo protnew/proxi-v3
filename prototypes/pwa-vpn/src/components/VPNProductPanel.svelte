@@ -153,7 +153,7 @@ async function startVPNSignaling(targetPubkey: string) {
         pushInfo = 'subscribed'
         addLog('Push OK: ' + (res.endpoint || '').slice(0, 48))
         try {
-          const r = await sendTestPush('Indestructible', 'Push E2E test')
+          const r = await sendTestPush('Proxi', 'Push E2E test')
           addLog('Push send: ' + JSON.stringify(r).slice(0, 80))
         } catch {}
       } else {

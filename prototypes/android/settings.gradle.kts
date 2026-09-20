@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "IndestructibleMessenger"
+rootProject.name = "Proxi"
 include(":app")

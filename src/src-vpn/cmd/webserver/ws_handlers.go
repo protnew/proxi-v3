@@ -121,11 +121,7 @@ func (s *Server) handleIdentityGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Also save to legacy file for backward compat
-	identityPath := getDataDir() + "/identity.json"
-	if fileErr := identity.SaveIdentity(privKey, identityPath); fileErr != nil {
-		log.Printf("WARNING: failed to save identity file: %v", fileErr)
-	}
+	// P3: no plaintext identity.json next to the DB — SQLite is the store.
 
 	// P3: private key material never leaves the server over the API.
 	writeJSON(w, 200, map[string]interface{}{

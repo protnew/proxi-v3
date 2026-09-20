@@ -33,11 +33,9 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// P16: caller scope = JWT npub; query npub — только фильтр, не идентичность
+	// H1: caller scope = JWT npub only — ?npub= query fallback allowed
+	// searching another user's messages (IDOR). No npub → anonymous scope.
 	npub, _ := r.Context().Value("npub").(string)
-	if npub == "" {
-		npub = r.URL.Query().Get("npub")
-	}
 	if npub == "" {
 		npub = "anonymous"
 	}

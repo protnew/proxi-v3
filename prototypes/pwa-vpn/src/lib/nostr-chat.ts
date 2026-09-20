@@ -75,33 +75,47 @@ async function sha256Hex(data: string): Promise<string> {
 
 export class NostrChat {
   private identity: Identity
-  private relays: string[]
+  // BAG-30: resolve relay URLs lazily at connect time — the JWT may not
+  // exist yet at construction (App boots Nostr before Go auth completes).
+  private relayResolver: () => string[]
   private connections: WebSocket[] = []
   private messageCallbacks: MessageCallback[] = []
   private connectedCount = 0
   private subId = 'dm-' + Math.random().toString(36).slice(2, 10)
 
-  constructor(identity: Identity, relays: string[] = defaultRelays()) {
+  constructor(identity: Identity, relays?: string[] | (() => string[])) {
     this.identity = identity
-    this.relays = relays
+    this.relayResolver = typeof relays === 'function' ? relays
+      : Array.isArray(relays) ? () => relays
+      : defaultRelays
   }
 
   get connectedRelays(): number { return this.connectedCount }
   get isConnected(): boolean { return this.connectedCount > 0 }
 
   async connect(): Promise<number> {
+    // BAG-30: /nostr is JWT-protected — without a token the handshake is a
+    // guaranteed 401 and the close-handler would retry forever.
+    const urls = this.relayResolver()
+    if (!urls.some(u => u.includes('token='))) {
+      console.log('[Nostr] No JWT yet — skipping /nostr connect')
+      return 0
+    }
     const filter = {
       kinds: [KIND_DM],
       '#p': [this.identity.publicKey],
       limit: 50,
     }
     const subMsg = JSON.stringify(['REQ', this.subId, filter])
-    const promises = this.relays.map(url => this.connectRelay(url, subMsg))
+    const promises = urls.map((_, i) => this.connectRelay(i, subMsg))
     await Promise.allSettled(promises)
     return this.connectedCount
   }
 
-  private connectRelay(url: string, subMsg: string): Promise<void> {
+  private connectRelay(idx: number, subMsg: string): Promise<void> {
+    // Fresh URL per attempt: reconnects pick up a JWT that appeared later.
+    const urls = this.relayResolver()
+    const url = urls[Math.min(idx, urls.length - 1)]
     return new Promise((resolve) => {
       try {
         const ws = new WebSocket(url)
@@ -117,7 +131,7 @@ export class NostrChat {
         ws.onclose = () => {
           this.connectedCount = Math.max(0, this.connectedCount - 1)
           setTimeout(() => {
-            if (this.messageCallbacks.length > 0) this.connectRelay(url, subMsg)
+            if (this.messageCallbacks.length > 0) this.connectRelay(idx, subMsg)
           }, 5000)
         }
         this.connections.push(ws)

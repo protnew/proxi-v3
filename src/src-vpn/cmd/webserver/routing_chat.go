@@ -26,11 +26,9 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	if v := r.URL.Query().Get("since"); v != "" {
 		fmt.Sscanf(v, "%d", &since)
 	}
-	// Prefer JWT context npub; accept query npub/peer for filters
+	// H1: scope strictly to JWT npub — ?npub= query fallback was an IDOR
+	// (any token holder could pull another user's DM history).
 	npub, _ := r.Context().Value("npub").(string)
-	if npub == "" {
-		npub = r.URL.Query().Get("npub")
-	}
 	peer := r.URL.Query().Get("peer")
 	if peer == "" {
 		peer = r.URL.Query().Get("with")

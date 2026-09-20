@@ -69,7 +69,7 @@ export async function subscribeWebPush(): Promise<{ ok: boolean; reason?: string
   return { ok: true, endpoint: sub.endpoint }
 }
 
-export async function sendTestPush(title = 'Indestructible', body = 'Test push'): Promise<unknown> {
+export async function sendTestPush(title = 'Proxi', body = 'Test push'): Promise<unknown> {
   const r = await fetch('/api/push/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

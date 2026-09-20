@@ -119,7 +119,7 @@ class TunVpnService : AndroidVpnService() {
         try {
             // 1. Build TUN interface — capture ALL traffic
             val builder = Builder()
-            builder.setSession("IndestructibleVPN")
+            builder.setSession("Proxi VPN")
             builder.setMtu(TUN_MTU)
             builder.addAddress(TUN_ADDRESS, TUN_PREFIX)
             builder.addRoute("0.0.0.0", 0)   // Route EVERYTHING through TUN

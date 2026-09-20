@@ -26,6 +26,11 @@ class NostrRelayService : Service() {
         var isRunning = false
             private set
         var onMessage: ((Message) -> Unit)? = null
+
+        // P4: local authenticated /nostr relay only — public relays leak
+        // the social graph. Set from ChatViewModel after JWT auth.
+        var relayBase: String = "ws://10.0.2.2:8090/nostr"
+        var jwtToken: String = ""
     }
 
     override fun onCreate() {
@@ -50,10 +55,10 @@ class NostrRelayService : Service() {
     }
 
     private fun connectRelays() {
+        // P4/P9: single local relay with JWT — WS has no Authorization header.
+        val tok = jwtToken
         val relayUrls = listOf(
-            "wss://relay.damus.io",
-            "wss://nos.lol",
-            "wss://relay.nostr.band",
+            relayBase + if (tok.isNotEmpty()) "?token=$tok" else ""
         )
 
         for (url in relayUrls) {
@@ -130,7 +135,7 @@ class NostrRelayService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("Indestructible Messenger")
+            .setContentTitle("Proxi")
             .setContentText(text)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentIntent(pendingIntent)

@@ -38,7 +38,7 @@ func main() {
 		err := sentry.Init(sentry.ClientOptions{
 			Dsn:           sentryDSN,
 			EnableTracing: false,
-			Release:       "unkillable-messenger@0.1.0",
+			Release:       "proxi@0.1.0",
 			Environment:   os.Getenv("SENTRY_ENVIRONMENT"),
 		})
 		if err != nil {
@@ -57,7 +57,7 @@ func main() {
 	defer logger.Sync() // flushes buffer, if any
 	zap.ReplaceGlobals(logger)
 	zap.RedirectStdLog(logger)
-	log.Println("🚀 Unkillable Messenger initializing...")
+	log.Println("🚀 Proxi initializing...")
 
 	// Wrap main logic in a deferred recover so panics are reported to Sentry
 	defer func() {

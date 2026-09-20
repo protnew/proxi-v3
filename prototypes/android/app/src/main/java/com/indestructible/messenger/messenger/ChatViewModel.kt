@@ -10,10 +10,10 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 import com.indestructible.messenger.crypto.Nip44
 
+// P4: no public Nostr relays — DM/presence via local authenticated /nostr only.
 class ChatViewModel(
     var serverUrl: String = "ws://10.0.2.2:8090/ws",
     var httpUrl: String = "http://10.0.2.2:8090",
-    val nostrRelays: List<String> = listOf("wss://relay.damus.io", "wss://nos.lol", "wss://relay.nostr.band")
 ) {
     val chats = mutableStateListOf<Chat>()
     val messages = mutableStateListOf<Message>()
@@ -37,12 +37,54 @@ class ChatViewModel(
         this.myPubKey = myPubKey
         connectionStatus.value = "authenticating"
 
-        // Step 1: Signup to get JWT
+        // Step 1 (P1): challenge-response signup — bare npub is rejected.
+        // challenge → signed kind:22242 event → JWT.
         val mediaType = "application/json".toMediaType()
-        val body = """{"npub":"$myPubKey"}""".toRequestBody(mediaType)
 
         Thread {
             try {
+                if (myPrivKeyHex.isEmpty()) {
+                    connectionStatus.value = "error: no key"
+                    return@Thread
+                }
+                // 1. request challenge
+                val chReq = Request.Builder()
+                    .url("$httpUrl/api/auth/challenge")
+                    .post("""{"npub":"$myPubKey"}""".toRequestBody(mediaType))
+                    .build()
+                val chResp = client.newCall(chReq).execute()
+                val chBody = chResp.body?.string() ?: ""
+                if (chResp.code != 200) {
+                    connectionStatus.value = "error: challenge ${chResp.code}"
+                    Log.e("ChatVM", "Challenge failed: ${chResp.code} $chBody")
+                    return@Thread
+                }
+                val challenge = JSONObject(chBody).getString("challenge")
+
+                // 2. build + sign kind:22242 event (NIP-01 serialization)
+                val createdAt = System.currentTimeMillis() / 1000
+                val tagsJson = """[["challenge","$challenge"]]"""
+                val serialized = """[0,"$myPubKey",$createdAt,22242,$tagsJson,"$challenge"]"""
+                val idBytes = java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(serialized.toByteArray(Charsets.UTF_8))
+                val idHex = idBytes.joinToString("") { "%02x".format(it) }
+                val skBytes = myPrivKeyHex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                val sig = com.indestructible.messenger.crypto.Schnorr.sign(idBytes, skBytes)
+                    .joinToString("") { "%02x".format(it) }
+
+                val eventJson = JSONObject().apply {
+                    put("id", idHex); put("pubkey", myPubKey)
+                    put("created_at", createdAt); put("kind", 22242)
+                    put("tags", org.json.JSONArray(tagsJson))
+                    put("content", challenge); put("sig", sig)
+                }
+                val body = JSONObject().apply {
+                    put("npub", myPubKey)
+                    put("username", "android_${myPubKey.take(8)}")
+                    put("challenge", challenge)
+                    put("event", eventJson)
+                }.toString().toRequestBody(mediaType)
+
                 val req = Request.Builder()
                     .url("$httpUrl/api/auth/signup")
                     .post(body)
@@ -55,6 +97,9 @@ class ChatViewModel(
                     jwtToken = json.optString("access_token", "")
                     if (jwtToken.isNotEmpty()) {
                         Log.i("ChatVM", "Auth OK, token received")
+                        NostrRelayService.jwtToken = jwtToken
+                        NostrRelayService.relayBase =
+                            httpUrl.replaceFirst("http", "ws") + "/nostr"
                         connectWebSocket(myPubKey)
                     } else {
                         connectionStatus.value = "error: no token"

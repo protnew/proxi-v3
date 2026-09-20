@@ -497,7 +497,40 @@ func runMigrations(db *sql.DB) error {
 
 	// FTS5 probe lives outside migration Up: CREATE IF NOT EXISTS, ignore errors, never DROP.
 	tryEnsureFTS5(db)
+	// Post-migration column repair: DBs that recorded a differently-named
+	// v15 (see live messenger.db: "push_subscriptions_and_identity_owner")
+	// never got the soft-delete columns. Ensure them idempotently.
+	ensureColumn(db, "messages", "is_deleted", "INTEGER NOT NULL DEFAULT 0")
+	ensureColumn(db, "messages", "deleted_at", "INTEGER NOT NULL DEFAULT 0")
+	ensureColumn(db, "messages", "erased_at", "INTEGER NOT NULL DEFAULT 0")
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_is_deleted ON messages(is_deleted)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_deleted_at ON messages(deleted_at)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_messages_erased_at ON messages(erased_at)`)
 	return nil
+}
+
+// ensureColumn adds a column only when PRAGMA table_info shows it missing —
+// safe on DBs where the same-named migration was recorded but partially applied.
+func ensureColumn(db *sql.DB, table, column, decl string) {
+	rows, err := db.Query(`PRAGMA table_info(` + table + `)`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, ctype string
+		var notnull, pk int
+		var dflt interface{}
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err == nil {
+			if name == column {
+				return // already present
+			}
+		}
+	}
+	if _, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + column + ` ` + decl); err != nil {
+		log.Printf("⚠️  ensureColumn %s.%s: %v", table, column, err)
+	}
 }
 
 func tryEnsureFTS5(db *sql.DB) {

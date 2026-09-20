@@ -1,7 +1,9 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+﻿@file:OptIn(ExperimentalMaterial3Api::class)
 
 package com.indestructible.messenger.ui.screens
-
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,22 +35,20 @@ fun MainScreen(
     var selectedChat by remember { mutableStateOf<Chat?>(null) }
     var inputText by remember { mutableStateOf("") }
 
-    Row(modifier = Modifier.fillMaxSize()) {
-        // Sidebar
+    @Composable
+    fun SidebarPane(modifier: Modifier = Modifier) {
         Box(
-            modifier = Modifier
-                .width(320.dp)
+            modifier = modifier
                 .fillMaxHeight()
                 .background(MessengerColors.SidebarBg)
         ) {
             Column {
-                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TextButton(onClick = onNavigateToSettings) {
+                    TextButton(onClick = onNavigateToSettings, modifier = Modifier.testTag("btn_settings").semantics { contentDescription = "Настройки" }) {
                         Text("\u2630", color = Color.White, fontSize = 20.sp)
                     }
                     OutlinedTextField(
@@ -62,12 +62,11 @@ fun MainScreen(
                             focusedContainerColor = MessengerColors.InputBg,
                         )
                     )
-                    TextButton(onClick = onNavigateToNewChat) {
+                    TextButton(onClick = onNavigateToNewChat, modifier = Modifier.testTag("btn_new_chat_icon").semantics { contentDescription = "Новый чат" }) {
                         Text("\u270F\uFE0F", fontSize = 18.sp)
                     }
                 }
 
-                // Connection status
                 chatVM?.let { vm ->
                     val status = vm.connectionStatus.value
                     val color = when {
@@ -83,7 +82,6 @@ fun MainScreen(
                     )
                 }
 
-                // Chat list
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     items(chats) { chat ->
                         ChatListItem(
@@ -95,32 +93,57 @@ fun MainScreen(
                             }
                         )
                     }
+                    if (chats.isEmpty()) {
+                        item {
+                            EmptyState(onNewChat = onNavigateToNewChat)
+                        }
+                    }
                 }
 
-                // VPN bar
                 VpnStatusBar()
             }
         }
+    }
 
-        // Chat area
-        if (selectedChat != null) {
-            val vmMessages = chatVM?.messages ?: selectedChat!!.messages
-            ChatArea(
-                chat = selectedChat!!,
-                messages = vmMessages,
-                myPubKey = myPubKey,
-                inputText = inputText,
-                onInputTextChange = { inputText = it },
-                onSend = {
-                    if (inputText.isNotBlank()) {
-                        val to = selectedChat!!.id.removePrefix("dm:")
-                        chatVM?.sendMessage(myPubKey, to, inputText)
-                        inputText = ""
-                    }
+    @Composable
+    fun ActiveChatPane(showBack: Boolean) {
+        val chat = selectedChat ?: return
+        val vmMessages = chatVM?.messages ?: chat.messages
+        ChatArea(
+            chat = chat,
+            messages = vmMessages,
+            myPubKey = myPubKey,
+            inputText = inputText,
+            onInputTextChange = { inputText = it },
+            onSend = {
+                if (inputText.isNotBlank()) {
+                    val to = chat.id.removePrefix("dm:")
+                    chatVM?.sendMessage(myPubKey, to, inputText)
+                    inputText = ""
                 }
-            )
+            },
+            onBack = if (showBack) {{ selectedChat = null; inputText = "" }} else null,
+        )
+    }
+
+    // Phone (<600dp): list OR chat full-width. Tablet: side-by-side.
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val phone = maxWidth < 600.dp
+        if (phone) {
+            if (selectedChat != null) {
+                ActiveChatPane(showBack = true)
+            } else {
+                SidebarPane(modifier = Modifier.fillMaxSize())
+            }
         } else {
-            EmptyState()
+            Row(modifier = Modifier.fillMaxSize()) {
+                SidebarPane(modifier = Modifier.width(320.dp))
+                if (selectedChat != null) {
+                    ActiveChatPane(showBack = false)
+                } else {
+                    EmptyState(onNewChat = onNavigateToNewChat)
+                }
+            }
         }
     }
 }
@@ -187,6 +210,7 @@ fun ChatArea(
     inputText: String,
     onInputTextChange: (String) -> Unit,
     onSend: () -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     Column(modifier = Modifier.fillMaxSize().background(MessengerColors.ChatBg)) {
         // Header
@@ -194,6 +218,11 @@ fun ChatArea(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            if (onBack != null) {
+                TextButton(onClick = onBack, modifier = Modifier.testTag("chat_back").semantics { contentDescription = "Назад" }) {
+                    Text("\u2190", color = Color.White, fontSize = 20.sp)
+                }
+            }
             Box(modifier = Modifier.size(40.dp).background(MessengerColors.UserAvatarBg), contentAlignment = Alignment.Center) {
                 Text(chat.avatar, fontSize = 18.sp)
             }
@@ -219,14 +248,14 @@ fun ChatArea(
                 value = inputText,
                 onValueChange = onInputTextChange,
                 placeholder = { Text("\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435", color = Color.Gray) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("chat_composer").semantics { contentDescription = "\u0421\u043E\u043E\u0431\u0449\u0435\u043D\u0438\u0435" },
                 maxLines = 4,
                 colors = OutlinedTextFieldDefaults.colors(
                     unfocusedContainerColor = MessengerColors.InputBg,
                     focusedContainerColor = MessengerColors.InputBg,
                 )
             )
-            TextButton(onClick = onSend) {
+            TextButton(onClick = onSend, modifier = Modifier.testTag("chat_send").semantics { contentDescription = "\u041E\u0442\u043F\u0440\u0430\u0432\u0438\u0442\u044C" }) {
                 Text("\u27A4", color = MessengerColors.Accent, fontSize = 20.sp)
             }
         }
@@ -262,18 +291,28 @@ fun MessageBubble(msg: Message, isMine: Boolean) {
     }
 }
 
+
+
 @Composable
-fun EmptyState() {
+fun EmptyState(onNewChat: () -> Unit = {}) {
     Box(
         modifier = Modifier.fillMaxSize().background(MessengerColors.ChatBg),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text("\uD83D\uDEE1\uFE0F", fontSize = 64.sp)
+            Text("🛡️", fontSize = 64.sp)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("Indestructible Messenger", color = Color.White, fontSize = 20.sp)
-            Text("\u0412\u044B\u0431\u0435\u0440\u0438\u0442\u0435 \u0447\u0430\u0442 \u0438\u043B\u0438 \u043D\u0430\u0447\u043D\u0438\u0442\u0435 \u043D\u043E\u0432\u044B\u0439", color = Color.Gray, fontSize = 14.sp)
-            Text("P2P \u2022 E2E \u2022 \u041D\u0435\u0443\u0431\u0438\u0432\u0430\u0435\u043C\u043E", color = Color.DarkGray, fontSize = 13.sp)
+            Text("Proxi", color = Color.White, fontSize = 20.sp)
+            Text("Выберите чат или начните новый", color = Color.Gray, fontSize = 14.sp)
+            Text("P2P • E2E • Неубиваемо", color = Color.DarkGray, fontSize = 13.sp)
+            Spacer(modifier = Modifier.height(20.dp))
+            Button(
+                onClick = onNewChat,
+                modifier = Modifier
+                    .testTag("btn_new_chat")
+                    .semantics { contentDescription = "Новый чат" },
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A7BD5))
+            ) { Text("Новый чат") }
         }
     }
 }
@@ -405,3 +444,5 @@ private fun formatTime(ts: Long): String {
     val sdf = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault())
     return sdf.format(java.util.Date(ts))
 }
+
+
