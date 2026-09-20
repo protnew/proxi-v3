@@ -120,9 +120,11 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var req struct {
-		From string `json:"from"`
-		To   string `json:"to"`
-		Text string `json:"text"`
+		From      string `json:"from"`
+		To        string `json:"to"`
+		Text      string `json:"text"`
+		Encrypted bool   `json:"encrypted"`
+		IsE2E     bool   `json:"is_e2e"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
@@ -154,11 +156,19 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		req.From = "anonymous"
 	}
 
+	// P5 (2026-09-20): клиентский шифротекст хранится как есть — сервер НЕ
+	// перешифровывает (иначе двойное шифрование ломает NIP-44 на приёме).
+	// Fail-closed: флаг encrypted/is_e2e без формата шифротекста → 422.
+	clientCipher := chat.LooksLikeClientCiphertext(req.Text)
+	if (req.Encrypted || req.IsE2E) && !clientCipher {
+		writeError(w, http.StatusUnprocessableEntity, "E2E_FLAG_MISMATCH", "encrypted flag without ciphertext payload")
+		return
+	}
+
 	// CRYP-010: Double Ratchet first (when session exists), then legacy ECDH prekey path.
-	// Client-side NIP-44 ciphertext (already encrypted) is stored as-is if marked.
 	encryptedText := req.Text
-	isEncrypted := false
-	if req.To != "broadcast" && req.To != "" {
+	isEncrypted := clientCipher
+	if !isEncrypted && req.To != "broadcast" && req.To != "" {
 		// Prefer DR session if established (forward secrecy)
 		if s.drSessions != nil {
 			ct, usedDR, derr := s.drSessions.EncryptOutbound(req.From, req.To, req.Text)
