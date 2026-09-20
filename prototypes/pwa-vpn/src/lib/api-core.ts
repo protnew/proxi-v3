@@ -29,6 +29,7 @@ import type { Message } from '../stores/messenger';
 import { makeChatPayload } from './api-payload';
 import * as secp from '@noble/secp256k1';
 import { encryptDM } from './nip-e2e';
+import { loadIdentityAsync } from './identity';
 
 // If VITE_API_URL is empty → same-origin (Go serves both dist + API on one port).
 // This is how "Telegram Web" works: one URL, no separate API host.
@@ -155,8 +156,22 @@ export function initIdentity(): string {
   return cachedIdentity.pubkey;
 }
 
+// BAG-26: pubkey is known synchronously but privateKey lives in IndexedDB —
+// hydrate async so E2E send is not silently skipped on first interactions.
+async function hydratePrivateKeyFromSecureStore(): Promise<void> {
+  try {
+    const id = await loadIdentityAsync();
+    if (id?.privateKey && cachedIdentity) {
+      cachedIdentity.privateKey = id.privateKey;
+      e2eEnabled = true;
+    }
+  } catch { /* non-fatal: E2E stays off until key hydrates */ }
+}
+
 function exposeProxiDebug(): void {
   if (typeof window === 'undefined') return;
+  // P25: debug globals only in dev mode (?dev=1), not in production builds.
+  if (new URLSearchParams(window.location.search).get('dev') !== '1') return;
   try {
     (window as any).__proxiPubkey = cachedIdentity?.pubkey || '';
     (window as any).__proxiUserId = cachedIdentity?.userId || '';

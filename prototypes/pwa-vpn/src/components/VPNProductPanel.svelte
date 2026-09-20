@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
   import { rtcVPN } from '../lib/webrtc-vpn'
   import { getLocalTabP2P, type TabP2PStatus } from '../lib/local-tab-p2p'
@@ -188,6 +188,10 @@ async function startVPNSignaling(targetPubkey: string) {
       statusText = 'Ошибка: ' + (e as Error).message
       addLog('Ошибка: ' + (e as Error).message)
     }
+  }
+  // P11: requestVPN was merged into giveVPN (dead code) — button «Запросить VPN»
+  // called an undefined function. Split into its own handler.
+  async function requestVPN() {
     if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
     try {
@@ -271,7 +275,7 @@ async function startVPNSignaling(targetPubkey: string) {
         transportMode = 'Nostr Relay'
         try {
           await dataRelay.connect()
-          const relayIp = await dataRelay.fetchThroughRelay('http://api.ipify.org', senderPubkey)
+          const relayIp = await dataRelay.fetchThroughRelay('http://api.ipify.org', from)
           const ip = relayIp.trim()
           if (ip && /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
             lastTunnelIp = ip
@@ -331,6 +335,27 @@ async function startVPNSignaling(targetPubkey: string) {
       console.log('[VPN] WebRTC SW tunnel registered')
     }
   }
+  // P11: exit-node side — peer sent rtc-offer, we answer and become the exit.
+  // Was referenced but never defined (dead reference → 'rtc-offer' events dropped).
+  async function handleRTCOffer(event: { from: string; rtcSdp?: string; iceCandidates?: string[] }) {
+    try {
+      await ensureNostr()
+      addLog('WebRTC: offer от ' + event.from.slice(0, 12) + '… — создаю answer')
+      const { sdp, iceCandidates } = await rtcVPN.createAnswer(event.rtcSdp || '', event.iceCandidates || [])
+      await nostrVPN.sendRTCAnswer(event.from, sdp, iceCandidates)
+      addLog('WebRTC answer отправлен (' + iceCandidates.length + ' ICE)')
+      vpnStatus = 'connecting'
+      statusText = 'Раздаю VPN · WebRTC connecting…'
+      await rtcVPN.waitForOpen(15000)
+      vpnStatus = 'connected'
+      statusText = 'Раздаю VPN · P2P connected'
+      addLog('WebRTC P2P connected — я exit node для ' + event.from.slice(0, 12) + '…')
+    } catch (e) {
+      vpnStatus = 'error'
+      statusText = 'Ошибка: ' + (e as Error).message
+      addLog('rtc-offer error: ' + (e as Error).message)
+    }
+  }
   let unsubVPN: (() => void) | null = null
   $effect(() => {
     const token = localStorage.getItem('proxi_token')
@@ -378,7 +403,6 @@ async function startVPNSignaling(targetPubkey: string) {
   })
 </script>
 <div class="vpn-product" data-testid="vpn-product">
-  {#if isDevMode}
   <div class="tab-p2p-status" data-testid="vpn-tab-p2p-status">
     VPN-101: {tabP2P.phase} · role={tabP2P.role}
     {#if tabP2P.tunnelIp} · IP {tabP2P.tunnelIp}{/if}
@@ -393,7 +417,6 @@ async function startVPNSignaling(targetPubkey: string) {
       {#if amneziaStatus}<span class="ice-badge amnezia" title="DPI obfuscation">🛡️ {amneziaStatus}</span>{/if}
     </div>
   {/if}
-  {/if}
   {#if vpnStatus === 'off' || vpnStatus === 'error'}
     {#if vpnStatus === 'off'}
       <p class="vpn-empty" data-testid="vpn-empty">VPN выключен. В браузере это WebRTC DataChannel, не системный туннель телефона.</p>
@@ -405,7 +428,7 @@ async function startVPNSignaling(targetPubkey: string) {
       </div>
     {/if}
     <div class="vpn-buttons">
-      <button class="vpn-btn share" data-testid="vpn-give" disabled={vpnStatus === 'connecting'} onclick={() => { applyDemoPartner(); if (friendId.trim()) giveVPN(); else showInviteModal = true }}>
+      <button class="vpn-btn share" data-testid="vpn-give" onclick={() => { applyDemoPartner(); if (friendId.trim()) giveVPN(); else showInviteModal = true }}>
         📡 Дать VPN другу
       </button>
       <button class="vpn-btn request" data-testid="vpn-request" onclick={() => { applyDemoPartner(); if (friendId.trim()) requestVPN(); else showRequestModal = true }}>
@@ -417,14 +440,12 @@ async function startVPNSignaling(targetPubkey: string) {
       <button class="vpn-btn push" data-testid="vpn-push" disabled={pushBusy} onclick={enablePush}>
         🔔 Уведомления
       </button>
-      {#if isDevMode}
       <button class="vpn-btn engine" data-testid="vpn-tab-host" onclick={startTabP2PHost}>
         🧪 2 вкладки: я exit
       </button>
       <button class="vpn-btn request" data-testid="vpn-tab-join" onclick={startTabP2PJoiner}>
         🧪 2 вкладки: войти peer
       </button>
-      {/if}
     </div>
     {#if isDevMode}
     <div class="phase2-status" data-testid="phase2-status">
