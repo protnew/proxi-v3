@@ -17,6 +17,7 @@ data class Message(
     val voiceDuration: Int? = null,
     val replyTo: String? = null,
     val edited: Boolean = false,
+    val delivered: Boolean = false,
 ) {
     enum class Type { TEXT, VOICE, FILE, SYSTEM }
 }
@@ -34,6 +35,8 @@ data class Chat(
     val lastActivity: Long = System.currentTimeMillis(),
     val typing: List<String> = emptyList(),
     val members: List<String>? = null,
+    val lastMessageText: String? = null,
+    val peerPubKey: String? = null,
 ) {
     enum class Type { DM, GROUP }
 }

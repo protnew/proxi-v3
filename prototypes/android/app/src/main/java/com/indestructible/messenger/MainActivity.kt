@@ -9,6 +9,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import com.indestructible.messenger.messenger.Notifier
 import com.indestructible.messenger.ui.theme.MessengerTheme
 import com.indestructible.messenger.ui.navigation.MessengerNavHost
 
@@ -17,6 +18,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         VpnPermissionHolder.activity = this
+        requestNotificationPermission()
         setContent {
             MessengerTheme {
                 Surface(
@@ -26,6 +28,25 @@ class MainActivity : ComponentActivity() {
                     MessengerNavHost()
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Notifier.appForeground = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Notifier.appForeground = false
+    }
+
+    private fun requestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 42)
         }
     }
 

@@ -2,7 +2,6 @@
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
@@ -11,7 +10,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.indestructible.messenger.ui.screens.*
-import com.indestructible.messenger.messenger.Chat
 import com.indestructible.messenger.messenger.ChatViewModel
 import com.indestructible.messenger.messenger.ChatViewModelHolder
 import com.indestructible.messenger.nostr.NostrIdentity
@@ -20,11 +18,10 @@ import com.indestructible.messenger.nostr.NostrIdentity
 fun MessengerNavHost() {
     val navController = rememberNavController()
     val context = androidx.compose.ui.platform.LocalContext.current
-    val chats = remember { mutableStateListOf<Chat>() }
     var identity by remember { mutableStateOf<NostrIdentity?>(null) }
     var identityLoaded by remember { mutableStateOf(false) }
     val chatVM = remember {
-        val vm = ChatViewModel()
+        val vm = ChatViewModel(context.applicationContext)
         ChatViewModelHolder.instance = vm
         vm
     }
@@ -35,6 +32,7 @@ fun MessengerNavHost() {
         if (saved != null) {
             identity = saved
             chatVM.setPrivateKey(saved.privateKey.joinToString("") { "%02x".format(it) })
+            chatVM.loadChats()
             chatVM.connect(saved.publicKey)
         }
         identityLoaded = true
@@ -48,10 +46,13 @@ fun MessengerNavHost() {
         startDestination = startDest
     ) {
         composable("auth") {
-            AuthScreen(onDone = { id ->
+            AuthScreen(onDone = { id, profileName ->
                 identity = id
                 com.indestructible.messenger.nostr.IdentityStore.save(context, id)
+                context.getSharedPreferences("proxi_profile", android.content.Context.MODE_PRIVATE)
+                    .edit().putString("name", profileName).apply()
                 chatVM.setPrivateKey(id.privateKey.joinToString("") { "%02x".format(it) })
+                chatVM.loadChats()
                 chatVM.connect(id.publicKey)
                 navController.navigate("main") {
                     popUpTo("auth") { inclusive = true }
@@ -62,7 +63,7 @@ fun MessengerNavHost() {
             MainScreen(
                 onNavigateToSettings = { navController.navigate("settings") },
                 onNavigateToNewChat = { navController.navigate("new_chat") },
-                chats = chats,
+                chats = chatVM.chats,
                 chatVM = chatVM,
                 myPubKey = identity?.publicKey ?: "me",
             )
@@ -71,23 +72,24 @@ fun MessengerNavHost() {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
                 serverUrl = chatVM.serverUrl,
+                myPubKey = identity?.publicKey ?: "",
                 onServerUrlChange = { chatVM.serverUrl = it },
                 onDisconnect = { chatVM.disconnect() },
+                onLogout = {
+                    chatVM.wipeAll()
+                    com.indestructible.messenger.nostr.IdentityStore.clear(context)
+                    context.getSharedPreferences("proxi_profile", android.content.Context.MODE_PRIVATE)
+                        .edit().clear().apply()
+                    identity = null
+                    navController.navigate("auth") { popUpTo(0) { inclusive = true } }
+                },
             )
         }
         composable("new_chat") {
             NewChatScreen(
                 onBack = { navController.popBackStack() },
                 onCreateChat = { pubkey, name ->
-                    chats.add(Chat(
-                        id = "dm:$pubkey",
-                        name = name,
-                        avatar = name.take(1).ifBlank { "?" },
-                        type = Chat.Type.DM,
-                        messages = emptyList(),
-                        unread = 0,
-                        lastActivity = System.currentTimeMillis()
-                    ))
+                    chatVM.createDmChat(pubkey, name)
                     navController.popBackStack()
                 }
             )

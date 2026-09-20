@@ -19,7 +19,7 @@ import com.indestructible.messenger.nostr.NostrIdentity
 private enum class OnbStep { WELCOME, KEY_CREATE, KEY_SHOW, PROFILE, SECURITY, READY }
 
 @Composable
-fun AuthScreen(onDone: (NostrIdentity) -> Unit) {
+fun AuthScreen(onDone: (NostrIdentity, String) -> Unit) {
     var step by remember { mutableStateOf(OnbStep.WELCOME) }
     var identity by remember { mutableStateOf<NostrIdentity?>(null) }
     var importKey by remember { mutableStateOf("") }
@@ -172,7 +172,7 @@ fun AuthScreen(onDone: (NostrIdentity) -> Unit) {
                 }
                 Spacer(modifier = Modifier.height(24.dp))
                 identity?.let { id ->
-                    Button(onClick = { onDone(id) },
+                    Button(onClick = { onDone(id, profileName.trim()) },
                         modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A7BD5))) { Text("\u0412\u043E\u0439\u0442\u0438", color = Color.White) }
                 }
