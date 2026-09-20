@@ -1,4 +1,4 @@
-package com.indestructible.messenger.messenger
+﻿package com.indestructible.messenger.messenger
 
 import android.util.Log
 import androidx.compose.runtime.mutableStateListOf
@@ -22,6 +22,10 @@ class ChatViewModel(
     private var webSocket: WebSocket? = null
     private var jwtToken: String = ""
     private var myPubKey: String = ""
+    // P24: held for E2E only, never sent anywhere.
+    private var myPrivKeyHex: String = ""
+
+    fun setPrivateKey(hex: String) { myPrivKeyHex = hex }
 
     private val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
@@ -98,6 +102,8 @@ class ChatViewModel(
         })
     }
 
+    fun debugPubKey(): String = myPubKey
+
     fun sendMessage(from: String, to: String, text: String) {
         val msg = Message(
             id = "msg_${System.currentTimeMillis()}",
@@ -106,13 +112,28 @@ class ChatViewModel(
         )
         messages.add(msg)
 
-        // Send plaintext via WS — server handles relay/storage
-        // MOB-103: Client-side encryption is optional (Nip44 available but disabled
-        // until secp256k1 ECDH is implemented for PWA compatibility)
+        // P24 (2026-09-20): E2E by default for DMs when a key is set —
+        // real NIP-44 v2, wire-compatible with PWA nostr-tools and Go.
+        var payload = text
+        var isE2E = false
+        if (to.isNotEmpty() && to != "broadcast" && myPrivKeyHex.isNotEmpty()) {
+            try {
+                val theirPubHex = if (to.startsWith("npub1")) {
+                    com.indestructible.messenger.crypto.Bech32.decodeNpub(to)
+                        .joinToString("") { "%02x".format(it) }
+                } else to
+                payload = "nip44:" + Nip44.encryptFor(text, myPrivKeyHex, theirPubHex)
+                isE2E = true
+            } catch (e: Exception) {
+                Log.e("ChatVM", "E2E encrypt failed — NOT sending plaintext", e)
+                return // fail closed: never downgrade to plaintext
+            }
+        }
         val json = JSONObject().apply {
             put("type", "chat")
             put("to", to)
-            put("text", text)
+            put("text", payload)
+            if (isE2E) { put("encrypted", true); put("is_e2e", true) }
             put("ts", System.currentTimeMillis() / 1000)
             put("id", msg.id)
         }
@@ -130,19 +151,21 @@ class ChatViewModel(
                 val to = json.optString("to", json.optString("recipient", ""))
                 val text = json.optString("text", json.optString("content", ""))
 
-                // MOB-103: Decrypt if encrypted payload
-                val encryptedText = json.optString("encrypted", "")
-                val finalText = if (encryptedText.isNotEmpty()) {
+                // P24: real NIP-44 decrypt. "nip44:" prefix marks client ciphertext.
+                val rawText = text
+                val finalText = if (rawText.startsWith("nip44:") && myPrivKeyHex.isNotEmpty()) {
                     try {
-                        val convKey = Nip44.deriveConversationKey(from.toByteArray())
-                        val decrypted = Nip44.decrypt(encryptedText, convKey)
-                        Nip44.zeroBuffer(convKey)
-                        decrypted
+                        val theirPubHex = if (from.startsWith("npub1")) {
+                            com.indestructible.messenger.crypto.Bech32.decodeNpub(from)
+                                .joinToString("") { "%02x".format(it) }
+                        } else from
+                        Nip44.decryptFrom(rawText.removePrefix("nip44:"), myPrivKeyHex, theirPubHex)
                     } catch (e: Exception) {
-                        text // fallback to plaintext
+                        Log.e("ChatVM", "E2E decrypt failed", e)
+                        "[не удалось расшифровать]"
                     }
                 } else {
-                    text
+                    rawText
                 }
 
                 if (finalText.isNotEmpty()) {
@@ -170,3 +193,4 @@ class ChatViewModel(
         connectionStatus.value = "disconnected"
     }
 }
+

@@ -102,7 +102,8 @@ class NostrRelayService : Service() {
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Новое сообщение")
-            .setContentText(msg.text.take(50))
+            // P24: no plaintext/ciphertext on lockscreen — sender only.
+            .setContentText(msg.from.take(12) + "…")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)

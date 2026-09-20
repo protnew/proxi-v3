@@ -26,7 +26,6 @@ func TestEncrypt44Decrypt44(t *testing.T) {
 		plaintext string
 	}{
 		{"simple message", "Hello, World!"},
-		{"empty string", ""},
 		{"unicode", "Привет мир 🌍 日本語テスト"},
 		{"short", "Hi"},
 		{"exactly 32 bytes", "1234567890123456789012345678901"},
@@ -217,24 +216,29 @@ func TestEncrypt44ConversationKeyCommutes(t *testing.T) {
 }
 
 func TestNip44Padding(t *testing.T) {
+	// P6: spec padding = 2-byte BE length + data + zero fill to calcPaddedLen.
 	tests := []struct {
 		name     string
 		input    []byte
-		expected int // expected padded length
+		expected int // expected total padded length (2 + bucket)
 	}{
-		{"empty", []byte{}, 64},            // plen=32, boundary loops to 64
-		{"1 byte", []byte{1}, 64},          // plen=32, boundary loops to 64
-		{"31 bytes", make([]byte, 31), 64}, // plen=32, boundary loops to 64
-		{"32 bytes", make([]byte, 32), 64}, // boundary 32 <= 32, goes to 64
-		{"33 bytes", make([]byte, 33), 64},
-		{"64 bytes", make([]byte, 64), 128}, // boundary 64 <= 64, goes to 128
-		{"65 bytes", make([]byte, 65), 128},
-		{"128 bytes", make([]byte, 128), 256}, // boundary 128 <= 128, goes to 256
+		{"1 byte", []byte{1}, 34},
+		{"31 bytes", make([]byte, 31), 34},
+		{"32 bytes", make([]byte, 32), 34},
+		{"33 bytes", make([]byte, 33), 66},
+		{"64 bytes", make([]byte, 64), 66},
+		{"65 bytes", make([]byte, 65), 98}, // bucket = 32*3 = 96
+		{"128 bytes", make([]byte, 128), 130},
+		{"256 bytes", make([]byte, 256), 258},
+		{"257 bytes", make([]byte, 257), 322}, // bucket = 64*5 = 320
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			padded := nip44Pad(tt.input)
+			padded, err := nip44Pad(tt.input)
+			if err != nil {
+				t.Fatalf("nip44Pad failed: %v", err)
+			}
 			if len(padded) != tt.expected {
 				t.Errorf("padded length: expected %d, got %d", tt.expected, len(padded))
 			}
@@ -247,6 +251,15 @@ func TestNip44Padding(t *testing.T) {
 				t.Errorf("unpadded length: expected %d, got %d", len(tt.input), len(unpadded))
 			}
 		})
+	}
+}
+
+func TestNip44RejectsEmptyAndOversize(t *testing.T) {
+	if _, err := nip44Pad([]byte{}); err == nil {
+		t.Error("expected error for empty plaintext (spec min 1 byte)")
+	}
+	if _, err := nip44Pad(make([]byte, nip44MaxPlaintext+1)); err == nil {
+		t.Error("expected error for oversize plaintext")
 	}
 }
 

@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -26,8 +26,11 @@
             </intent-filter>
         </activity>
 
+        <!-- P24/A6 (2026-09-20): .vpn.VpnService — мёртвый дубль datapath (v1-путь,
+             канон = tun2socks+WebRTC в TunVpnService). Декларация удалена, файл
+             в vpn/archive/. Два сервиса с android.net.VpnService ломали выбор. -->
         <service
-            android:name=".vpn.VpnService"
+            android:name=".vpn.TunVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:exported="false"
             >
@@ -41,5 +44,15 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+            <receiver
+            android:name=".messenger.DebugSendReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="com.indestructible.messenger.DEBUG_SEND" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
+

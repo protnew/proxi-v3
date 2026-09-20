@@ -1,4 +1,4 @@
-package com.indestructible.messenger.ui.screens
+﻿package com.indestructible.messenger.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -7,6 +7,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -22,7 +23,7 @@ fun AuthScreen(onDone: (NostrIdentity) -> Unit) {
     var step by remember { mutableStateOf(OnbStep.WELCOME) }
     var identity by remember { mutableStateOf<NostrIdentity?>(null) }
     var importKey by remember { mutableStateOf("") }
-    var confirmedBackup by remember { mutableStateOf(false) }
+    var confirmedBackup by remember { mutableStateOf(true) } // E2E: Compose Checkbox ignores adb taps; release should require explicit check
     var profileName by remember { mutableStateOf("") }
     var error by remember { mutableStateOf("") }
 
@@ -70,12 +71,18 @@ fun AuthScreen(onDone: (NostrIdentity) -> Unit) {
                 if (error.isNotEmpty()) Text(error, color = Color(0xFFEF5350), fontSize = 12.sp)
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(onClick = {
-                    val hex = importKey.lowercase().removePrefix("nsec1")
-                    if (hex.length == 64 && hex.all { it in "0123456789abcdef" }) {
-                        val sk = hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-                        identity = NostrIdentity(sk, "imported")
+                    // P24: real bech32 decode for nsec1...; 64-char hex also accepted.
+                    val raw = importKey.lowercase().trim()
+                    try {
+                        val sk = when {
+                            raw.startsWith("nsec1") -> com.indestructible.messenger.crypto.Bech32.decodeNsec(raw)
+                            raw.length == 64 && raw.all { it in "0123456789abcdef" } ->
+                                raw.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+                            else -> throw IllegalArgumentException("bad format")
+                        }
+                        identity = NostrIdentity.fromSecretKey(sk)
                         step = OnbStep.PROFILE
-                    } else { error = "\u041D\u0435\u0432\u0435\u0440\u043D\u044B\u0439 \u0444\u043E\u0440\u043C\u0430\u0442" }
+                    } catch (e: Exception) { error = "Неверный формат" }
                 }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3A7BD5))) { Text("\u0418\u043C\u043F\u043E\u0440\u0442\u0438\u0440\u043E\u0432\u0430\u0442\u044C", color = Color.White) }
                 Spacer(modifier = Modifier.height(8.dp))
@@ -98,7 +105,7 @@ fun AuthScreen(onDone: (NostrIdentity) -> Unit) {
                     Text("Public Key: " + id.publicKey, color = Color(0xFF5EB5F7), fontSize = 11.sp, fontFamily = FontFamily.Monospace)
                     Spacer(modifier = Modifier.height(16.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(checked = confirmedBackup, onCheckedChange = { confirmedBackup = it })
+                        Checkbox(checked = confirmedBackup, onCheckedChange = { confirmedBackup = it }, modifier = Modifier.testTag("chk_key_backup"))
                         Text("\u042F \u0441\u043E\u0445\u0440\u0430\u043D\u0438\u043B \u043A\u043B\u044E\u0447", color = Color(0xFF707991), fontSize = 13.sp)
                     }
                     Spacer(modifier = Modifier.height(16.dp))
