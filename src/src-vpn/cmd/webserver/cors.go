@@ -114,3 +114,34 @@ func applyCORSHeaders(w http.ResponseWriter, r *http.Request, allowCredentials b
 	w.Header().Set("Access-Control-Max-Age", "86400")
 	return true
 }
+
+// wsOriginAllowed mirrors CORS whitelist for WebSocket upgrade Origin checks.
+// Empty origin is allowed (non-browser clients); otherwise must match whitelist or LAN.
+func wsOriginAllowed(origin string) bool {
+	if origin == "" {
+		return true
+	}
+	for _, o := range corsAllowedOrigins() {
+		if o == origin {
+			return true
+		}
+	}
+	return isPrivateLANOrigin(origin)
+}
+
+// wsRequestedProtocols returns Sec-WebSocket-Protocol tokens for AcceptOptions.Subprotocols.
+func wsRequestedProtocols(r *http.Request) []string {
+	raw := r.Header.Get("Sec-WebSocket-Protocol")
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if s := strings.TrimSpace(p); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+

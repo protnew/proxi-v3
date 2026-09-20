@@ -46,6 +46,7 @@ func TestCRYP011_X3DHCalledOnSessionCreate(t *testing.T) {
 
 
 func TestCRYP011_HTTPSessionEstablishThenDRMessage(t *testing.T) {
+	t.Setenv("VPN_DEV_BOOTSTRAP_PAIR", "1") // P15: bootstrap_pair gated by dev flag
 	db, err := store.NewStore(":memory:")
 	if err != nil {
 		t.Fatal(err)

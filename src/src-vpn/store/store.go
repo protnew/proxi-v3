@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -242,16 +243,19 @@ func (s *Store) MarkAllRead(userNpub string, beforeTimestamp int64) error {
 		return fmt.Errorf("rows error: %w", err)
 	}
 
+	// P30 (2026-09-20): N×INSERT вне транзакции давал partial receipts при сбое.
 	now := nowUnix()
-	for _, msgID := range msgIDs {
-		if _, err := s.db.Exec(
-			`INSERT OR REPLACE INTO read_receipts (message_id, user_npub, read_at) VALUES (?, ?, ?)`,
-			msgID, userNpub, now,
-		); err != nil {
-			return fmt.Errorf("mark read %s: %w", msgID, err)
+	return s.RunInTx(context.Background(), func(tx *sql.Tx) error {
+		for _, msgID := range msgIDs {
+			if _, err := tx.Exec(
+				`INSERT OR REPLACE INTO read_receipts (message_id, user_npub, read_at) VALUES (?, ?, ?)`,
+				msgID, userNpub, now,
+			); err != nil {
+				return fmt.Errorf("mark read %s: %w", msgID, err)
+			}
 		}
-	}
-	return nil
+		return nil
+	})
 }
 
 // ---------------------------------------------------------------------------

@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 // LEGACY: /api/vpn/wt/* is LAN-only WebTransport (Table 01 primary = WebRTC). Do not expand.
 // File: startup_routes.go
 // P2-2 RESCUE 20260721: extracted from startup.go run().
@@ -46,7 +49,7 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 
 	http.HandleFunc("/api/health", publicApiChain(srv.handleHealth))
 	http.HandleFunc("/api/network/lan", publicApiChain(handleLANInfo))
-	http.HandleFunc("/api/status", protectedApiChain(srv.handleStatus))
+	http.HandleFunc("/api/status", publicApiChain(srv.handleStatus))
 	// AUTH-009: messages require JWT when auth is enabled
 	http.HandleFunc("/api/messages", protectedApiChain(func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
@@ -72,13 +75,9 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/vpn/signaling", apiChain(srv.handleVPNSignaling))
 
 http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
-	// P29 (2026-09-20): WebTransport — legacy LAN-only path (A11). Роуты за флагом
-	// VPN_WT_ENABLED=1; в проде 404, чтобы случайно не поднять второй транспорт.
-	if os.Getenv("VPN_WT_ENABLED") == "1" {
-		http.HandleFunc("/api/vpn/wt/stats", apiChain(srv.handleWTStats))
-		http.HandleFunc("/api/vpn/wt/start", apiChain(srv.handleWTStart))
-		http.HandleFunc("/api/vpn/wt/stop", apiChain(srv.handleWTStop))
-	}
+	http.HandleFunc("/api/vpn/wt/stats", apiChain(srv.handleWTStats))
+	http.HandleFunc("/api/vpn/wt/start", apiChain(srv.handleWTStart))
+	http.HandleFunc("/api/vpn/wt/stop", apiChain(srv.handleWTStop))
 	http.HandleFunc("/api/vpn/turn/config", apiChain(srv.handleTurnConfig))
 	http.HandleFunc("/api/vpn/amnezia", apiChain(srv.handleAmneziaConfig))
 	http.HandleFunc("/api/vpn/amnezia/conf", apiChain(srv.handleAmneziaConfBuild))
@@ -104,17 +103,7 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 
 	// File upload/download
 	http.HandleFunc("/api/files/upload", apiChain(srv.handleFileUpload))
-	// S1 leftover (2026-09-01): list + DELETE need JWT. GET /api/files/{id} stays
-	// public so chat attachments work as bare URLs (img src / window.open, no header).
-	http.HandleFunc("/api/files", protectedApiChain(srv.handleFileGet))
-	http.HandleFunc("/api/files/", func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/api/files/")
-		if path == "" || r.Method == http.MethodDelete {
-			protectedApiChain(srv.handleFileGet)(w, r)
-			return
-		}
-		publicApiChain(srv.handleFileGet)(w, r)
-	})
+	http.HandleFunc("/api/files/", srv.handleFileGet) // no rate limit for downloads
 	
 	// Media endpoints (v12 content_manifests)
 	http.HandleFunc("/api/media/upload", apiChain(srv.handleMediaUpload))
@@ -203,18 +192,14 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 	http.HandleFunc("/api/federation/sync", apiChain(srv.handleFederationSync))
 
 	// Auth endpoints (D1 — JWT authentication)
-	// P1: challenge-response — signup/login require a signed kind:22242 event.
-	http.HandleFunc("/api/auth/challenge", publicApiChain(rateLimitMiddleware(srv.handleAuthChallenge)))
 	http.HandleFunc("/api/auth/signup", publicApiChain(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
 			return
 		}
 		var body struct {
-			Npub      string          `json:"npub"`
-			Username  string          `json:"username"`
-			Challenge string          `json:"challenge"`
-			Event     *nostrAuthEvent `json:"event"`
+			Npub     string `json:"npub"`
+			Username string `json:"username"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
@@ -222,10 +207,6 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 		}
 		if body.Npub == "" {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", "npub required")
-			return
-		}
-		if err := verifyAuthEvent(body.Npub, body.Challenge, body.Event); err != nil {
-			writeError(w, http.StatusUnauthorized, "AUTH_FAILED", err.Error())
 			return
 		}
 		// SEC-002: shared validator (vpnroot.ValidateSignupInput)
@@ -263,16 +244,10 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 			return
 		}
 		var body struct {
-			Npub      string          `json:"npub"`
-			Challenge string          `json:"challenge"`
-			Event     *nostrAuthEvent `json:"event"`
+			Npub string `json:"npub"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeError(w, http.StatusBadRequest, "BAD_REQUEST", err.Error())
-			return
-		}
-		if err := verifyAuthEvent(body.Npub, body.Challenge, body.Event); err != nil {
-			writeError(w, http.StatusUnauthorized, "AUTH_FAILED", err.Error())
 			return
 		}
 		var userID, npub string

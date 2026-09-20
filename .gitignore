@@ -87,3 +87,10 @@ src/src-vpn/data/uploads/
 .env
 .env.*
 !.env.example
+
+# Local runtime identity / VPN keys (never publish)
+**/messenger.db.identity.key
+**/*.identity.key
+
+data/
+*.log

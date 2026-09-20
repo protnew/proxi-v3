@@ -1,3 +1,6 @@
+//go:build ignore
+// +build ignore
+
 package main
 
 import (
@@ -6,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"time"
 	"os/signal"
@@ -15,6 +19,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/unkillable-messenger/vpn"
 	"github.com/unkillable-messenger/vpn/auth"
+	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/federation"
 	"github.com/unkillable-messenger/vpn/identity"
 	"github.com/unkillable-messenger/vpn/ipfs"
@@ -83,7 +88,10 @@ func run() error {
 		distDir = "/app/dist"
 	}
 
-	port := resolvePort()
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	// Check dist dir exists
 	if info, err := os.Stat(distDir); err != nil || !info.IsDir() {
@@ -100,10 +108,15 @@ func run() error {
 		defer ipfsNode.Stop()
 	}
 
-	// Initialize SQLite store — one path, not process cwd
-	dbPath, dataDir := resolveDBPath()
-	if err := os.MkdirAll(dataDir, 0755); err != nil {
-		return fmt.Errorf("data dir %s: %w", dataDir, err)
+	// Initialize SQLite store
+	dbPath := os.Getenv("DB_PATH")
+	dataDir := os.Getenv("DATA_DIR")
+	if dataDir == "" {
+		dataDir = "."
+	}
+	if dbPath == "" {
+		os.MkdirAll(dataDir, 0755)
+		dbPath = path.Join(dataDir, "messenger.db")
 	}
 	db, err := store.NewStore(dbPath)
 	if err != nil {
@@ -115,7 +128,8 @@ func run() error {
 		db: db,
 	}
 
-	// P8 (2026-09-20): DMS worker один — deadMansSwitchLoop ниже (после initHub).
+	// Start Dead Man's Switch worker
+	go startDeadMansSwitchWorker(context.Background(), srv)
 
 	var spErr error
 	storageProvider, spErr = storage.NewLocalStore(filepath.Join(dataDir, "uploads"))
@@ -224,9 +238,26 @@ func run() error {
 		log.Printf("🔑 Identity loaded from DB: %s", npub)
 	}
 
-	// P7 (2026-09-20): второй initHub удалён — пересоздавал hub и затирал
-	// hardened OnMessage (P5 fail-closed + reply-enrich) наивным persist'ом.
-	// Hub инициализируется один раз выше (initHub содержит persist-логику).
+	// Initialize chat hub with message persistence callback (M-002)
+	srv.initHub()
+	if srv.hub != nil && srv.db != nil {
+		srv.hub.OnMessage = func(msg *chat.Message) {
+			msgID := msg.ID
+			if msgID == "" {
+				msgID = fmt.Sprintf("msg-%d-%s", msg.Ts, msg.From[:min(len(msg.From), 8)])
+			}
+			srv.db.SaveMessage(store.Message{
+				ID:        msgID,
+				From:      msg.From,
+				To:        msg.To,
+				Text:      msg.Text,
+				Timestamp: msg.Ts,
+				Encrypted: msg.IsE2E,
+				ReplyTo:   msg.ReplyTo,
+				ForwardedFrom: msg.ForwardedFrom,
+			})
+		}
+	}
 
 	// Auto-connect VPN peers on startup
 	go srv.autoConnectPeers()
@@ -237,14 +268,10 @@ func run() error {
 	// Start dead man's switch checker (every hour)
 	go srv.deadMansSwitchLoop()
 
-	// P30 (2026-09-20): WAL checkpoint + AutoBackup были определены, но нигде
-	// не запускались — wal рос бесконечно, бэкапов не было.
-	go srv.startWALCheckpoint(context.Background())
-	srv.db.AutoBackup(context.Background(), filepath.Join(dataDir, "backups"), 24*time.Hour)
-
-	jwtSecret, err := requireJWTSecret()
-	if err != nil {
-		return err
+	// Initialize auth service (JWT)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = os.Getenv("JWT_SECRET") // P31: no hardcoded fallback
 	}
 	authSvc := auth.NewAuthService(jwtSecret)
 	srv.authService = authSvc
@@ -254,7 +281,7 @@ func run() error {
 
 	// Create HTTP server
 	httpSrv := &http.Server{
-		Addr:              httpBindAddr(port),
+		Addr:              "127.0.0.1:" + port,
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

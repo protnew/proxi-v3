@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/crypto"
@@ -57,6 +58,12 @@ func (s *Server) handleSessionEstablish(w http.ResponseWriter, r *http.Request) 
 
 	switch req.Mode {
 	case "bootstrap_pair":
+		// P15 (2026-09-20): dev-ceremony — сервер генерит X3DH-ключи ОБЕИХ сторон
+		// (server-side MITM по дизайну). За feature-флагом, в проде выключено.
+		if os.Getenv("VPN_DEV_BOOTSTRAP_PAIR") != "1" {
+			writeError(w, http.StatusForbidden, "DEV_ONLY", "bootstrap_pair disabled (set VPN_DEV_BOOTSTRAP_PAIR=1)")
+			return
+		}
 		bobMat, err := crypto.NewX3DHBobMaterial()
 		if err != nil {
 			writeError(w, 500, "X3DH_ERROR", err.Error())

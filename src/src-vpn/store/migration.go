@@ -1,6 +1,7 @@
-package store
+﻿package store
 
 import (
+	"strings"
 	"database/sql"
 	"fmt"
 	"log"
@@ -423,8 +424,26 @@ CREATE INDEX IF NOT EXISTS idx_messages_deleted_at ON messages(deleted_at);
 CREATE INDEX IF NOT EXISTS idx_messages_erased_at ON messages(erased_at);
 `,
 	},
+	{
+		Version: 16,
+		Name:    "identity_owner_user_id",
+		Up: `
+-- Singleton device identity: first JWT user to claim it owns nsec export.
+ALTER TABLE identity ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '';
+`,
+	},
 }
 
+
+// isBenignSchemaErr: column/table already present (partial legacy DBs).
+func isBenignSchemaErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate column name") ||
+		strings.Contains(msg, "already exists")
+}
 // runMigrations applies all pending migrations in order.
 func runMigrations(db *sql.DB) error {
 	// Create schema_version tracking table
@@ -458,8 +477,11 @@ func runMigrations(db *sql.DB) error {
 		}
 
 		if _, err := tx.Exec(m.Up); err != nil {
-			tx.Rollback()
-			return fmt.Errorf("migration v%d (%s): %w", m.Version, m.Name, err)
+			if !isBenignSchemaErr(err) {
+				tx.Rollback()
+				return fmt.Errorf("migration v%d (%s): %w", m.Version, m.Name, err)
+			}
+			log.Printf("⚠️  Migration v%d (%s): benign schema skip: %v", m.Version, m.Name, err)
 		}
 
 		if _, err := tx.Exec("INSERT INTO schema_version (version, name) VALUES (?, ?)", m.Version, m.Name); err != nil {
