@@ -33,6 +33,8 @@ type Contact struct {
 	GrantVPNAccess    bool   `json:"grantVpnAccess"`
 	UseAsVPNNode      bool   `json:"useAsVpnNode"`
 	CreatedAt         int64  `json:"createdAt"`
+	// OwnerUserID scopes the contact to one account (P7); not exposed via API.
+	OwnerUserID string `json:"-"`
 }
 
 // NewStore opens (or creates) an SQLite database at dbPath and runs
@@ -84,9 +86,9 @@ func (s *Store) Close() error {
 
 func (s *Store) SaveContact(c Contact) error {
 	_, err := s.db.Exec(
-		`INSERT INTO contacts (id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
+		`INSERT INTO contacts (id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at, owner_user_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(owner_user_id, id) DO UPDATE SET
 			name=excluded.name,
 			public_key=excluded.public_key,
 			endpoint=excluded.endpoint,
@@ -95,15 +97,21 @@ func (s *Store) SaveContact(c Contact) error {
 			use_as_vpn_node=excluded.use_as_vpn_node`,
 		c.ID, c.Name, c.PublicKey, c.Endpoint,
 		c.IsMessengerFriend, c.GrantVPNAccess, c.UseAsVPNNode,
-		time.Now().Unix(),
+		time.Now().Unix(), c.OwnerUserID,
 	)
 	return err
 }
 
-// GetContacts retrieves all stored contacts.
-
-func (s *Store) GetContacts() ([]Contact, error) {
-	rows, err := s.db.Query(`SELECT id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at FROM contacts`)
+// GetContactsForOwner retrieves contacts scoped to one owner (P7).
+// Empty owner (auth disabled / legacy tests) returns all rows.
+func (s *Store) GetContactsForOwner(owner string) ([]Contact, error) {
+	q := `SELECT id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at, owner_user_id FROM contacts`
+	args := []interface{}{}
+	if owner != "" {
+		q += ` WHERE owner_user_id = ?`
+		args = append(args, owner)
+	}
+	rows, err := s.db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +120,7 @@ func (s *Store) GetContacts() ([]Contact, error) {
 	var out []Contact
 	for rows.Next() {
 		var c Contact
-		if err := rows.Scan(&c.ID, &c.Name, &c.PublicKey, &c.Endpoint, &c.IsMessengerFriend, &c.GrantVPNAccess, &c.UseAsVPNNode, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.PublicKey, &c.Endpoint, &c.IsMessengerFriend, &c.GrantVPNAccess, &c.UseAsVPNNode, &c.CreatedAt, &c.OwnerUserID); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -120,10 +128,19 @@ func (s *Store) GetContacts() ([]Contact, error) {
 	return out, rows.Err()
 }
 
-// DeleteContact removes a contact by ID.
+// GetContacts retrieves all stored contacts (legacy/admin view).
+func (s *Store) GetContacts() ([]Contact, error) {
+	return s.GetContactsForOwner("")
+}
 
-func (s *Store) DeleteContact(id string) error {
-	_, err := s.db.Exec(`DELETE FROM contacts WHERE id = ?`, id)
+// DeleteContactForOwner removes a contact by ID scoped to one owner (P7).
+// Empty owner deletes regardless of owner (legacy/tests).
+func (s *Store) DeleteContactForOwner(id, owner string) error {
+	if owner == "" {
+		_, err := s.db.Exec(`DELETE FROM contacts WHERE id = ?`, id)
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM contacts WHERE id = ? AND owner_user_id = ?`, id, owner)
 	return err
 }
 

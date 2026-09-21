@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/unkillable-messenger/vpn/bot"
@@ -234,9 +235,58 @@ func (s *Server) initHub() {
 
 // ========== Peer Management Handlers ==========
 
-// handleContactsGet — GET /api/contacts — список контактов
+// isAdminIdentity — P7: WireGuard mesh changes (AddPeer/RemovePeer) are
+// restricted to identities listed in PROXI_ADMIN_NPUBS (comma-separated npub
+// or 64-hex). Empty list = nobody may change the mesh via API.
+var (
+	adminNpubsOnce sync.Once
+	adminNpubs     map[string]bool
+)
+
+func isAdminIdentity(r *http.Request) bool {
+	adminNpubsOnce.Do(func() {
+		adminNpubs = map[string]bool{}
+		for _, raw := range strings.Split(os.Getenv("PROXI_ADMIN_NPUBS"), ",") {
+			raw = strings.TrimSpace(raw)
+			if raw == "" {
+				continue
+			}
+			if hexID, err := npubToXOnlyHex(raw); err == nil {
+				adminNpubs[hexID] = true
+			} else {
+				adminNpubs[strings.ToLower(raw)] = true
+			}
+		}
+	})
+	if len(adminNpubs) == 0 {
+		return false
+	}
+	for _, key := range []string{"userID", "npub"} {
+		val, ok := r.Context().Value(key).(string)
+		if !ok || val == "" {
+			continue
+		}
+		if hexID, err := npubToXOnlyHex(val); err == nil && adminNpubs[hexID] {
+			return true
+		}
+		if adminNpubs[strings.ToLower(val)] {
+			return true
+		}
+	}
+	return false
+}
+
+// callerUserID returns the JWT user id (empty when auth is disabled).
+func callerUserID(r *http.Request) string {
+	if v, ok := r.Context().Value("userID").(string); ok {
+		return v
+	}
+	return ""
+}
+
+// handleContactsGet — GET /api/contacts — список контактов (P7: только свои)
 func (s *Server) handleContactsGet(w http.ResponseWriter, r *http.Request) {
-	contacts, err := s.db.GetContacts()
+	contacts, err := s.db.GetContactsForOwner(callerUserID(r))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
@@ -270,23 +320,32 @@ func (s *Server) handleContactsSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P7: the contact belongs to the caller; VPN mesh changes are admin-only.
+	req.OwnerUserID = callerUserID(r)
+	if req.GrantVPNAccess && !isAdminIdentity(r) {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "granting VPN access is admin-only (PROXI_ADMIN_NPUBS)")
+		return
+	}
+
 	if err := s.db.SaveContact(req); err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	// Sync with VPN Manager
-	if req.GrantVPNAccess {
-		// Only add to WireGuard if they provided a PublicKey
-		if req.PublicKey != "" {
-			if err := vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint); err != nil {
-				log.Printf("Error AddPeer: %v", err)
+	// Sync with VPN Manager (admins only — the mesh is server-global).
+	if isAdminIdentity(r) {
+		if req.GrantVPNAccess {
+			// Only add to WireGuard if they provided a PublicKey
+			if req.PublicKey != "" {
+				if err := vpnMgr.AddPeer(req.Name, req.PublicKey, req.Endpoint); err != nil {
+					log.Printf("Error AddPeer: %v", err)
+				}
 			}
-		}
-	} else {
-		if len(req.PublicKey) >= 16 {
-			if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil {
-				log.Printf("Error RemovePeer: %v", err)
+		} else {
+			if len(req.PublicKey) >= 16 {
+				if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil {
+					log.Printf("Error RemovePeer: %v", err)
+				}
 			}
 		}
 	}
@@ -319,13 +378,13 @@ func (s *Server) handleContactsRemove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.db.DeleteContact(req.ID); err != nil {
+	if err := s.db.DeleteContactForOwner(req.ID, callerUserID(r)); err != nil {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", err.Error())
 		return
 	}
 
-	// Clean up VPN peer if necessary
-	if len(req.PublicKey) >= 16 {
+	// Clean up VPN peer if necessary (admins only — P7)
+	if isAdminIdentity(r) && len(req.PublicKey) >= 16 {
 		if err := vpnMgr.RemovePeer(req.PublicKey[:16]); err != nil {
 			log.Printf("Error RemovePeer: %v", err)
 		}

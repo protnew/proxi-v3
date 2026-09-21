@@ -446,8 +446,24 @@ DELETE FROM prekey_bundles;
 		Version: 18,
 		Name:    "contacts_owner_scoping",
 		Up: `
--- P7: contacts are per-user, not a global shared list.
+-- P7: contacts are per-user, not a global shared list. Non-destructive
+-- rebuild (no DROP): the old table is kept as contacts_legacy_v18.
 ALTER TABLE contacts ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE contacts RENAME TO contacts_legacy_v18;
+CREATE TABLE contacts (
+    id TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT '',
+    public_key TEXT NOT NULL DEFAULT '',
+    endpoint TEXT NOT NULL DEFAULT '',
+    is_messenger_friend INTEGER NOT NULL DEFAULT 0,
+    grant_vpn_access INTEGER NOT NULL DEFAULT 0,
+    use_as_vpn_node INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL DEFAULT 0,
+    owner_user_id TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (owner_user_id, id)
+);
+INSERT INTO contacts (id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at, owner_user_id)
+    SELECT id, name, public_key, endpoint, is_messenger_friend, grant_vpn_access, use_as_vpn_node, created_at, owner_user_id FROM contacts_legacy_v18;
 CREATE INDEX IF NOT EXISTS idx_contacts_owner ON contacts(owner_user_id);
 `,
 	},
