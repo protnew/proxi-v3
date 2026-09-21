@@ -1,8 +1,8 @@
-# Как прогнать полные функциональные тесты (native Windows)
+﻿# Как прогнать полные функциональные тесты (native Windows)
 
 **Дата прогона агента:** 2026-08-04T07:55:06Z  
 **Код:** ветка `dev` · `0d028dd chore(qa): drop coverage *.out from git; keep Zero-Point reports only`  
-**Стек:** Go API `:8080` + Vite PWA `:5173` · **без Docker**
+**Стек:** Go API `:8090` + Vite PWA `:5173` · **без Docker**
 
 ---
 
@@ -32,7 +32,7 @@ messenger-server-dev.exe
 Проверка:
 
 ```bat
-curl http://127.0.0.1:8080/api/health
+curl http://127.0.0.1:8090/api/health
 ```
 
 Ожидание: HTTP 200.
@@ -198,7 +198,7 @@ npx playwright test e2e/vpn.spec.ts --reporter=list
 
 | Симптом | Действие |
 |---------|----------|
-| Playwright `ERR_CONNECTION_REFUSED` | Поднять Vite :5173 и API :8080 |
+| Playwright `ERR_CONNECTION_REFUSED` | Поднять Vite :5173 и API :8090 |
 | signup 401 | Нужна ветка `dev` с fix public routes |
 | Go OOM | `GOMAXPROCS=1`, пакеты по одному |
 | stale selectors textarea | Не использовать старый `tests/e2e.spec.ts`; брать `e2e/messenger.spec.ts` |

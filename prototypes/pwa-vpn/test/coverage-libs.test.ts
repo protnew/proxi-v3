@@ -99,6 +99,10 @@ describe('update-check', () => {
     expect(s.updateAvailable).toBe(false)
   })
   it('checkForUpdate no-throw without SW', async () => {
+    // node env: navigator may be missing — stub minimal shape
+    if (typeof (globalThis as any).navigator === 'undefined') {
+      (globalThis as any).navigator = {} as any
+    }
     await checkForUpdate()
     expect(await getSWVersion()).toBe('unknown')
   })

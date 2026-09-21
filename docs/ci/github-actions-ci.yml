@@ -1,4 +1,4 @@
-name: CI (native)
+﻿name: CI (native)
 
 # Native Go + Node — NO Docker service containers required for unit path.
 on:
@@ -73,10 +73,10 @@ jobs:
           mkdir -p data-ci
           PORT=8080 DATA_DIR=$PWD/data-ci ./messenger-server > server.log 2>&1 &
           for i in $(seq 1 30); do
-            curl -fsS http://127.0.0.1:8080/api/health && break
+            curl -fsS http://127.0.0.1:8090/api/health && break
             sleep 1
           done
-          curl -fsS http://127.0.0.1:8080/api/health
+          curl -fsS http://127.0.0.1:8090/api/health
 
       - name: Install PWA + Playwright
         working-directory: prototypes/pwa-vpn
@@ -97,5 +97,5 @@ jobs:
         working-directory: prototypes/pwa-vpn
         env:
           APP_URL: http://127.0.0.1:5173
-          API_URL: http://127.0.0.1:8080
+          API_URL: http://127.0.0.1:8090
         run: npx playwright test --config=playwright.config.ts

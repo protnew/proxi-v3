@@ -1,4 +1,4 @@
-{
+﻿{
   "timestamp": "2026-08-16T03:45:16Z",
   "scan": "zero-point-physical",
   "project": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2",
@@ -73,7 +73,7 @@
       "e2e/vpn.spec.ts SOCKS5 dev panel"
     ],
     "suite_command": "npx playwright test --reporter=line",
-    "suite_this_scan": "FINISHED 18.9m; vite :5173 + go :8080 up",
+    "suite_this_scan": "FINISHED 18.9m; vite :5173 + go :8090 up",
     "pass": 13,
     "fail": 34,
     "skipped": 2,

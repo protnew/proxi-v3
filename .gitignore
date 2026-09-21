@@ -94,3 +94,9 @@ src/src-vpn/data/uploads/
 
 data/
 *.log
+
+# P32 hygiene 2026-09-21
+.wrangler/
+*.err
+$prof
+src/src-tauri/binaries/

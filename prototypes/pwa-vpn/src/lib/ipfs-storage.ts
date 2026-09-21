@@ -48,8 +48,11 @@ function bytesToHex(b: Uint8Array): string {
 
 /** CIDv1-like simple content id: bafy... not required — use sha256:<hex> for Phase 1 */
 export async function computeCID(data: ArrayBuffer | Uint8Array): Promise<string> {
-  const buf = data instanceof ArrayBuffer ? data : data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)
-  const hash = await crypto.subtle.digest('SHA-256', buf as ArrayBuffer)
+  // Same-realm copy for jsdom/Node webcrypto interop
+  const src = data instanceof ArrayBuffer ? new Uint8Array(data) : data
+  const bytes = new Uint8Array(src.byteLength)
+  bytes.set(src)
+  const hash = await crypto.subtle.digest('SHA-256', bytes)
   return 'sha256:' + bytesToHex(new Uint8Array(hash))
 }
 

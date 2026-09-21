@@ -57,7 +57,7 @@ import {
   setIdentity, connectRelays, sendDM, sendGroupMessage, sendTyping,
   sendBinaryVoice, sendPresence, sendCallSignal, onMessage, onPresence, onTyping,
   getStatus, chatApi, request, initIdentity, initIdentityAsync, getName,
-  connectWebSocket, buildChatPayload,
+  connectWebSocket, buildChatPayload, setE2EEnabledLocal,
 } from '../src/lib/api';
 
 beforeEach(() => {
@@ -65,6 +65,8 @@ beforeEach(() => {
   MockWS.reset();
   Object.keys(ls).forEach(k => delete ls[k]);
   setIdentity('a'.repeat(64), 'b'.repeat(64));
+  // P5: these cases cover transport plumbing with E2E off; ciphertext path is send-dm-p5.test.ts
+  setE2EEnabledLocal(false);
   ls['proxi_token'] = 'jwt-abc';
   mockFetch.mockResolvedValue(ok({ access_token: 'jwt-abc', user_id: 'u1', refresh_token: 'r' }));
 });
@@ -83,17 +85,25 @@ describe('api.ts WS OPEN paths', () => {
     expect(join.type).toBe('join');
   });
 
-  it('sendDM via WS when open + REST dual-write', async () => {
+  it('sendDM via WS when open (P5: no REST dual-write)', async () => {
+    // beforeEach sets E2E off — transport plumbing only; ciphertext in send-dm-p5
     await connectRelays();
     await new Promise(r => setTimeout(r, 20));
-    mockFetch.mockResolvedValue(ok({ ok: true }));
+    mockFetch.mockClear();
     const r = await sendDM('c'.repeat(64), 'hello via ws');
     expect(r.status).toBe(200);
+    expect((r as any).data?.via).toBe('ws');
+    expect((r as any).data?.encrypted).toBe(false);
     const ws = MockWS.instances.at(-1)!;
-    const types = ws.sent.map(s => {
-      try { return JSON.parse(String(s)).type; } catch { return null; }
-    });
-    expect(types).toContain('chat');
+    const chats = ws.sent.map(s => {
+      try { return JSON.parse(String(s)); } catch { return null; }
+    }).filter(m => m && m.type === 'chat');
+    expect(chats.length).toBeGreaterThanOrEqual(1);
+    expect(chats[chats.length - 1].text).toBe('hello via ws');
+    expect(chats[chats.length - 1].encrypted).toBe(false);
+    // P5 removed REST dual-write when WS succeeds
+    const restPosts = mockFetch.mock.calls.filter(c => String(c[0]).includes('/api/messages'));
+    expect(restPosts.length).toBe(0);
   });
 
   it('sendGroupMessage via WS', async () => {

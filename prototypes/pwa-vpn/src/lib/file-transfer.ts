@@ -199,6 +199,9 @@ export class FileReceiver {
 }
 
 async function computeHash(buffer: ArrayBuffer): Promise<string> {
-  const hashBuffer = await crypto.subtle.digest('SHA-256', buffer)
+  // Copy into a same-realm Uint8Array — jsdom ArrayBuffer is rejected by Node webcrypto
+  const bytes = new Uint8Array(buffer.byteLength)
+  bytes.set(new Uint8Array(buffer))
+  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes)
   return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('')
 }

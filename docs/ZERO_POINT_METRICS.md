@@ -1,4 +1,4 @@
-# Zero-Point Metrics Template
+﻿# Zero-Point Metrics Template
 
 ## Что это
 
@@ -12,7 +12,7 @@
 | ZP-01 | Go unit tests PASS rate | 100% | `go test ./... 2>&1 \| grep -c "^ok"` |
 | ZP-02 | Vitest PASS rate | 100% | `npx vitest run --reporter=json \| jq .numPassedTestsWithFilters` |
 | ZP-03 | Playwright e2e PASS | 100% | `npx playwright test --reporter=line` |
-| ZP-04 | Cold start time (API) | < 3s | `time curl http://127.0.0.1:8080/api/health` (from server start) |
+| ZP-04 | Cold start time (API) | < 3s | `time curl http://127.0.0.1:8090/api/health` (from server start) |
 | ZP-05 | Cold start time (UI) | < 5s | `time curl http://127.0.0.1:5173/` (from vite start) |
 | ZP-06 | DM latency Alice→Bob | < 500ms | Playwright: time from send to visible in Bob context |
 | ZP-07 | VPN SOCKS connect time | < 2s | RPC `start_real_tunnel` → `get_status connected` |

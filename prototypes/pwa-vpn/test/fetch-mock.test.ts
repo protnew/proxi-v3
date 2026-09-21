@@ -63,6 +63,7 @@ function mockResponse(data: any, ok = true, status = 200): Response {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFetch.mockReset();
   Object.keys(store).forEach(k => delete store[k]);
 });
 
@@ -130,7 +131,16 @@ describe('API messaging', () => {
     store['proxi_token'] = 'mock-jwt-token';
   });
 
-  it('sendDM calls POST /api/messages', async () => {
+  it('sendDM with E2E on refuses short peer (no plaintext on wire)', async () => {
+    setE2EEnabledLocal(true);
+    const result = await sendDM('bob-pub', 'hello');
+    expect(result.status).toBe(400);
+    expect((result as any).error).toMatch(/e2e_required/);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('sendDM with E2E off POSTs plaintext via REST when WS closed', async () => {
+    setE2EEnabledLocal(false);
     mockFetch.mockResolvedValueOnce(mockResponse({ ok: true }));
     const result = await sendDM('bob-pub', 'hello');
     expect(mockFetch).toHaveBeenCalled();

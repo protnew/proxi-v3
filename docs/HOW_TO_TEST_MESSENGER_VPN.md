@@ -1,9 +1,9 @@
-# Messenger + **настоящий** VPN (native Windows)
+﻿# Messenger + **настоящий** VPN (native Windows)
 
 ## Код
 - Папка: `.04-Src` (git)
 - Ветка: `dev`
-- Backend: `:8080` · UI: `:5173`
+- Backend: `:8090` · UI: `:5173`
 - **Не Docker**
 
 ```powershell

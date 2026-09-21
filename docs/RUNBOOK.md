@@ -1,56 +1,51 @@
-# Production Runbook — Indestructible Messenger
+﻿# RUNBOOK — Неубиваемый (Proxi messenger+VPN)
 
-## Deployment
+## Source of Truth (P2)
 
-### VPS Setup (Hetzner $5/mo)
+| Что | Канон |
+|-----|--------|
+| GitHub active | `protnew/unkillable` · ветка `dev` |
+| Archive only | `protnew/proxi` — **не пушить** |
+| Local path | `C:\Obsidian\New\Projects\04-Неубиваемый-контент V2\.04-Src` |
+| API | **`:8090`** (`curl http://127.0.0.1:8090/api/health`) |
+| UI Solo verify | Vite **`:5173`** + proxy на API `:8090` |
+| Alt UI | dist с того же `:8090` |
+| Backlog DB | `08-Backlog/backlog_proxi_v6.db` (не v3) |
+| DEPRECATED | папка `… V2 DEV` — эксперимент, не канон |
+
+## Clone / pull
+
 ```bash
-# 1. Install Docker
-curl -fsSL https://get.docker.com | sh
-
-# 2. Clone repo
-git clone https://github.com/protnew/proxi.git
-cd proxi
-
-# 3. Build & run
-docker-compose up -d --build
+git clone https://github.com/protnew/unkillable.git
+cd unkillable
+git checkout dev
 ```
 
-### Environment Variables
-- `PORT` — HTTP port (default: 8080)
-- `DB_PATH` — SQLite file path (default: proxi.db)
-- `JWT_SECRET` — JWT signing secret (REQUIRED in production)
+Или работай в vault `.04-Src` (там же `.git`).
 
-### Health Check
+## Environment
+
+- `PORT` — HTTP port (**default: 8090**)
+- `DB_PATH` — SQLite path (default under data dir; not committed)
+- Never commit `.env*` except `*.example`; never commit `*.identity.key` / `*.db`
+
+## Health
+
 ```bash
-curl http://localhost:8080/api/health
-# Expected: {"status":"ok"}
+curl http://127.0.0.1:8090/api/health
+# expect {"status":"ok",...}
 ```
 
-## Monitoring
+## Start (typical Solo)
 
-### Logs
-```bash
-docker-compose logs -f
-```
-
-### SQLite WAL Checkpoint
-Runs automatically every 24h. Manual:
-```bash
-sqlite3 proxi.db "PRAGMA wal_checkpoint(TRUNCATE);"
-```
+1. Go API from `src/src-vpn`: webserver on **8090**
+2. Vite from `prototypes/pwa-vpn`: `npm run dev -- --host 127.0.0.1 --port 5173`
+3. Open `http://127.0.0.1:5173/`
 
 ## Troubleshooting
 
-### WebSocket not connecting
-- Check CORS headers in browser DevTools
-- Verify port 8080 is open in firewall
-- Check `/api/status` for hub stats
+- API down → check process on **8090**, not 8080
+- Playwright `ERR_CONNECTION_REFUSED` → raise Vite :5173 and API :8090
+- Do not use `proxi` remote for push
 
-### Messages not persisting
-- Check SQLite WAL mode: `PRAGMA journal_mode;`
-- Verify disk space
-- Check `proxi.db` permissions
-
-### Rate limit (429)
-- Default: 100 req/s per user
-- Adjust in `routing.go`: `middleware.NewRateLimiter(R, B)`
+Updated 2026-09-18 · P2/P12 port+remote sync

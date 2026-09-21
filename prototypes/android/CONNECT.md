@@ -1,4 +1,4 @@
-# Android App — Connect to Go Backend
+﻿# Android App — Connect to Go Backend
 
 ## Current State
 Android prototype exists at `prototypes/android/` with:
@@ -7,8 +7,8 @@ Android prototype exists at `prototypes/android/` with:
 - WebSocket connection to Go backend
 
 ## Connection Steps
-1. Start Go backend: `go run ./cmd/webserver/` (port 8080)
-2. In Android app, set server URL: `ws://YOUR_IP:8080/ws`
+1. Start Go backend: `go run ./cmd/webserver/` (port 8090)
+2. In Android app, set server URL: `ws://YOUR_IP:8090/ws`
 3. Generate identity (auto on first launch)
 4. Connect — WebSocket auth via JWT
 

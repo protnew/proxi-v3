@@ -1,11 +1,10 @@
-package vpn
+﻿package vpn
 
 // amnezia_import.go — prepare conf for AmneziaVPN/AmneziaWG GUI import + launch helper.
 
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -115,18 +114,12 @@ func PrepareAmneziaImport() ImportPrepResult {
 	}
 	res.AmneziaVPN = avpn
 
-	// Launch explorer on folder + AmneziaVPN
+	// AUTO-LAUNCH DISABLED (2026-09-18): never start AmneziaVPN.exe / explorer / bat.
+	// Product VPN is in-app userspace; external GUI is optional manual export only.
+	_ = avpn
+	res.Launched = false
 	if runtime.GOOS == "windows" {
-		_ = exec.Command("explorer.exe", "/select,", userCopy).Start()
-		if avpn != "" {
-			if err := exec.Command(avpn).Start(); err == nil {
-				res.Launched = true
-			}
-		}
-		// also try open bat
-		if res.HelperPath != "" {
-			_ = exec.Command("cmd.exe", "/c", "start", "", res.HelperPath).Start()
-		}
+		res.Note = "conf ready for manual export only; AmneziaVPN auto-launch disabled"
 	}
 
 	res.OK = true
@@ -146,7 +139,7 @@ echo 3) В Amnezia: добавить сервер → импорт из файл
 echo.
 explorer /select,"` + confPath + `"
 if exist "C:\Program Files\AmneziaVPN\AmneziaVPN.exe" (
-  start "" "C:\Program Files\AmneziaVPN\AmneziaVPN.exe"
+  echo AmneziaVPN auto-start disabled — open manually only if you want
 ) else (
   echo AmneziaVPN.exe not found
 )
