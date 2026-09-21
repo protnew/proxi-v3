@@ -432,6 +432,25 @@ CREATE INDEX IF NOT EXISTS idx_messages_erased_at ON messages(erased_at);
 ALTER TABLE identity ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '';
 `,
 	},
+	{
+		Version: 17,
+		Name:    "prekey_public_only_wipe",
+		Up: `
+-- P2: legacy bundles stored the X25519 PRIVATE key in identity_key (server-side
+-- auto-decrypt design). Wipe them; republishing now requires a verified
+-- signature, so only public keys can enter the table again.
+DELETE FROM prekey_bundles;
+`,
+	},
+	{
+		Version: 18,
+		Name:    "contacts_owner_scoping",
+		Up: `
+-- P7: contacts are per-user, not a global shared list.
+ALTER TABLE contacts ADD COLUMN owner_user_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_contacts_owner ON contacts(owner_user_id);
+`,
+	},
 }
 
 

@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/unkillable-messenger/vpn/crypto"
 )
 
 // N7: PreKey bundle distribution API for desktop X3DH multi-device.
@@ -38,6 +40,18 @@ func (s *Server) handlePreKeyPublish(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.IdentityKey) == 0 || len(req.SignedPreKey) == 0 {
 		http.Error(w, "identity_key and signed_prekey required", http.StatusBadRequest)
+		return
+	}
+	// P2 (2026-09-21): only verified, public-key bundles may be stored. The
+	// signature over signed_prekey must verify against identity_key, so the
+	// publisher proves possession of the matching private key — a raw private
+	// X25519 blob can no longer enter the table.
+	if !crypto.VerifyPreKeyBundle(&crypto.PreKeyBundle{
+		IdentityKey:  req.IdentityKey,
+		SignedPreKey: req.SignedPreKey,
+		Signature:    req.Signature,
+	}) {
+		http.Error(w, "invalid bundle: signature over signed_prekey must verify against identity_key (public keys only)", http.StatusBadRequest)
 		return
 	}
 
