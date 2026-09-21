@@ -4,12 +4,15 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/unkillable-messenger/vpn/store"
 )
 
@@ -50,6 +53,9 @@ type Client struct {
 	conn          WebSocketConn
 	mu            sync.Mutex
 	subscriptions map[string]*Subscription
+	// AuthPubkey — x-only hex identity taken from the JWT at connection time.
+	// Empty = unauthenticated connection (tests / auth-disabled relay).
+	AuthPubkey string
 }
 
 // WebSocketConn abstracts gorilla/nhooyr websocket.
@@ -109,9 +115,18 @@ func ComputeEventID(e *Event) string {
 
 // HandleClient handles a WebSocket client connection (NIP-01 protocol).
 func (r *Relay) HandleClient(conn WebSocketConn) {
+	r.HandleClientAuth(conn, "")
+}
+
+// HandleClientAuth handles an authenticated WebSocket client: authPubkey is the
+// x-only hex pubkey from the connection's JWT. Events published on this
+// connection must be signed AND match this identity (P1: no publishing as
+// someone else).
+func (r *Relay) HandleClientAuth(conn WebSocketConn, authPubkey string) {
 	client := &Client{
 		conn:          conn,
 		subscriptions: make(map[string]*Subscription),
+		AuthPubkey:    strings.ToLower(authPubkey),
 	}
 
 	r.mu.Lock()
@@ -168,6 +183,17 @@ func (r *Relay) handleEvent(client *Client, raw []json.RawMessage) {
 		return
 	}
 
+	// P1: schnorr signature is mandatory for every WS-published event.
+	if err := verifyEventSig(&event); err != nil {
+		client.sendOK(event.ID, false, "invalid signature: "+err.Error())
+		return
+	}
+	// P1: authenticated connections may only publish as their own identity.
+	if client.AuthPubkey != "" && !strings.EqualFold(event.PubKey, client.AuthPubkey) {
+		client.sendOK(event.ID, false, "pubkey does not match connection identity")
+		return
+	}
+
 	// Persist to SQLite if db is configured
 	if r.db != nil {
 		if err := r.db.SaveNostrEvent(store.NostrEvent{
@@ -193,7 +219,7 @@ func (r *Relay) handleEvent(client *Client, raw []json.RawMessage) {
 	subs := make([]*Subscription, 0)
 	for c := range r.clients {
 		for _, sub := range c.subscriptions {
-			if matchFilter(&event, &sub.Filter) {
+			if matchFilter(&event, &sub.Filter) && deliveryAllowed(c, &event) {
 				subs = append(subs, sub)
 			}
 		}
@@ -227,6 +253,16 @@ func (r *Relay) handleReq(client *Client, raw []json.RawMessage) {
 
 	var filter Filter
 	json.Unmarshal(raw[1], &filter)
+
+	// P1: DM (kind 4) and VPN signaling (kind 30090) are private — a
+	// subscription may only ever see its own identity's events.
+	if containsSensitiveKind(filter.Kinds) {
+		if client.AuthPubkey == "" {
+			client.sendNotice("auth required for kinds 4/30090")
+			return
+		}
+		filter.Authors = []string{client.AuthPubkey}
+	}
 
 	sub := &Subscription{
 		ID:     subID,
@@ -307,9 +343,68 @@ func (r *Relay) handleClose(client *Client, raw []json.RawMessage) {
 	client.mu.Unlock()
 }
 
+// verifyEventSig checks the schnorr signature of an event over its ID (NIP-01).
+func verifyEventSig(e *Event) error {
+	if e.Sig == "" {
+		return errors.New("missing sig")
+	}
+	sigBytes, err := hex.DecodeString(e.Sig)
+	if err != nil {
+		return errors.New("bad sig hex")
+	}
+	sig, err := schnorr.ParseSignature(sigBytes)
+	if err != nil {
+		return errors.New("bad schnorr sig")
+	}
+	pkBytes, err := hex.DecodeString(e.PubKey)
+	if err != nil || len(pkBytes) != 32 {
+		return errors.New("bad pubkey hex")
+	}
+	pk, err := schnorr.ParsePubKey(pkBytes)
+	if err != nil {
+		return errors.New("bad x-only pubkey")
+	}
+	idBytes, err := hex.DecodeString(e.ID)
+	if err != nil {
+		return errors.New("bad id hex")
+	}
+	if !sig.Verify(idBytes, pk) {
+		return errors.New("signature verification failed")
+	}
+	return nil
+}
+
+// containsSensitiveKind reports whether the filter asks for private kinds.
+func containsSensitiveKind(kinds []int) bool {
+	for _, k := range kinds {
+		if k == 4 || k == 30090 {
+			return true
+		}
+	}
+	return false
+}
+
+// deliveryAllowed: private-kind events reach only the author and p-tag peers.
+func deliveryAllowed(c *Client, e *Event) bool {
+	if e.Kind != 4 && e.Kind != 30090 {
+		return true
+	}
+	if c.AuthPubkey == "" {
+		return false
+	}
+	if strings.EqualFold(e.PubKey, c.AuthPubkey) {
+		return true
+	}
+	for _, t := range e.Tags {
+		if len(t) >= 2 && t[0] == "p" && strings.EqualFold(t[1], c.AuthPubkey) {
+			return true
+		}
+	}
+	return false
+}
+
 // matchFilter checks if an event matches a NIP-01 filter.
-func matchFilter(event *Event, filter *Filter) bool {
-	if len(filter.IDs) > 0 && !contains(filter.IDs, event.ID) {
+func matchFilter(event *Event, filter *Filter) bool {	if len(filter.IDs) > 0 && !contains(filter.IDs, event.ID) {
 		return false
 	}
 	if len(filter.Authors) > 0 && !contains(filter.Authors, event.PubKey) {
@@ -415,7 +510,7 @@ func (r *Relay) InjectLocalEvent(event Event) {
 	subs := make([]*Subscription, 0)
 	for c := range r.clients {
 		for _, sub := range c.subscriptions {
-			if matchFilter(&event, &sub.Filter) {
+			if matchFilter(&event, &sub.Filter) && deliveryAllowed(c, &event) {
 				subs = append(subs, sub)
 			}
 		}

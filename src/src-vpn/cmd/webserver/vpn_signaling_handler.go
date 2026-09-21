@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	vpn "github.com/unkillable-messenger/vpn"
@@ -13,19 +14,39 @@ import (
 
 // handleVPNSignaling — POST publish / GET pending
 // INF-010: wires VPNSignaling + Nostr relay (was initialized but unreachable).
+// P1 (2026-09-21): identity is taken from JWT claims only — body `from` is
+// ignored when auth is enabled; GET returns only the caller's own invites.
 func (s *Server) handleVPNSignaling(w http.ResponseWriter, r *http.Request) {
 	if vpnSignaling == nil {
 		vpnSignaling = vpn.NewVPNSignaling()
 	}
+	// P1: resolve caller identity from JWT (npub → x-only hex).
+	callerHex := ""
+	if s.authService != nil {
+		npub, _ := r.Context().Value("npub").(string)
+		if npub == "" {
+			writeError(w, 401, "UNAUTHORIZED", "identity required")
+			return
+		}
+		h, err := npubToXOnlyHex(npub)
+		if err != nil {
+			writeError(w, 401, "UNAUTHORIZED", "invalid identity in token")
+			return
+		}
+		callerHex = h
+	}
 	switch r.Method {
 	case http.MethodGet:
 		invites := vpnSignaling.GetPendingInvites()
-		if invites == nil {
-			invites = []vpn.VPNEvent{}
+		own := make([]vpn.VPNEvent, 0, len(invites))
+		for _, inv := range invites {
+			if callerHex == "" || strings.EqualFold(inv.From, callerHex) || strings.EqualFold(inv.To, callerHex) {
+				own = append(own, inv)
+			}
 		}
 		writeJSON(w, 200, map[string]interface{}{
-			"pending": invites,
-			"count":   len(invites),
+			"pending": own,
+			"count":   len(own),
 		})
 	case http.MethodPost:
 		body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
@@ -45,22 +66,31 @@ func (s *Server) handleVPNSignaling(w http.ResponseWriter, r *http.Request) {
 			writeError(w, 400, "PARSE_ERROR", "invalid JSON")
 			return
 		}
-		if req.From == "" || req.To == "" || req.Type == "" {
-			writeError(w, 400, "VALIDATION_ERROR", "type, from, to required")
+		if req.To == "" || req.Type == "" {
+			writeError(w, 400, "VALIDATION_ERROR", "type, to required")
+			return
+		}
+		// P1: `from` comes from JWT claims, never from the body.
+		from := req.From
+		if callerHex != "" {
+			from = callerHex
+		}
+		if from == "" {
+			writeError(w, 401, "UNAUTHORIZED", "identity required")
 			return
 		}
 		var ve vpn.VPNEvent
 		switch req.Type {
 		case "vpn-invite":
-			ve = vpnSignaling.CreateVPNInvite(req.From, req.To, req.WTAddr, req.WTCertHash)
+			ve = vpnSignaling.CreateVPNInvite(from, req.To, req.WTAddr, req.WTCertHash)
 		case "vpn-request":
-			ve = vpnSignaling.CreateVPNRequest(req.From, req.To)
+			ve = vpnSignaling.CreateVPNRequest(from, req.To)
 		case "vpn-accept":
-			ve = vpnSignaling.CreateVPNAccept(req.From, req.To, req.WTAddr, req.WTCertHash)
+			ve = vpnSignaling.CreateVPNAccept(from, req.To, req.WTAddr, req.WTCertHash)
 		case "vpn-reject":
-			ve = vpnSignaling.CreateVPNReject(req.From, req.To)
+			ve = vpnSignaling.CreateVPNReject(from, req.To)
 		case "vpn-cancel":
-			ve = vpn.VPNEvent{Type: "vpn-cancel", From: req.From, To: req.To, Timestamp: time.Now().Unix()}
+			ve = vpn.VPNEvent{Type: "vpn-cancel", From: from, To: req.To, Timestamp: time.Now().Unix()}
 		default:
 			writeError(w, 400, "VALIDATION_ERROR", "unknown type")
 			return
@@ -71,7 +101,7 @@ func (s *Server) handleVPNSignaling(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		ev := nostr.Event{
-			PubKey:    req.From,
+			PubKey:    from,
 			CreatedAt: ve.Timestamp,
 			Kind:      vpn.VPNEventKind,
 			Tags:      [][]string{{"p", req.To}},

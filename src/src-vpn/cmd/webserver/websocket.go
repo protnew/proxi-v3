@@ -22,9 +22,25 @@ func (s *Server) handleNostrWS(w http.ResponseWriter, r *http.Request) {
 	}
 	// P9: /nostr требует JWT (Bearer или ?token=) когда auth включён —
 	// анонимная запись в relay закрыта; подписи событий проверяет сам relay (NIP-01).
-	if s.authService != nil && !s.fileTokenOK(r) {
-		http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
-		return
+	authPubkey := ""
+	if s.authService != nil {
+		tok := requestToken(r)
+		if tok == "" {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
+			return
+		}
+		claims, err := s.authService.ValidateToken(tok)
+		if err != nil {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"invalid token"}`, http.StatusUnauthorized)
+			return
+		}
+		// P1: bind the connection to the JWT identity (x-only hex).
+		if hex, err := npubToXOnlyHex(claims.Npub); err == nil {
+			authPubkey = hex
+		} else {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"token has no valid npub"}`, http.StatusUnauthorized)
+			return
+		}
 	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OriginPatterns: []string{"*"},
@@ -34,7 +50,7 @@ func (s *Server) handleNostrWS(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[nostr] upgrade error: %v", err)
 		return
 	}
-	nostrRelay.HandleClient(&nhooyrWSConn{c: conn})
+	nostrRelay.HandleClientAuth(&nhooyrWSConn{c: conn}, authPubkey)
 }
 
 // handleNostrStats returns relay statistics.

@@ -1,11 +1,14 @@
 package nostr
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/unkillable-messenger/vpn/store"
 )
 
@@ -363,17 +366,28 @@ func TestMatchFilter_Until(t *testing.T) {
 }
 
 func TestHandleEvent(t *testing.T) {
-	// Helper to create a valid event with computed ID
-	makeEvent := func(pubkey string, kind int, content string, createdAt int64) Event {
+	// Helper to create a valid event with computed ID (P1: real schnorr sig
+	// over the ID; pubkey belongs to the per-call keypair — callers matching
+	// by author should use evt.PubKey).
+	makeEvent := func(_ string, kind int, content string, createdAt int64) Event {
+		priv, err := btcec.NewPrivateKey()
+		if err != nil {
+			t.Fatalf("keygen: %v", err)
+		}
 		evt := Event{
-			PubKey:    pubkey,
+			PubKey:    hex.EncodeToString(priv.PubKey().SerializeCompressed()[1:]),
 			Kind:      kind,
 			Content:   content,
 			CreatedAt: createdAt,
 			Tags:      nil,
-			Sig:       "fakesig",
 		}
 		evt.ID = ComputeEventID(&evt)
+		idBytes, _ := hex.DecodeString(evt.ID)
+		sig, serr := schnorr.Sign(priv, idBytes)
+		if serr != nil {
+			t.Fatalf("sign: %v", serr)
+		}
+		evt.Sig = hex.EncodeToString(sig.Serialize())
 		return evt
 	}
 
@@ -732,5 +746,99 @@ func TestHandleClose(t *testing.T) {
 
 		// Should not panic
 		r.handleClose(client, []json.RawMessage{json.RawMessage(`"nonexistent"`)})
+	})
+}
+
+// P1 (2026-09-21): unsigned/spoofed events must be rejected; private kinds are
+// author-bound on REQ and delivery.
+func TestRelayP1SigAndACL(t *testing.T) {
+	newKey := func() (*btcec.PrivateKey, string) {
+		priv, err := btcec.NewPrivateKey()
+		if err != nil {
+			t.Fatalf("keygen: %v", err)
+		}
+		return priv, hex.EncodeToString(priv.PubKey().SerializeCompressed()[1:])
+	}
+	sign := func(priv *btcec.PrivateKey, evt *Event) {
+		evt.ID = ComputeEventID(evt)
+		id, _ := hex.DecodeString(evt.ID)
+		sig, err := schnorr.Sign(priv, id)
+		if err != nil {
+			t.Fatalf("sign: %v", err)
+		}
+		evt.Sig = hex.EncodeToString(sig.Serialize())
+	}
+
+	t.Run("unsigned event rejected", func(t *testing.T) {
+		r := NewRelay(10, nil)
+		conn := newMockConn()
+		client := &Client{conn: conn, subscriptions: make(map[string]*Subscription)}
+		r.mu.Lock()
+		r.clients[client] = true
+		r.mu.Unlock()
+		_, pub := newKey()
+		evt := Event{PubKey: pub, Kind: 1, Content: "x", CreatedAt: 1}
+		evt.ID = ComputeEventID(&evt)
+		raw, _ := json.Marshal(evt)
+		r.handleEvent(client, []json.RawMessage{raw})
+		w := conn.getWritten()
+		if len(w) == 0 {
+			t.Fatal("no response")
+		}
+		if m, ok := w[len(w)-1].([]interface{}); !ok || m[2] == true {
+			t.Errorf("expected ok=false for unsigned event, got %v", w[len(w)-1])
+		}
+	})
+
+	t.Run("spoofed pubkey rejected on authenticated connection", func(t *testing.T) {
+		r := NewRelay(10, nil)
+		conn := newMockConn()
+		victimPriv, _ := newKey()
+		attackerPriv, attackerPub := newKey()
+		client := &Client{conn: conn, subscriptions: make(map[string]*Subscription), AuthPubkey: attackerPub}
+		r.mu.Lock()
+		r.clients[client] = true
+		r.mu.Unlock()
+		evt := Event{PubKey: hex.EncodeToString(victimPriv.PubKey().SerializeCompressed()[1:]), Kind: 1, Content: "spoof", CreatedAt: 2}
+		sign(attackerPriv, &evt) // valid sig, but for the WRONG identity relative to the connection
+		raw, _ := json.Marshal(evt)
+		r.handleEvent(client, []json.RawMessage{raw})
+		w := conn.getWritten()
+		if m, ok := w[len(w)-1].([]interface{}); !ok || m[2] == true {
+			t.Errorf("expected ok=false for spoofed pubkey, got %v", w[len(w)-1])
+		}
+	})
+
+	t.Run("REQ for kind 4 forces author=self and needs auth", func(t *testing.T) {
+		r := NewRelay(10, nil)
+		conn := newMockConn()
+		anon := &Client{conn: conn, subscriptions: make(map[string]*Subscription)}
+		rawSub := []json.RawMessage{json.RawMessage(`"s1"`), json.RawMessage(`{"kinds":[4]}`)}
+		r.handleReq(anon, rawSub)
+		if _, exists := anon.subscriptions["s1"]; exists {
+			t.Error("anonymous client must not subscribe to kind 4")
+		}
+
+		authd := &Client{conn: newMockConn(), subscriptions: make(map[string]*Subscription), AuthPubkey: "aa" + "00"}
+		r.handleReq(authd, rawSub)
+		sub, exists := authd.subscriptions["s1"]
+		if !exists {
+			t.Fatal("authed subscription expected")
+		}
+		if len(sub.Filter.Authors) != 1 || sub.Filter.Authors[0] != "aa"+"00" {
+			t.Errorf("expected authors forced to self, got %v", sub.Filter.Authors)
+		}
+	})
+
+	t.Run("delivery ACL hides DMs from third parties", func(t *testing.T) {
+		third := &Client{conn: newMockConn(), AuthPubkey: "cc"}
+		peer := &Client{conn: newMockConn(), AuthPubkey: "bb"}
+		evt := &Event{PubKey: "aa", Kind: 4, Tags: [][]string{{"p", "bb"}}}
+		if deliveryAllowed(third, evt) {
+			t.Error("third party must not receive kind 4")
+		}
+		if !deliveryAllowed(peer, evt) {
+			t.Error("p-tag peer must receive kind 4")
+		}
 	})
 }
