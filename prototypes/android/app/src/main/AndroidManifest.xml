@@ -48,7 +48,7 @@
 
             <receiver
             android:name=".messenger.DebugSendReceiver"
-            android:exported="true"
+            android:exported="false"
             android:enabled="true">
             <intent-filter>
                 <action android:name="com.indestructible.messenger.DEBUG_SEND" />
