@@ -28,6 +28,13 @@ func (s *Server) handleVpnRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// P10: exit-node/SOCKS upstream/WG peer operations are server
+	// administration, not a tenant feature — admin-only when auth is enabled.
+	if s.authService != nil && !isAdminIdentity(r) {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "vpn rpc is admin-only (PROXI_ADMIN_NPUBS)")
+		return
+	}
+
 	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read body")

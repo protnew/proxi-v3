@@ -15,6 +15,33 @@ import (
 
 const maxFileSize = 50 << 20 // 50 MB
 
+// callerFileOwner — P18: the file-scope identity of the caller (x-only hex or
+// raw npub). Second return: whether scoping is enforced (auth enabled).
+func (s *Server) callerFileOwner(r *http.Request) (string, bool) {
+	if s.authService == nil {
+		return "", false // auth disabled (dev/tests): no scoping
+	}
+	claims, err := s.authService.ValidateToken(requestToken(r))
+	if err != nil {
+		return "?", true // enforced, invalid caller → owns nothing
+	}
+	if h, err := npubToXOnlyHex(claims.Npub); err == nil {
+		return h, true
+	}
+	return claims.Npub, true
+}
+
+// fileOwnedBy reports whether a file's UploadedBy matches the caller identity.
+func fileOwnedBy(uploadedBy, owner string) bool {
+	if uploadedBy == owner {
+		return true
+	}
+	if h, err := npubToXOnlyHex(uploadedBy); err == nil {
+		return h == owner
+	}
+	return false
+}
+
 // uploadDir returns the uploads directory path.
 func uploadDir() string {
 	dir := getDataDir() + "/uploads"
@@ -189,6 +216,16 @@ func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "DB_ERROR", "Failed to list files")
 		return
 	}
+	// P18: list only the caller's own files (IDOR).
+	if owner, enforced := s.callerFileOwner(r); enforced {
+		own := make([]store.FileMeta, 0, len(files))
+		for _, fm := range files {
+			if fileOwnedBy(fm.UploadedBy, owner) {
+				own = append(own, fm)
+			}
+		}
+		files = own
+	}
 	if files == nil {
 		files = []store.FileMeta{}
 	}
@@ -200,6 +237,19 @@ func (s *Server) handleFileList(w http.ResponseWriter, r *http.Request) {
 
 // handleFileDelete removes a file by ID.
 func (s *Server) handleFileDelete(w http.ResponseWriter, r *http.Request, fileID string) {
+	// P18: only the owner (or an admin) may delete a file.
+	if owner, enforced := s.callerFileOwner(r); enforced {
+		fm, err := s.db.GetFileMeta(fileID)
+		if err != nil || fm == nil {
+			writeError(w, http.StatusNotFound, "NOT_FOUND", "File not found")
+			return
+		}
+		if !fileOwnedBy(fm.UploadedBy, owner) && !isAdminIdentity(r) {
+			writeError(w, http.StatusForbidden, "FORBIDDEN", "not your file")
+			return
+		}
+	}
+
 	// Delete from storage
 	if err := storageProvider.DeleteFile(fileID); err != nil && !os.IsNotExist(err) {
 		log.Printf("WARNING: failed to delete file %s: %v", fileID, err)
