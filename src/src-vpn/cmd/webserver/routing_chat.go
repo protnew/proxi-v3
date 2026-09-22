@@ -1,4 +1,4 @@
-// File: routing_chat.go
+﻿// File: routing_chat.go
 // P2-1 RESCUE 20260720: extracted from routing.go (God Object split).
 
 package main
@@ -86,7 +86,10 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 			// Legacy ECDH
 			recipientBundle, err := s.db.GetPreKeyBundle(currentUserNpub)
 			if err == nil && recipientBundle != nil {
-				plaintext, err := chat.DecryptMessageFromSender(m.Text, recipientBundle.IdentityKey, m.From)
+				// R7/P2-leftover (2026-09-22): DEAD PATH after public-only prekey bundles.
+// IdentityKey is a PUBLIC key; treating it as recipientPrivKey cannot succeed and must NOT be extended.
+// Full fail-closed/removal gated on X2 (E2E model). Do not add new call sites.
+			plaintext, err := chat.DecryptMessageFromSender(m.Text, recipientBundle.IdentityKey, m.From)
 				if err == nil {
 					msgs[i].Text = plaintext
 					msgs[i].Encrypted = false
