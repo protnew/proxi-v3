@@ -12,7 +12,7 @@ const PUBLIC = [
 function walk(dir: string, acc: string[] = []): string[] {
   if (!existsSync(dir)) return acc
   for (const name of readdirSync(dir)) {
-    if (name === 'node_modules' || name === 'dist' || name === '_quarantine_p9') continue
+    if (name === 'node_modules' || name === 'dist' || name === '_quarantine_p9' || name === 'archive') continue
     const p = join(dir, name)
     const st = statSync(p)
     if (st.isDirectory()) walk(p, acc)
