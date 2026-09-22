@@ -123,6 +123,7 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		Text      string `json:"text"`
 		Encrypted bool   `json:"encrypted"`
 		IsE2E     bool   `json:"is_e2e"`
+		Group     string `json:"group"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "PARSE_ERROR", "Invalid JSON")
@@ -136,6 +137,11 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 	// Validation
 	if strings.TrimSpace(req.Text) == "" {
 		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "Message text is required")
+		return
+	}
+	// P3: group room id must be a well-formed "group:*" tag (or empty = DM).
+	if req.Group != "" && !strings.HasPrefix(req.Group, "group:") {
+		writeError(w, http.StatusBadRequest, "VALIDATION_ERROR", "group must be a group:* room id")
 		return
 	}
 	// SEC-002: single SoT — vpnroot.MaxMessageLen / ValidateMessage
@@ -202,6 +208,7 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		Text:      encryptedText,
 		Encrypted: isEncrypted,
 		Timestamp: time.Now().Unix(),
+		Group:     req.Group,
 	}
 
 	// Persist to SQLite
@@ -220,6 +227,7 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 			Text:  msg.Text,
 			Ts:    msg.Timestamp,
 			IsE2E: msg.Encrypted,
+			Group: msg.Group,
 		}
 		if encoded, encErr := wsMsg.Encode(); encErr == nil {
 			switch msg.To {

@@ -104,10 +104,11 @@ func (s *Server) handleEditMessage(w http.ResponseWriter, r *http.Request) {
 	if s.hub != nil {
 		msg := &chat.Message{
 			Type: "message_edited",
+			ID:   req.ID, // P15: clients key tombstones/edits off the id field
+			From: senderNpub,
 			Text: req.Text,
 			Ts:   time.Now().Unix(),
 		}
-		msg.From = ""
 		encoded, _ := msg.Encode()
 		s.hub.Broadcast(encoded, "")
 	}
@@ -151,9 +152,10 @@ func (s *Server) handleDeleteMessage(w http.ResponseWriter, r *http.Request) {
 	if s.hub != nil {
 		msg := &chat.Message{
 			Type: "message_deleted",
+			ID:   req.ID, // P15: id as a field, not smuggled through Text
+			From: senderNpub,
 			Ts:   time.Now().Unix(),
 		}
-		msg.Text = req.ID
 		encoded, _ := msg.Encode()
 		s.hub.Broadcast(encoded, "")
 	}

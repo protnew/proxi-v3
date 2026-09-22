@@ -1,7 +1,10 @@
 package store
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
+	"time"
 
 	_ "modernc.org/sqlite"
 )
@@ -251,4 +254,47 @@ func (s *Store) GetPreKeyBundle(userID string) (*PreKeyBundleRow, error) {
 		return nil, fmt.Errorf("get prekey bundle for %s: %w", userID, err)
 	}
 	return &p, nil
+}
+
+// CreateGroup atomically creates the group channel, the admin membership and
+// all member rows in one transaction (P4: no half-created groups).
+func (s *Store) CreateGroup(name, creator string, members []string) (groupID string, err error) {
+	groupID = fmt.Sprintf("grp-%d", time.Now().UnixNano())
+	now := time.Now().Unix()
+	total := 1
+	err = s.RunInTx(context.Background(), func(tx *sql.Tx) error {
+		if _, e := tx.Exec(
+			`INSERT OR REPLACE INTO channels (id, name, description, creator, subscribers, created_at)
+			 VALUES (?, ?, ?, ?, ?, ?)`,
+			groupID, name, "Group chat", creator, total, now,
+		); e != nil {
+			return fmt.Errorf("create channel: %w", e)
+		}
+		if _, e := tx.Exec(
+			`INSERT OR REPLACE INTO group_members (group_id, user_npub, role, joined_at) VALUES (?, ?, ?, ?)`,
+			groupID, creator, "admin", now,
+		); e != nil {
+			return fmt.Errorf("create admin member: %w", e)
+		}
+		for _, m := range members {
+			if m == creator || m == "" {
+				continue
+			}
+			if _, e := tx.Exec(
+				`INSERT OR REPLACE INTO group_members (group_id, user_npub, role, joined_at) VALUES (?, ?, ?, ?)`,
+				groupID, m, "member", now,
+			); e != nil {
+				return fmt.Errorf("create member %s: %w", m, e)
+			}
+			total++
+		}
+		if _, e := tx.Exec(`UPDATE channels SET subscribers = ? WHERE id = ?`, total, groupID); e != nil {
+			return fmt.Errorf("update subscriber count: %w", e)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	return groupID, nil
 }

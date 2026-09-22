@@ -6,12 +6,9 @@ package main
 import (
 
 	"encoding/json"
-	"fmt"
-
 	"log"
 	"net/http"
 
-	"time"
 	"github.com/unkillable-messenger/vpn/store"
 
 )
@@ -51,7 +48,7 @@ func (s *Server) handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	var req struct {
 		Name        string   `json:"name"`
-		CreatorNpub string   `json:"creatorNpub"`
+		CreatorNpub string   `json:"creatorNpub"` // ignored when auth is on (P4)
 		Members     []string `json:"members"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -62,47 +59,21 @@ func (s *Server) handleGroupCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
-	if req.Name == "" || req.CreatorNpub == "" {
-		writeError(w, 400, "BAD_REQUEST", "name and creatorNpub required")
+	// P4: the creator is whoever the JWT says — body claims are not trusted.
+	creator := req.CreatorNpub
+	if npub, ok := r.Context().Value("npub").(string); ok && npub != "" {
+		creator = npub
+	}
+	if req.Name == "" || creator == "" {
+		writeError(w, 400, "BAD_REQUEST", "name required")
 		return
 	}
 
-	groupID := fmt.Sprintf("grp-%d", time.Now().UnixNano())
-
-	// Add creator as admin
-	if err := s.db.SaveGroupMember(store.GroupMember{
-		GroupID:  groupID,
-		UserNpub: req.CreatorNpub,
-		Role:     "admin",
-		JoinedAt: time.Now().Unix(),
-	}); err != nil {
+	groupID, err := s.db.CreateGroup(req.Name, creator, req.Members)
+	if err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
 	}
-
-	// Add members
-	for _, m := range req.Members {
-		if m == req.CreatorNpub {
-			continue
-		}
-		s.db.SaveGroupMember(store.GroupMember{
-			GroupID:  groupID,
-			UserNpub: m,
-			Role:     "member",
-			JoinedAt: time.Now().Unix(),
-		})
-	}
-
-	// Also create as a channel for message routing
-	ch := store.Channel{
-		ID:          groupID,
-		Name:        req.Name,
-		Description: "Group chat",
-		Creator:     req.CreatorNpub,
-		Subscribers: len(req.Members) + 1,
-		CreatedAt:   time.Now().Unix(),
-	}
-	s.db.SaveChannel(ch)
 
 	writeJSON(w, 200, map[string]interface{}{
 		"status":  "created",
@@ -130,6 +101,20 @@ func (s *Server) handleGroupMembers(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeError(w, 500, "DB_ERROR", err.Error())
 		return
+	}
+	// P4: the member list is visible only to participants.
+	if npub, ok := r.Context().Value("npub").(string); ok && npub != "" {
+		member := false
+		for _, m := range members {
+			if m.UserNpub == npub {
+				member = true
+				break
+			}
+		}
+		if !member {
+			writeError(w, 403, "FORBIDDEN", "not a group member")
+			return
+		}
 	}
 	if members == nil {
 		members = []store.GroupMember{}
@@ -162,12 +147,21 @@ func (s *Server) handleGroupKick(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
-	if req.GroupID == "" || req.AdminNpub == "" || req.TargetNpub == "" {
-		writeError(w, 400, "BAD_REQUEST", "groupId, adminNpub and targetNpub required")
+	if req.GroupID == "" || req.TargetNpub == "" {
+		writeError(w, 400, "BAD_REQUEST", "groupId and targetNpub required")
+		return
+	}
+	// P4: admin identity comes from JWT claims, never from the body.
+	adminNpub := req.AdminNpub
+	if npub, ok := r.Context().Value("npub").(string); ok && npub != "" {
+		adminNpub = npub
+	}
+	if adminNpub == "" {
+		writeError(w, 401, "UNAUTHORIZED", "identity required")
 		return
 	}
 
-	isAdmin, err := s.db.IsGroupAdmin(req.GroupID, req.AdminNpub)
+	isAdmin, err := s.db.IsGroupAdmin(req.GroupID, adminNpub)
 	if err != nil || !isAdmin {
 		writeError(w, 403, "FORBIDDEN", "Only admin can kick members")
 		return
@@ -203,16 +197,25 @@ func (s *Server) handleGroupPromote(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 400, "VALIDATION_ERROR", err.Error())
 		return
 	}
-	if req.GroupID == "" || req.AdminNpub == "" || req.TargetNpub == "" || req.NewRole == "" {
-		writeError(w, 400, "BAD_REQUEST", "groupId, adminNpub, targetNpub and newRole required")
+	if req.GroupID == "" || req.TargetNpub == "" || req.NewRole == "" {
+		writeError(w, 400, "BAD_REQUEST", "groupId, targetNpub and newRole required")
 		return
 	}
 	if req.NewRole != "admin" && req.NewRole != "moderator" && req.NewRole != "member" {
 		writeError(w, 400, "BAD_REQUEST", "newRole must be admin, moderator or member")
 		return
 	}
+	// P4: admin identity comes from JWT claims, never from the body.
+	adminNpub := req.AdminNpub
+	if npub, ok := r.Context().Value("npub").(string); ok && npub != "" {
+		adminNpub = npub
+	}
+	if adminNpub == "" {
+		writeError(w, 401, "UNAUTHORIZED", "identity required")
+		return
+	}
 
-	isAdmin, err := s.db.IsGroupAdmin(req.GroupID, req.AdminNpub)
+	isAdmin, err := s.db.IsGroupAdmin(req.GroupID, adminNpub)
 	if err != nil || !isAdmin {
 		writeError(w, 403, "FORBIDDEN", "Only admin can promote members")
 		return

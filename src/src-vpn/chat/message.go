@@ -47,6 +47,7 @@ type Message struct {
 	ReplyToFrom   string `json:"replyToFrom,omitempty"`   // sender of replied message
 	ForwardedFrom string `json:"forwardedFrom,omitempty"` // original sender npub for forwarded messages
 	TTL           int    `json:"ttl,omitempty"`           // self-destruct in seconds (0 = never)
+	Group         string `json:"group,omitempty"`         // P3: group room id (e.g. "group:g1") — empty = DM
 	IsE2E         bool   `json:"is_e2e,omitempty"`        // flag indicating the message payload (Text) is E2E encrypted
 	Encrypted     bool   `json:"encrypted,omitempty"`     // P5: client wire flag (must match ciphertext)
 	VoiceData     string `json:"voiceData,omitempty"`     // base64-encoded audio (legacy fallback)

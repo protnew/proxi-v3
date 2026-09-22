@@ -467,6 +467,15 @@ INSERT INTO contacts (id, name, public_key, endpoint, is_messenger_friend, grant
 CREATE INDEX IF NOT EXISTS idx_contacts_owner ON contacts(owner_user_id);
 `,
 	},
+	{
+		Version: 19,
+		Name:    "messages_group_id",
+		Up: `
+-- P3: group messages keep their room id through the server (wire + REST).
+ALTER TABLE messages ADD COLUMN group_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_messages_group ON messages(group_id);
+`,
+	},
 }
 
 

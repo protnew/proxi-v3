@@ -191,6 +191,7 @@ func (s *Server) initHub() {
 				ReplyTo:       msg.ReplyTo,
 				ForwardedFrom: msg.ForwardedFrom,
 				TTL:           msg.TTL,
+				Group:         msg.Group,
 			}
 			// Enrich reply with preview text
 			if msg.ReplyTo != "" {

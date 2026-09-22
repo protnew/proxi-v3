@@ -24,6 +24,7 @@ type Message struct {
 	ForwardedFrom string `json:"forwardedFrom,omitempty"` // npub автора пересланного
 	Attachments   string `json:"attachments,omitempty"`   // JSON array of file IDs
 	TTL           int    `json:"ttl,omitempty"`           // seconds until self-destruct (0 = never)
+	Group         string `json:"group,omitempty"`         // P3: group room id ("group:g1"), пусто = DM
 	Sig           string `json:"sig,omitempty"`           // CRYP-012 Ed25519 base64
 }
 
@@ -50,10 +51,10 @@ func (s *Store) SaveMessage(msg Message) error {
 		return fmt.Errorf("message too long: %d > %d", len(msg.Text), MaxMessageLen)
 	}
 	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, group_id)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		msg.ID, msg.From, msg.To, msg.Text, boolToInt(msg.Encrypted), msg.Timestamp,
-		msg.ReplyTo, msg.ForwardedFrom, msg.Attachments, msg.TTL,
+		msg.ReplyTo, msg.ForwardedFrom, msg.Attachments, msg.TTL, msg.Group,
 	)
 	if err != nil {
 		return fmt.Errorf("save message %s: %w", msg.ID, err)
@@ -98,14 +99,15 @@ func (s *Store) DeleteMessage(messageID, senderNpub string) error {
 // given npub is either sender or recipient.
 
 func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, error) {
+	// P14: take the NEWEST `limit` rows (DESC) and return them oldest-first.
 	rows, err := s.db.Query(
-		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, IFNULL(group_id, '')
 		 FROM messages
 		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND timestamp > ?
 		   AND (recipient = 'broadcast'
 		        OR sender = ?
 		        OR recipient = ?)
-		 ORDER BY timestamp ASC
+		 ORDER BY timestamp DESC
 		 LIMIT ?`,
 		since, npub, npub, limit,
 	)
@@ -119,26 +121,32 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 		var m Message
 		var enc int
 		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL); err != nil {
+			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL, &m.Group); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Encrypted = enc != 0
 		msgs = append(msgs, m)
 	}
-	return msgs, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i, j := 0, len(msgs)-1; i < j; i, j = i+1, j-1 {
+		msgs[i], msgs[j] = msgs[j], msgs[i]
+	}
+	return msgs, nil
 }
 
 // GetMessageByID returns a single message by ID, or error if not found.
 
 func (s *Store) GetMessageByID(id string) (*Message, error) {
 	row := s.db.QueryRow(
-		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
+		`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, IFNULL(group_id, '')
 		 FROM messages WHERE id = ? AND IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0`, id,
 	)
 	var m Message
 	var enc int
 	if err := row.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-		&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL); err != nil {
+		&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL, &m.Group); err != nil {
 		return nil, fmt.Errorf("message %s not found: %w", id, err)
 	}
 	m.Encrypted = enc != 0
@@ -297,7 +305,7 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 	var err error
 	if npub == "" {
 		rows, err = s.db.Query(
-			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
+			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, IFNULL(group_id, '')
 		 FROM messages
 		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND text LIKE ?
 		 ORDER BY timestamp DESC
@@ -306,7 +314,7 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 		)
 	} else {
 		rows, err = s.db.Query(
-			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl
+			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, IFNULL(group_id, '')
 		 FROM messages
 		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND text LIKE ?
 		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)
@@ -325,7 +333,7 @@ func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message,
 		var m Message
 		var enc int
 		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL); err != nil {
+			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL, &m.Group); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Encrypted = enc != 0
