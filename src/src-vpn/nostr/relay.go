@@ -1,4 +1,4 @@
-package nostr
+﻿package nostr
 
 import (
 	"crypto/sha256"
@@ -488,6 +488,8 @@ func (r *Relay) GetStats() map[string]interface{} {
 // Used for VPN signaling without a remote WS client. Skips ID/sig crypto verification
 // (local trust boundary). Still persists, broadcasts to subscribers, fires OnEvent.
 func (r *Relay) InjectLocalEvent(event Event) {
+	// R11/SigLocal: local inject bypasses schnorr; Sig=="local" must never be treated as authenticated Nostr events.
+
 	if event.CreatedAt == 0 {
 		event.CreatedAt = time.Now().Unix()
 	}

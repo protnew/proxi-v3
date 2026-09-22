@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"encoding/json"
@@ -106,7 +106,7 @@ func (s *Server) handleVPNSignaling(w http.ResponseWriter, r *http.Request) {
 			Kind:      vpn.VPNEventKind,
 			Tags:      [][]string{{"p", req.To}},
 			Content:   string(content),
-			Sig:       "local", // INF-010 local inject; production signs with nsec
+			Sig:       "local", // R11/SigLocal: UNSAFE/local-only — NOT schnorr; InjectLocalEvent must never pass Event.Verify / production AUTH
 		}
 		// Inject into relay → OnEvent → vpnSignaling.HandleIncomingEvent
 		if nostrRelay != nil {
