@@ -120,3 +120,32 @@ func TestInvalidToken(t *testing.T) {
 		t.Error("expected error for empty token, got nil")
 	}
 }
+
+// P17: refresh tokens rotate once; replaying a consumed token revokes the family.
+func TestRefreshTokenRotationAndReuse(t *testing.T) {
+	svc := NewAuthService("test-secret-key-32bytes-long!!")
+	_, refresh, err := svc.GenerateTokenPair("u1", "npub1x")
+	if err != nil {
+		t.Fatalf("GenerateTokenPair: %v", err)
+	}
+	a1, r1, err := svc.RefreshToken(refresh)
+	if err != nil {
+		t.Fatalf("first refresh: %v", err)
+	}
+	if a1 == "" || r1 == "" {
+		t.Fatal("empty pair")
+	}
+	// Replaying the ORIGINAL token must fail AND revoke the family.
+	if _, _, err := svc.RefreshToken(refresh); err == nil {
+		t.Fatal("expected reuse of original refresh token to fail")
+	}
+	// The rotated successor is now revoked too.
+	if _, _, err := svc.RefreshToken(r1); err == nil {
+		t.Fatal("expected family revocation to invalidate the successor")
+	}
+	// A fresh login keeps working.
+	_, refresh2, _ := svc.GenerateTokenPair("u1", "npub1x")
+	if _, _, err := svc.RefreshToken(refresh2); err != nil {
+		t.Fatalf("fresh login refresh: %v", err)
+	}
+}
