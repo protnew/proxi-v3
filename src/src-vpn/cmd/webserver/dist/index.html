@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Proxi</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; }
+    </style>
+    <script type="module" crossorigin src="/assets/index-hXfnH4I4.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-DozQUjrq.css">
+  <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
+  <body>
+    <div id="app"></div>
+        <script>
+      // DOM-level safety: hide loading overlay after 9s regardless of Svelte state
+      window.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+          var el = document.getElementById('loading-overlay');
+          if (el && el.style.display !== 'none') {
+            el.style.display = 'none';
+          }
+        }, 9000);
+      });
+    </script>
+  </body>
+</html>
