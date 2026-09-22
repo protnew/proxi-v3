@@ -26,7 +26,6 @@
   let killSwitch = $state(false)
   // P4: DM/VPN-signaling ходит только через встроенный relay — публичные
   // релеи сливают соцграф. Поле информационное (канон: local /nostr).
-  // R2/P9: public relays banned; local hub /nostr only
   let relayList = $state(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/nostr`)
 
   async function loadSeed() {
@@ -117,7 +116,7 @@
 
   async function doShowQR() {
     if (showQR) { showQR = false; return }
-    qrDataUrl = await generateContactQR({ type: 'nostr', pubkey: currentProfile?.pubkey ||  name: currentProfile?.name || '' })
+    qrDataUrl = await generateContactQR({ type: 'nostr', pubkey: currentProfile?.pubkey || '', name: currentProfile?.name || '' })
     showQR = true
   }
 
