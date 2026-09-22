@@ -1,3 +1,4 @@
+﻿<!-- R2/P9 2026-09-22: public Nostr relays neutralized; defaults empty/local hub -->
 <script lang="ts">
   import * as stores from '../stores/messenger'
   import { setE2EEnabled, loadE2EPref, toggleVPN } from '../lib/api-extended'
@@ -10,7 +11,7 @@
   let tab = $state<'profile' | 'contacts' | 'chats' | 'advanced'>('profile')
   let e2eOn = $state(true)
   let vpnOn = $state(false)
-  let currentProfile = $state<stores.Profile>({ pubkey: '', name: '', about: '', avatar: '👤' })
+  let currentProfile = $state<stores.Profile>({ pubkey:  name:  about:  avatar: '👤' })
   let contactList = $state<stores.Contact[]>([])
   let chatList = $state<stores.Chat[]>([])
 
@@ -116,7 +117,7 @@
 
   async function doShowQR() {
     if (showQR) { showQR = false; return }
-    qrDataUrl = await generateContactQR({ type: 'nostr', pubkey: currentProfile?.pubkey || '', name: currentProfile?.name || '' })
+    qrDataUrl = await generateContactQR({ type: 'nostr', pubkey: currentProfile?.pubkey ||  name: currentProfile?.name || '' })
     showQR = true
   }
 
