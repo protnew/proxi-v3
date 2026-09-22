@@ -10,9 +10,9 @@ import { getConversationKey, encrypt as nip44Encrypt, decrypt as nip44Decrypt } 
 import type { Message } from '../stores/messenger'
 
 const RELAYS = [
-  'wss://relay.damus.io',
-  'wss://nos.lol',
-  'wss://relay.nostr.band',
+  'wss://relay.example.invalid',
+  'wss://relay.example.invalid',
+  'wss://relay.example.invalid',
 ]
 
 // Nostr event kinds we use
