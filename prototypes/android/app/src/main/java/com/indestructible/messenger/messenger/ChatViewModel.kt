@@ -478,18 +478,38 @@ class ChatViewModel(
         }.start()
     }
 
+    // P11: filemeta comes from the peer and is attacker-controlled. Only a
+    // relative same-origin /api/files/... path may ever be fetched with the
+    // JWT; file names are reduced to their basename (no traversal).
+    private fun sanitizeFileUrl(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val u = raw.trim()
+        if (!u.startsWith("/api/files/")) return null
+        if (u.contains("..") || u.contains('@') || u.contains("://") || u.contains('\\')) return null
+        return u
+    }
+
+    private fun sanitizeFileName(raw: String?): String =
+        raw?.substringAfterLast('/')?.substringAfterLast('\\')?.takeIf { it.isNotBlank() && it != "." && it != ".." }
+            ?: "file"
+
     /** Download an attachment (JWT-authed) into app files dir. */
     fun downloadAttachment(fileUrl: String, fileName: String, onDone: (java.io.File?) -> Unit) {
+        val safeUrl = sanitizeFileUrl(fileUrl) ?: run {
+            Log.e("ChatVM", "blocked non-relative attachment url")
+            onDone(null); return
+        }
+        val safeName = sanitizeFileName(fileName)
         Thread {
             try {
                 val req = Request.Builder()
-                    .url(httpUrl + fileUrl)
+                    .url(httpUrl + safeUrl)
                     .header("Authorization", "Bearer $jwtToken")
                     .build()
                 val resp = client.newCall(req).execute()
                 if (resp.code != 200) { onDone(null); return@Thread }
                 val dir = java.io.File(appContext.filesDir, "attachments").apply { mkdirs() }
-                val out = java.io.File(dir, fileName.ifBlank { "file" })
+                val out = java.io.File(dir, safeName)
                 resp.body?.byteStream()?.use { inp ->
                     out.outputStream().use { inp.copyTo(it) }
                 }
@@ -614,13 +634,19 @@ class ChatViewModel(
                     if (finalText.startsWith("filemeta:")) {
                         try {
                             val meta = JSONObject(finalText.removePrefix("filemeta:"))
-                            fileUrl = meta.getString("url")
-                            fileName = meta.optString("name", "file")
+                            // P11: accept only relative same-origin file paths;
+                            // a hostile url/name degrades to a plain text bubble.
+                            fileUrl = sanitizeFileUrl(meta.getString("url"))
+                            fileName = sanitizeFileName(meta.optString("name", "file"))
                             fileSize = meta.optLong("size")
                             voiceDur = if (meta.has("dur")) meta.getInt("dur") else null
-                            mType = if (meta.optString("kind") == "voice")
-                                Message.Type.VOICE else Message.Type.FILE
-                            mText = fileName ?: "file"
+                            if (fileUrl != null) {
+                                mType = if (meta.optString("kind") == "voice")
+                                    Message.Type.VOICE else Message.Type.FILE
+                                mText = fileName ?: "file"
+                            } else {
+                                mText = fileName ?: "file"
+                            }
                         } catch (e: Exception) {
                             Log.e("ChatVM", "bad filemeta", e)
                         }
