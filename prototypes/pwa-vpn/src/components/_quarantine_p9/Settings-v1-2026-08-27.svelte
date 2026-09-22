@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
   import * as stores from '../stores/messenger'
   import { setE2EEnabled, loadE2EPref, toggleVPN } from '../lib/api-extended'
   import { updateProfile } from '../lib/api'
@@ -24,7 +24,7 @@
   let showSeed = $state(false)
   let pushEnabled = $state(false)
   let killSwitch = $state(false)
-  let relayList = $state('wss://relay.damus.io\nwss://nos.lol\nwss://relay.nostr.band')
+  let relayList = $state('\n\n')
 
   async function loadSeed() {
     identity = await loadIdentityAsync() as any
