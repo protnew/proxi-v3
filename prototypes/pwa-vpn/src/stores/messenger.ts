@@ -28,6 +28,8 @@ export interface Message {
   timestamp: number
   type: 'text' | 'voice' | 'file' | 'image' | 'system'
   read: boolean
+  /** P20: outbox honesty — pending until ACK; never invent ✓✓ */
+  deliveryStatus?: 'pending' | 'sent' | 'delivered' | 'failed'
   fileName?: string
   fileSize?: number
   fileUrl?: string
@@ -251,4 +253,18 @@ export function loadProfile() {
     const d = localStorage.getItem('messenger-profile')
     if (d) profile.set(JSON.parse(d))
   } catch {}
+}
+
+/** P20 helper: update delivery status without inventing read receipts */
+export function updateMessageDelivery(chatId: string, msgId: string, status: NonNullable<Message['deliveryStatus']>, read = false) {
+  chats.update(cs => {
+    if (!Array.isArray(cs)) return cs
+    return cs.map(c => {
+      if (c.id !== chatId) return c
+      return {
+        ...c,
+        messages: c.messages.map(m => m.id === msgId ? { ...m, deliveryStatus: status, read: read || m.read } : m),
+      }
+    })
+  })
 }

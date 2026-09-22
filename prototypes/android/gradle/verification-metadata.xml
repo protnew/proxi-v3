@@ -1,12 +1,13 @@
-﻿<?xml version="1.0" encoding="UTF-8"?>
-<!-- P28: verification-metadata scaffold for webrtc. Fill sha256 on next dependency bump. Do NOT create Choser X5 card. -->
-<verification-metadata xmlns="https://schema.gradle.org/dependency-verification" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- P28: verification-metadata scaffold. Fill component sha256 after X5 artifact decision. Do NOT create Choser X5 card here. -->
+<verification-metadata xmlns="https://schema.gradle.org/dependency-verification"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
   xsi:schemaLocation="https://schema.gradle.org/dependency-verification https://schema.gradle.org/dependency-verification/dependency-verification-1.3.xsd">
   <configuration>
     <verify-metadata>true</verify-metadata>
     <verify-signatures>false</verify-signatures>
   </configuration>
   <components>
-    <!-- TODO(P28): add org.webrtc component sha256 when artifact chosen (X5 gated). -->
+    <!-- TODO(P28/X5): add org.webrtc (or chosen) component + sha256 -->
   </components>
 </verification-metadata>

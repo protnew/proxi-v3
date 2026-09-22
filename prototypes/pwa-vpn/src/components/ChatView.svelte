@@ -4,6 +4,7 @@
   const dispatch = createEventDispatcher();
   import "./ChatView.css";
   import * as stores from '../stores/messenger'
+  import { updateMessageDelivery } from '../stores/messenger'
   import { sendDM, sendTyping, getName, sendFileManifest, sendBinaryVoice, sendGroupMessage, getSeckey } from '../lib/api'
   import { uploadFile, downloadByCID, formatCIDShort, MAX_FILE_BYTES } from '../lib/ipfs-storage'
   import { enqueue as outboxEnqueue, startOutboxWatcher } from '../lib/offline-outbox'
@@ -76,6 +77,31 @@
   })
   let peerPubkey = $derived(currentChatId?.replace('dm:', '').replace('group:', '') || '')
   let isGroup = $derived(currentChatId?.startsWith('group:') ?? false)
+  
+  // P19: header button handlers (no Amnezia; calls gated — toast only)
+  let showSearch = $state(false)
+  let searchQ = $state('')
+  let searchHits: Array<{ chatId: string; chatName: string; message: { id: string; text: string } }> = $state([])
+  let showHeaderMenu = $state(false)
+  function onSearchClick() {
+    showSearch = !showSearch
+    showHeaderMenu = false
+    if (showSearch) {
+      searchHits = searchMessages(searchQ || '') as any
+      toast(showSearch ? 'Поиск по сообщениям' : 'Поиск закрыт', 'info')
+    }
+  }
+  function onSearchInput() {
+    searchHits = searchMessages(searchQ) as any
+  }
+  function onMenuClick() {
+    showHeaderMenu = !showHeaderMenu
+    showSearch = false
+  }
+  function onCallClick() {
+    // R3/P5 gated (X3) — do not startCall / Amnezia here
+    toast('Звонки пока недоступны (ожидают решения X3)', 'warn')
+  }
   async function sendMessage() {
     let text = inputText.trim()
     if (!text || !currentChatId) return
@@ -96,7 +122,8 @@
       text,
       timestamp: ts,
       type: 'text',
-      read: true,
+      read: false,
+      deliveryStatus: 'pending',
       replyTo: replyTo?.id,
     }
     stores.addMessage(currentChatId, msg)
@@ -107,20 +134,20 @@
     try {
       if (isGroup) {
         const resp: any = await sendGroupMessage(peer, text)
-        if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp)
+        if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp); try { toast('Не удалось отправить в группу', 'error'); updateMessageDelivery(currentChatId, localId, 'failed') } catch {}
       } else {
         // P4: single DM factory — server /ws only (NostrChat is receive-only).
         let sent = false
         const resp: any = await sendDM(peer, text)
-        if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp)
+        if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp); try { toast('Не удалось отправить', 'error') } catch {}
         else if (resp?.status) sent = true
         if (!sent) {
-          outboxEnqueue(peer, text)
+          outboxEnqueue(peer, text); try { updateMessageDelivery(currentChatId, localId, 'pending'); toast('В очереди — отправится позже', 'warn') } catch {} /* P20-outbox-pending */
           console.log('[chatview] queued offline (outbox)')
         }
       }
     } catch (e) {
-      console.error('[chatview] sendMessage error', e)
+      console.error('[chatview] sendMessage error', e); try { toast('Ошибка отправки', 'error'); updateMessageDelivery(currentChatId, localId, 'failed') } catch {}
       try { if (!isGroup) outboxEnqueue(peerPubkey, text) } catch {}
     }
   }
@@ -196,7 +223,7 @@
     const isImage = file.type.startsWith('image/')
     const msgType = isImage ? 'image' : 'file'
     if (file.size > MAX_FILE_BYTES) {
-      console.error('[chatview] file too large', file.size)
+      console.error('[chatview] file too large', file.size); try { toast('Файл слишком большой', 'error') } catch {}
       alert(`Файл слишком большой (макс ${Math.round(MAX_FILE_BYTES/1024/1024)}MB)`)
       input.value = ''
       return
@@ -247,7 +274,7 @@
       }
       playOutgoing()
     } catch (err) {
-      console.error('[chatview] IPFS upload failed:', err)
+      console.error('[chatview] IPFS upload failed:', err); try { toast('Не удалось загрузить файл', 'error') } catch {}
       const url = URL.createObjectURL(file)
       const msg: Message = {
         id: crypto.randomUUID(),
@@ -319,14 +346,28 @@ function processMessageUrls(text: string) {
           {#if currentChat.typing && currentChat.typing.length > 0}
             <em>печатает...</em>
           {:else}
-            был(а) недавно
+            онлайн недавно <!-- P31-presence -->
           {/if}
         </span>
       </div>
-      <button class="hbtn">📞</button>
-      <button class="hbtn">🔍</button>
-      <button class="hbtn">⋮</button>
+      <button class="hbtn" type="button" title="Звонок" aria-label="Звонок" onclick={onCallClick}>📞</button>
+      <button class="hbtn" type="button" title="Поиск" aria-label="Поиск" onclick={onSearchClick}>🔍</button>
+      <button class="hbtn" type="button" title="Меню" aria-label="Меню" onclick={onMenuClick}>⋮</button>
     </div>
+        {#if showSearch}
+      <div class="search-panel" data-testid="chat-search-panel">
+        <input type="search" placeholder="Поиск…" bind:value={searchQ} oninput={onSearchInput} data-testid="chat-search-input" />
+        {#each searchHits.slice(0, 8) as hit}
+          <div class="search-hit">{hit.chatName}: {hit.message.text.slice(0, 80)}</div>
+        {/each}
+      </div>
+    {/if}
+    {#if showHeaderMenu}
+      <div class="header-menu" data-testid="chat-header-menu">
+        <button type="button" onclick={() => { showHeaderMenu = false; toast('Инфо чата — скоро', 'info') }}>О чате</button>
+        <button type="button" onclick={() => { showHeaderMenu = false; onSearchClick() }}>Поиск</button>
+      </div>
+    {/if}
     <div class="messages" bind:this={messagesEl}
       ondragover={(e) => { e.preventDefault(); e.stopPropagation() }}
       ondrop={(e) => {
@@ -384,7 +425,15 @@ function processMessageUrls(text: string) {
             {/if}
             <div class="meta">
               <span class="mtime">{formatTime(msg.timestamp)}</span>
-              {#if isMine(msg)}<span class="check">{msg.read ? '✓✓' : '✓'}</span>{/if}
+              {#if isMine(msg)}
+                <span class="check" title={msg.deliveryStatus || (msg.read ? 'read' : 'sent')}>
+                  {#if msg.deliveryStatus === 'pending'}⏳
+                  {:else if msg.deliveryStatus === 'failed'}⚠
+                  {:else if msg.deliveryStatus === 'delivered' || msg.read}✓✓
+                  {:else if msg.deliveryStatus === 'sent'}✓
+                  {:else}⏳{/if}
+                </span>
+              {/if}
             </div>
           </div>
         </div>

@@ -1,3 +1,5 @@
-﻿# P28 — webrtc pin / verification metadata
+# P28 — webrtc pin / verification-metadata
 - File: prototypes/android/gradle/verification-metadata.xml
-- Bump only after artifact decision (X5 card = gated — not created here).
+- Gradle can parse the scaffold (erify-metadata=true, empty components OK until pin).
+- Full pin only after X5 artifact decision — **no Choser card created in this increment**.
+- Check: xml well-formed; optional gradle --write-verification-metadata later.

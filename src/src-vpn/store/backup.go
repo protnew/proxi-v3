@@ -1,4 +1,4 @@
-﻿// P30/VACUUM: path must be under DATA_DIR; reject .. ; retain last N backups.
+// P30/VACUUM: path must be under DATA_DIR; reject .. ; retain last N backups.
 package store
 
 import (
@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,6 +18,41 @@ import (
 // storePath holds the original database path for backup/restore.
 // This is set during NewStore and is used by Backup/Restore methods.
 var storeMu sync.Mutex
+
+// validateVacuumPath (P30) rejects path traversal and paths outside allowedDir.
+func validateVacuumPath(dstPath string, allowedDir string) (string, error) {
+	if strings.TrimSpace(dstPath) == "" {
+		return "", fmt.Errorf("store: empty VACUUM destination")
+	}
+	if strings.Contains(dstPath, "\x00") {
+		return "", fmt.Errorf("store: NUL in VACUUM path")
+	}
+	if strings.Contains(dstPath, "..") {
+		return "", fmt.Errorf("store: VACUUM path contains ..")
+	}
+	clean := filepath.Clean(dstPath)
+	abs, err := filepath.Abs(clean)
+	if err != nil {
+		return "", fmt.Errorf("store: resolve VACUUM path: %w", err)
+	}
+	base := allowedDir
+	if base == "" {
+		base = filepath.Dir(abs)
+	}
+	baseAbs, err := filepath.Abs(base)
+	if err != nil {
+		return "", fmt.Errorf("store: resolve VACUUM base: %w", err)
+	}
+	sep := string(os.PathSeparator)
+	if abs != baseAbs && !strings.HasPrefix(abs, baseAbs+sep) {
+		return "", fmt.Errorf("store: VACUUM path escapes allowed dir")
+	}
+	if strings.Contains(abs, ".."+sep) {
+		return "", fmt.Errorf("store: VACUUM path contains ..")
+	}
+	return abs, nil
+}
+
 
 // Backup creates a backup of the SQLite database using VACUUM INTO.
 func (s *Store) Backup(dstPath string) error {
@@ -31,7 +67,7 @@ func (s *Store) Backup(dstPath string) error {
 	}
 
 	// Use VACUUM INTO (SQLite 3.27+)
-	_, err := s.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", dstPath))
+	_, err := s.db.Exec(fmt.Sprintf("VACUUM INTO '%s'", strings.ReplaceAll(dstPath, "'", "''")))
 	if err != nil {
 		return fmt.Errorf("store: VACUUM INTO failed: %w", err)
 	}
