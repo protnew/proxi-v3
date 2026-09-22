@@ -120,10 +120,22 @@
     showQR = true
   }
 
+  // P13: wipe must also drop IndexedDB (identity/history lived on after
+  // "Удалить все данные" and the account resurrected after reload).
+  async function wipeIndexedDB() {
+    const idb = indexedDB as any
+    if (!idb.databases) return
+    const dbs: { name: string }[] = await idb.databases()
+    await Promise.all((dbs || []).map(d => new Promise<void>(resolve => {
+      const req = indexedDB.deleteDatabase(d.name)
+      req.onsuccess = req.onerror = req.onblocked = () => resolve()
+    })))
+  }
+
   function clearData() {
     if (confirm('Удалить все данные? Чаты, контакты, ключи?')) {
       localStorage.clear()
-      location.reload()
+      wipeIndexedDB().finally(() => location.reload())
     }
   }
 </script>
@@ -156,6 +168,21 @@
         <div class="qr-box"><img src={qrDataUrl} alt="QR" /><p>Покажите другу для добавления</p></div>
       {/if}
     </div>
+  {:else if tab === 'contacts'}
+    <div class="sec">
+      <h4>Контакты ({contactList.length})</h4>
+      {#each contactList as c}
+        <div class="ci"><span class="ca">{c.avatar}</span><span class="cn">{c.name}</span><span class="cs">{c.isOnline ? '🟢' : '⚫'}</span></div>
+      {/each}
+      {#if contactList.length === 0}<p class="emp">Пусто</p>{/if}
+    </div>
+  {:else if tab === 'chats'}
+    <div class="sec">
+      <h4>Чаты ({chatList.length})</h4>
+      {#each chatList as c}
+        <div class="ci"><span class="ca">{c.avatar}</span><div><span class="cn">{c.name}</span><br><span class="cp">{c.id.slice(0, 20)}...</span></div></div>
+      {/each}
+    </div>
   {:else if tab === 'advanced'}
     <div class="sec">
       <h4>🔐 Шифрование</h4>
@@ -179,22 +206,6 @@
       </div>
       <p class="hint">Маршрутизация трафика через peer SOCKS5</p>
     </div>
-  {:else if tab === 'contacts'}
-    <div class="sec">
-      <h4>Контакты ({contactList.length})</h4>
-      {#each contactList as c}
-        <div class="ci"><span class="ca">{c.avatar}</span><span class="cn">{c.name}</span><span class="cs">{c.isOnline ? '🟢' : '⚫'}</span></div>
-      {/each}
-      {#if contactList.length === 0}<p class="emp">Пусто</p>{/if}
-    </div>
-  {:else if tab === 'chats'}
-    <div class="sec">
-      <h4>Чаты ({chatList.length})</h4>
-      {#each chatList as c}
-        <div class="ci"><span class="ca">{c.avatar}</span><div><span class="cn">{c.name}</span><br><span class="cp">{c.id.slice(0, 20)}...</span></div></div>
-      {/each}
-    </div>
-  {:else if tab === 'advanced'}
 
     <div class="setting-row">
       <span>🔊 Звук уведомлений</span>
