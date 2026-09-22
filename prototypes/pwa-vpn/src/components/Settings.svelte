@@ -1,5 +1,4 @@
-﻿<!-- R2/P9 2026-09-22: public Nostr relays neutralized; defaults empty/local hub -->
-<script lang="ts">
+﻿<script lang="ts">
   import * as stores from '../stores/messenger'
   import { setE2EEnabled, loadE2EPref, toggleVPN } from '../lib/api-extended'
   import { updateProfile } from '../lib/api'
@@ -11,7 +10,7 @@
   let tab = $state<'profile' | 'contacts' | 'chats' | 'advanced'>('profile')
   let e2eOn = $state(true)
   let vpnOn = $state(false)
-  let currentProfile = $state<stores.Profile>({ pubkey:  name:  about:  avatar: '👤' })
+  let currentProfile = $state<stores.Profile>({ pubkey: '', name: '', about: '', avatar: '👤' })
   let contactList = $state<stores.Contact[]>([])
   let chatList = $state<stores.Chat[]>([])
 
@@ -27,6 +26,7 @@
   let killSwitch = $state(false)
   // P4: DM/VPN-signaling ходит только через встроенный relay — публичные
   // релеи сливают соцграф. Поле информационное (канон: local /nostr).
+  // R2/P9: public relays banned; local hub /nostr only
   let relayList = $state(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/nostr`)
 
   async function loadSeed() {
