@@ -65,6 +65,17 @@ func (s *Server) scheduledMessagesLoop() {
 			continue
 		}
 		for _, sm := range msgs {
+			// P16: persist BEFORE delivering — an offline recipient must find
+			// the message in history after a restart, WS delivery is lossy.
+			if err := s.db.SaveMessage(store.Message{
+				ID:        fmt.Sprintf("sched-%s", sm.ID),
+				From:      sm.Sender,
+				To:        sm.Recipient,
+				Text:      sm.Text,
+				Timestamp: time.Now().Unix(),
+			}); err != nil {
+				log.Printf("📅 Scheduled save failed %s: %v", sm.ID, err)
+			}
 			// Send via WS
 			chatMsg := &chat.Message{
 				Type: "chat",

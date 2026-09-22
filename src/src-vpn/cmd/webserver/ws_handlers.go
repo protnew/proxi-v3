@@ -150,7 +150,11 @@ func (s *Server) initHub() {
 		s.drSessions = chat.NewDRSessionStore() // CRYP-010
 	}
 	if s.db != nil {
-		s.drSessions.SetMarker(s.db) // P13: persist session markers, fail closed after restart
+		// P13/P16: DR ratchet state itself is RAM-only (documented limitation
+		// until the E2E model fork X2 is decided). The persisted marker makes
+		// this fail CLOSED: after a restart sessions are marked lost and the
+		// clients re-handshake instead of hitting dead dr1: ciphertext.
+		s.drSessions.SetMarker(s.db)
 	}
 	s.hub.OnMessage = func(msg *chat.Message) {
 		// P5: never log message bodies on the hot path (metadata only).

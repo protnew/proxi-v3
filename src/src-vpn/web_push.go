@@ -53,8 +53,9 @@ var (
 	vapidPriv  *ecdsa.PrivateKey
 	vapidSubj  = "mailto:push@indestructible.local"
 	keysSource = ""
-	pushSubsMu sync.Mutex
-	pushSubs   []pushSub
+	pushSubsMu      sync.Mutex
+	pushSubs        []pushSub
+	pushSubsLoaded  bool // P16: load push_subscriptions.json once, lazily (env ready by then)
 )
 
 func init() {
@@ -209,6 +210,7 @@ func EnsureDevVAPID() (pub string, err error) {
 }
 
 func GetPushConfig() PushConfig {
+	ensurePushSubsLoaded()
 	pushMu.RLock()
 	defer pushMu.RUnlock()
 	cfg := pushCfg
@@ -228,12 +230,32 @@ func HandlePushConfig(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(cfg)
 }
 
+// ensurePushSubsLoaded — P16: subscriptions were written to disk but never
+// read back, so every restart silently dropped all subscribers.
+func ensurePushSubsLoaded() {
+	pushSubsMu.Lock()
+	defer pushSubsMu.Unlock()
+	if pushSubsLoaded {
+		return
+	}
+	pushSubsLoaded = true
+	b, err := os.ReadFile(filepath.Join(dataDir(), "push_subscriptions.json"))
+	if err != nil {
+		return
+	}
+	var subs []pushSub
+	if json.Unmarshal(b, &subs) == nil && len(subs) > 0 {
+		pushSubs = subs
+	}
+}
+
 // HandlePushSubscribe POST /api/push/subscribe
 func HandlePushSubscribe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	ensurePushSubsLoaded()
 	var raw json.RawMessage
 	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
@@ -280,6 +302,7 @@ func HandlePushSend(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method", http.StatusMethodNotAllowed)
 		return
 	}
+	ensurePushSubsLoaded()
 	var body struct {
 		Title string `json:"title"`
 		Body  string `json:"body"`
