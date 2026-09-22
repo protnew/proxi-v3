@@ -1,4 +1,5 @@
-<script lang="ts">
+﻿<script lang="ts">
+  import { toast } from '../lib/toast'; // P19
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
   import "./ChatView.css";

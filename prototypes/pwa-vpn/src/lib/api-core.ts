@@ -1,3 +1,4 @@
+﻿// P20: outbox -> pending, not instant delivered/read
 /**
  * API client for Go backend (Indestructible Messenger / Proxi).
  *
