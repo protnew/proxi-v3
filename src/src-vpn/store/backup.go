@@ -1,3 +1,4 @@
+﻿// P30/VACUUM: path must be under DATA_DIR; reject .. ; retain last N backups.
 package store
 
 import (
