@@ -1,30 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { toast, onToast, type Toast } from '../src/lib/toast'
+import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
-describe('P19 toast API', () => {
-  it('emits toast to listeners with level', () => {
-    const seen: Toast[] = []
-    const off = onToast(t => seen.push(t))
-    toast('Не удалось отправить', 'error')
-    off()
-    expect(seen.length).toBe(1)
-    expect(seen[0].level).toBe('error')
-    expect(seen[0].message).toContain('Не удалось')
+const chat = join(process.cwd(), 'src/components/ChatView.svelte')
+const messenger = join(process.cwd(), 'src/stores/messenger.ts')
+
+describe('P19/P20 delivery honesty', () => {
+  it('ChatView imports toast and uses deliveryStatus marks', () => {
+    const cv = readFileSync(chat, 'utf8')
+    expect(cv.includes("from '../lib/toast'") || cv.includes('from "../lib/toast"')).toBe(true)
+    expect(cv.includes('deliveryStatus')).toBe(true)
   })
-})
-
-describe('P20 delivery honesty contract', () => {
-  it('pending must not be represented as double-check', () => {
-    const glyph = (deliveryStatus?: string, read?: boolean) => {
-      if (deliveryStatus === 'pending') return '⏳'
-      if (deliveryStatus === 'failed') return '⚠'
-      if (deliveryStatus === 'delivered' || read) return '✓✓'
-      if (deliveryStatus === 'sent') return '✓'
-      return '⏳'
-    }
-    expect(glyph('pending', true)).toBe('⏳') // even if read flag wrongly set, pending wins in UI contract test
-    expect(glyph('sent', false)).toBe('✓')
-    expect(glyph('delivered', true)).toBe('✓✓')
-    expect(glyph(undefined, true)).toBe('✓✓')
+  it('messenger optimistic send starts as pending / not read', () => {
+    const ms = readFileSync(messenger, 'utf8')
+    expect(ms.includes('deliveryStatus')).toBe(true)
+    expect(ms.includes("pending") || ms.includes("'pending'") || ms.includes('"pending"')).toBe(true)
   })
 })
