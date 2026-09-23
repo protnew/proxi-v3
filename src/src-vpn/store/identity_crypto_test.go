@@ -196,3 +196,25 @@ func truncate(s string, n int) string {
 	}
 	return s[:n]
 }
+
+func TestIdentityKeyFileBinaryWhitespace(t *testing.T) {
+	// Regression: raw key files must accept edge bytes that TrimSpace would strip.
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "k.identity.key")
+	var raw [32]byte
+	raw[0] = 0x20  // space
+	raw[31] = 0x0a // newline
+	for i := 1; i < 31; i++ {
+		raw[i] = byte(i)
+	}
+	if err := os.WriteFile(keyPath, raw[:], 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readIdentityKeyFile(keyPath)
+	if err != nil {
+		t.Fatalf("readIdentityKeyFile: %v", err)
+	}
+	if got != raw {
+		t.Fatalf("key mismatch after read")
+	}
+}

@@ -5,11 +5,39 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+	"time"
 )
 
+func TestMain(m *testing.M) {
+	clearProxyEnv()
+	os.Exit(m.Run())
+}
+
+func clearProxyEnv() {
+	for _, k := range []string{
+		"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+		"http_proxy", "https_proxy", "all_proxy", "no_proxy",
+	} {
+		_ = os.Unsetenv(k)
+	}
+}
+
+// withNoProxy forces FilecoinPinner's client to ignore ambient HTTP(S)_PROXY.
+func withNoProxy(fp *FilecoinPinner) *FilecoinPinner {
+	var tr http.RoundTripper = &http.Transport{Proxy: nil}
+	if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+		cl := dt.Clone()
+		cl.Proxy = nil
+		tr = cl
+	}
+	fp.httpClient = &http.Client{Timeout: 30 * time.Second, Transport: tr}
+	return fp
+}
+
 func TestNewFilecoinPinner(t *testing.T) {
-	fp := NewFilecoinPinner("http://localhost:5001", "test-token")
+	fp := withNoProxy(NewFilecoinPinner("http://localhost:5001", "test-token"))
 	if fp == nil {
 		t.Fatal("NewFilecoinPinner returned nil")
 	}
@@ -43,7 +71,7 @@ func TestPinCID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	reqID, err := fp.PinCID("QmTestCID123")
 	if err != nil {
 		t.Fatalf("PinCID failed: %v", err)
@@ -59,7 +87,7 @@ func TestPinCIDError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "bad-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "bad-token"))
 	_, err := fp.PinCID("QmTestCID123")
 	if err == nil {
 		t.Fatal("expected error for unauthorized request")
@@ -80,7 +108,7 @@ func TestUnpinCID(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	if err := fp.UnpinCID("QmTestCID123"); err != nil {
 		t.Fatalf("UnpinCID failed: %v", err)
 	}
@@ -92,7 +120,7 @@ func TestUnpinCIDError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	err := fp.UnpinCID("QmNonExistent")
 	if err == nil {
 		t.Fatal("expected error for non-existent CID")
@@ -115,7 +143,7 @@ func TestGetStatus(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	status, err := fp.GetStatus("QmTestCID123")
 	if err != nil {
 		t.Fatalf("GetStatus failed: %v", err)
@@ -131,7 +159,7 @@ func TestGetStatusError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	_, err := fp.GetStatus("QmTestCID123")
 	if err == nil {
 		t.Fatal("expected error for server error")
@@ -148,21 +176,21 @@ func TestIsAvailable(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	if !fp.IsAvailable() {
 		t.Fatal("expected IsAvailable to return true")
 	}
 }
 
 func TestIsAvailableEmptyURL(t *testing.T) {
-	fp := NewFilecoinPinner("", "test-token")
+	fp := withNoProxy(NewFilecoinPinner("", "test-token"))
 	if fp.IsAvailable() {
 		t.Fatal("expected IsAvailable to return false for empty URL")
 	}
 }
 
 func TestIsAvailableUnreachable(t *testing.T) {
-	fp := NewFilecoinPinner("http://127.0.0.1:1", "test-token")
+	fp := withNoProxy(NewFilecoinPinner("http://127.0.0.1:1", "test-token"))
 	if fp.IsAvailable() {
 		t.Fatal("expected IsAvailable to return false for unreachable server")
 	}
@@ -188,7 +216,7 @@ func TestUploadData(t *testing.T) {
 	}))
 	defer server.Close()
 
-	fp := NewFilecoinPinner(server.URL, "test-token")
+	fp := withNoProxy(NewFilecoinPinner(server.URL, "test-token"))
 	cid, err := fp.UploadData("test.txt", []byte("hello world"))
 	if err != nil {
 		t.Fatalf("UploadData failed: %v", err)

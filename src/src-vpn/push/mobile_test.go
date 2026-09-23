@@ -4,9 +4,24 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 )
+
+func TestMain(m *testing.M) {
+	clearProxyEnv()
+	os.Exit(m.Run())
+}
+
+func clearProxyEnv() {
+	for _, k := range []string{
+		"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
+		"http_proxy", "https_proxy", "all_proxy", "no_proxy",
+	} {
+		_ = os.Unsetenv(k)
+	}
+}
 
 func TestSendFCM_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,7 +51,7 @@ func TestSendFCM_Success(t *testing.T) {
 	// use a custom transport to redirect
 	p.client.Transport = &redirectTransport{
 		url:       srv.URL,
-		transport: http.DefaultTransport,
+		transport: &http.Transport{Proxy: nil},
 	}
 
 	err := p.SendFCM("device123", PushPayload{
@@ -67,7 +82,7 @@ func TestSendFCM_WithData(t *testing.T) {
 
 	p := NewMobilePusher(MobilePushConfig{FCMServerKey: "key"})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendFCM("dev1", PushPayload{
 		Title: "Test",
@@ -87,7 +102,7 @@ func TestSendFCM_ServerError(t *testing.T) {
 
 	p := NewMobilePusher(MobilePushConfig{FCMServerKey: "key"})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendFCM("dev1", PushPayload{Title: "T", Body: "B"})
 	if err == nil {
@@ -124,7 +139,7 @@ func TestSendAPNs_Success_Sandbox(t *testing.T) {
 		APNSBundleID: "com.test.app",
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendAPNs("device456", PushPayload{
 		Title: "Alert",
@@ -149,7 +164,7 @@ func TestSendAPNs_Production(t *testing.T) {
 		APNSProduction: true,
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendAPNs("dev1", PushPayload{Title: "T", Body: "B"})
 	if err != nil {
@@ -174,7 +189,7 @@ func TestSendAPNs_WithCollapseID(t *testing.T) {
 		APNSBundleID: "com.app",
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendAPNs("dev1", PushPayload{
 		Title:      "T",
@@ -203,7 +218,7 @@ func TestSendAPNs_WithData(t *testing.T) {
 		APNSBundleID: "com.app",
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendAPNs("dev1", PushPayload{
 		Title: "T",
@@ -226,7 +241,7 @@ func TestSendAPNs_ServerError(t *testing.T) {
 		APNSBundleID: "com.app",
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.SendAPNs("dev1", PushPayload{Title: "T", Body: "B"})
 	if err == nil {
@@ -251,7 +266,7 @@ func TestSend_PrefersFCM(t *testing.T) {
 		APNSBundleID: "com.app",
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.Send("dev1", PushPayload{Title: "T", Body: "B"})
 	if err != nil {
@@ -275,7 +290,7 @@ func TestSend_FallbackToAPNs(t *testing.T) {
 		APNSBundleID: "com.app",
 	})
 	p.client = srv.Client()
-	p.client.Transport = &redirectTransport{url: srv.URL, transport: http.DefaultTransport}
+	p.client.Transport = &redirectTransport{url: srv.URL, transport: &http.Transport{Proxy: nil}}
 
 	err := p.Send("dev1", PushPayload{Title: "T", Body: "B"})
 	if err != nil {
@@ -309,6 +324,8 @@ func TestPushPayload_JSON(t *testing.T) {
 }
 
 // redirectTransport redirects all requests to the test server URL
+// Base transport must not be http.DefaultTransport (honors HTTP(S)_PROXY).
+// Use &http.Transport{Proxy: nil} or httptest Client.Transport.
 type redirectTransport struct {
 	url       string
 	transport http.RoundTripper

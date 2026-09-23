@@ -126,13 +126,15 @@ func readIdentityKeyFile(path string) ([32]byte, error) {
 	if err != nil {
 		return key, fmt.Errorf("read identity key file %s: %w", path, err)
 	}
-	data = []byte(strings.TrimSpace(string(data)))
+	// Raw 32-byte keys are binary: never TrimSpace — 0x09/0x0a/0x20 etc. are valid key bytes.
+	// TrimSpace only for hex text form (64 chars).
 	if len(data) == 32 {
 		copy(key[:], data)
 		return key, nil
 	}
-	if len(data) == 64 {
-		raw, err := hex.DecodeString(string(data))
+	trimmed := []byte(strings.TrimSpace(string(data)))
+	if len(trimmed) == 64 {
+		raw, err := hex.DecodeString(string(trimmed))
 		if err != nil || len(raw) != 32 {
 			return key, fmt.Errorf("identity key file %s: expected 32 raw bytes or 64 hex", path)
 		}
