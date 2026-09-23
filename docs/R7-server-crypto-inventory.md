@@ -1,16 +1,33 @@
-﻿# R7 — server auto-decrypt/encrypt inventory (2026-09-22)
+# R7 server crypto inventory — X2 CONFIRMED 2026-09-23
 
-**Do not expand** DecryptMessageFromSender(..., IdentityKey, ...).
+## Status: FAIL-CLOSED ACTIVE (client-blind)
 
-## Call sites
-```
-C:\Obsidian\New\Projects\04-Неубиваемый-контент V2\.04-Src\src\src-vpn\cmd\webserver\routing_chat.go:76:pt, used, err := s.drSessions.DecryptInbound(currentUserNpub, m.From, m.Text)
-C:\Obsidian\New\Projects\04-Неубиваемый-контент V2\.04-Src\src\src-vpn\cmd\webserver\routing_chat.go:89:plaintext, err := chat.DecryptMessageFromSender(m.Text, recipientBundle.IdentityKey, m.From)
-C:\Obsidian\New\Projects\04-Неубиваемый-контент V2\.04-Src\src\src-vpn\cmd\webserver\routing_chat.go:178:ct, usedDR, derr := s.drSessions.EncryptOutbound(req.From, req.To, req.Text)
-C:\Obsidian\New\Projects\04-Неубиваемый-контент V2\.04-Src\src\src-vpn\cmd\webserver\routing_chat.go:193:enc, err := chat.EncryptMessageForRecipient(req.Text, senderBundle.IdentityKey, req.To)
-```
+Server message handlers in `routing_chat.go` no longer call:
 
-## Policy
-- Until X2 decision: leave dead path; annotate; no new call sites.
-- Full deletion / fail-closed only after Alexey yes on X2.
-- Public-only prekey bundles: server must not require recipient privkey.
+| Symbol | Former role | Status |
+|--------|-------------|--------|
+| `DecryptInbound` (DR) | GET auto-decrypt | **REMOVED** |
+| `DecryptMessageFromSender` | GET legacy ECDH decrypt | **REMOVED** |
+| `EncryptOutbound` (DR) | POST server encrypt | **REMOVED** |
+| `EncryptMessageForRecipient` | POST legacy ECDH encrypt | **REMOVED** |
+
+## Current behavior
+
+### GET `/api/messages`
+- Returns rows as stored.
+- `Encrypted` flag preserved.
+- Client decrypts locally (NIP-44 / DR on device).
+
+### POST `/api/messages`
+- Client ciphertext (`LooksLikeClientCiphertext`) → store as-is, `Encrypted=true`.
+- `encrypted`/`is_e2e` flag without ciphertext shape → **422 `E2E_FLAG_MISMATCH`**.
+- Non-broadcast DM plaintext → **422 `PLAINTEXT_DM_FORBIDDEN`**.
+- Broadcast plaintext → OK (unencrypted storage).
+
+## Tests
+- `r7_fail_closed_test.go` — string-scan asserts zero forbidden call sites.
+- `r7_public_only_bundle_test.go` — hygiene log (kept).
+
+## Out of scope (locks)
+- No machineId, no Amnezia, no slog, no group crypto in this wave.
+- X4 deferred.

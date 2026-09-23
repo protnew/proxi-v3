@@ -1,5 +1,6 @@
 <script lang="ts">
   import { toast } from '../lib/toast'; // P19
+  import { startCall } from '../lib/calls'; // X3 2026-09-23
   import { createEventDispatcher } from 'svelte';
   const dispatch = createEventDispatcher();
   import "./ChatView.css";
@@ -99,8 +100,14 @@
     showSearch = false
   }
   function onCallClick() {
-    // R3/P5 gated (X3) — do not startCall / Amnezia here
-    toast('Звонки пока недоступны (ожидают решения X3)', 'warn')
+    // X3 CONFIRMED 2026-09-23 — wire 📞 to startCall (no Amnezia)
+    if (!peerPubkey) {
+      toast('Нет собеседника для звонка', 'warn')
+      return
+    }
+    void startCall(peerPubkey, true).catch(() => {
+      toast('Не удалось начать звонок', 'error')
+    })
   }
   async function sendMessage() {
     let text = inputText.trim()

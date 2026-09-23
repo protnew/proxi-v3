@@ -31,6 +31,7 @@ import { makeChatPayload } from './api-payload';
 import * as secp from '@noble/secp256k1';
 import { encryptDM } from './nip-e2e';
 import { loadIdentityAsync } from './identity';
+import { handleCallSignal } from './calls';
 
 // If VITE_API_URL is empty → same-origin (Go serves both dist + API on one port).
 // This is how "Telegram Web" works: one URL, no separate API host.
@@ -253,6 +254,31 @@ function wsProtocols(): string | string[] | undefined {
   return undefined;
 }
 
+/** X3/P5: classify WS payload for hub override (key_exchange + call signals). Exported for vitest. */
+export type WsRouteKind = 'presence-join' | 'presence-leave' | 'typing' | 'call' | 'message';
+
+export function routeWsPayload(msg: any): WsRouteKind {
+  if (!msg || typeof msg !== 'object') return 'message';
+  switch (msg.type) {
+    case 'join':
+      return 'presence-join';
+    case 'leave':
+      return 'presence-leave';
+    case 'typing':
+      return 'typing';
+    case 'key_exchange':
+    case 'call-offer':
+    case 'call-answer':
+    case 'call-ice':
+    case 'call-hangup':
+    case 'call-end':
+    case 'call-reject':
+      return 'call';
+    default:
+      return 'message';
+  }
+}
+
 function handleWsMessage(event: MessageEvent) {
   let msg: any;
   try {
@@ -261,6 +287,28 @@ function handleWsMessage(event: MessageEvent) {
     return;
   }
   if (!msg || typeof msg !== 'object') return;
+
+  const kind = routeWsPayload(msg);
+
+  // X3 hub override (2026-09-23): key_exchange + call-* before chat default.
+  if (kind === 'call') {
+    const signal = msg.signal ?? msg;
+    void handleCallSignal(msg.from || '', signal);
+    return;
+  }
+
+  if (kind === 'presence-join') {
+    presenceCallbacks.forEach(cb => cb(msg.from, true));
+    return;
+  }
+  if (kind === 'presence-leave') {
+    presenceCallbacks.forEach(cb => cb(msg.from, false));
+    return;
+  }
+  if (kind === 'typing') {
+    typingCallbacks.forEach(cb => cb(msg.from));
+    return;
+  }
 
   // Map Go chat.Message → Svelte Message shape.
   const mapped: Message = {
@@ -278,20 +326,7 @@ function handleWsMessage(event: MessageEvent) {
     replyTo: msg.replyTo,
     forwardedFrom: msg.forwardedFrom,
   };
-
-  switch (msg.type) {
-    case 'join':
-      presenceCallbacks.forEach(cb => cb(msg.from, true));
-      break;
-    case 'leave':
-      presenceCallbacks.forEach(cb => cb(msg.from, false));
-      break;
-    case 'typing':
-      typingCallbacks.forEach(cb => cb(msg.from));
-      break;
-    default:
-      messageCallbacks.forEach(cb => cb(mapped));
-  }
+  messageCallbacks.forEach(cb => cb(mapped));
 }
 
 function mapMsgType(t?: string): 'text' | 'voice' | 'file' | 'image' | 'system' {

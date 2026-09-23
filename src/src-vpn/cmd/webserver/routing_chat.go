@@ -1,5 +1,9 @@
-﻿// File: routing_chat.go
+// File: routing_chat.go
 // P2-1 RESCUE 20260720: extracted from routing.go (God Object split).
+// X2 CONFIRMED 2026-09-23 — fail-closed active: server is client-blind for DM.
+//   GET returns ciphertext as stored (Encrypted flag preserved).
+//   POST stores client ciphertext as-is; rejects plaintext DM (422 PLAINTEXT_DM_FORBIDDEN).
+//   Broadcast plaintext remains OK. No server-side message crypto in handlers.
 
 package main
 
@@ -13,11 +17,8 @@ import (
 	"strings"
 	"time"
 	"github.com/unkillable-messenger/vpn/chat"
-	"github.com/unkillable-messenger/vpn/crypto"
 
 	"github.com/unkillable-messenger/vpn/store"
-
-	"go.uber.org/zap"
 
 )
 
@@ -64,41 +65,9 @@ func (s *Server) handleMessagesGet(w http.ResponseWriter, r *http.Request) {
 	}
 	msgs = filtered
 
-	// Auto-decrypt messages for the current user (CRYP-010 DR first, then legacy ECDH)
-	currentUserNpub := npub
-	if currentUserNpub != "" {
-		for i, m := range msgs {
-			if !m.Encrypted || m.To != currentUserNpub {
-				continue
-			}
-			// Double Ratchet
-			if s.drSessions != nil && chat.IsDRCiphertext(m.Text) {
-				pt, used, err := s.drSessions.DecryptInbound(currentUserNpub, m.From, m.Text)
-				if err == nil && used {
-					msgs[i].Text = pt
-					msgs[i].Encrypted = false
-					continue
-				}
-				if err != nil {
-					zap.S().Warnf("DR decrypt failed msg %s from %s: %v", m.ID, m.From, err)
-				}
-			}
-			// Legacy ECDH
-			recipientBundle, err := s.db.GetPreKeyBundle(currentUserNpub)
-			if err == nil && recipientBundle != nil {
-				// R7/P2-leftover (2026-09-22): DEAD PATH after public-only prekey bundles.
-// IdentityKey is a PUBLIC key; treating it as recipientPrivKey cannot succeed and must NOT be extended.
-// Full fail-closed/removal gated on X2 (E2E model). Do not add new call sites.
-			plaintext, err := chat.DecryptMessageFromSender(m.Text, recipientBundle.IdentityKey, m.From)
-				if err == nil {
-					msgs[i].Text = plaintext
-					msgs[i].Encrypted = false
-				} else {
-					zap.S().Warnf("Failed to decrypt message %s from %s: %v", m.ID, m.From, err)
-				}
-			}
-		}
-	}
+	// X2 CONFIRMED 2026-09-23 — fail-closed active.
+	// Server is blind: do NOT auto-decrypt inbound DMs (DR/legacy paths removed).
+	// Return ciphertext as stored; Encrypted flag preserved for client-side decrypt.
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"messages": msgs,
@@ -172,36 +141,15 @@ func (s *Server) handleMessagesPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// CRYP-010: Double Ratchet first (when session exists), then legacy ECDH prekey path.
+	// X2 CONFIRMED 2026-09-23 — fail-closed active.
+	// Server never encrypts outbound DMs (DR/legacy paths removed).
+	// Client ciphertext → store as-is. Broadcast plaintext OK.
+	// Non-broadcast DM plaintext → 422 PLAINTEXT_DM_FORBIDDEN.
 	encryptedText := req.Text
 	isEncrypted := clientCipher
-	if !isEncrypted && req.To != "broadcast" && req.To != "" {
-		// Prefer DR session if established (forward secrecy)
-		if s.drSessions != nil {
-			ct, usedDR, derr := s.drSessions.EncryptOutbound(req.From, req.To, req.Text)
-			if derr != nil {
-				log.Printf("WARNING: DR encrypt failed: %v", derr)
-			} else if usedDR {
-				encryptedText = ct
-				isEncrypted = true
-			}
-		}
-		// Fallback: legacy ECDH via stored prekey bundle
-		if !isEncrypted {
-			bundleRow, err := s.db.GetPreKeyBundle(req.From)
-			if err == nil && bundleRow != nil {
-				senderBundle := &crypto.PreKeyBundle{
-					IdentityKey: bundleRow.IdentityKey,
-				}
-				enc, err := chat.EncryptMessageForRecipient(req.Text, senderBundle.IdentityKey, req.To)
-				if err == nil {
-					encryptedText = enc
-					isEncrypted = true
-				} else {
-					log.Printf("WARNING: E2E encryption failed: %v", err)
-				}
-			}
-		}
+	if !clientCipher && req.To != "broadcast" {
+		writeError(w, http.StatusUnprocessableEntity, "PLAINTEXT_DM_FORBIDDEN", "DM must be client-encrypted; server is blind")
+		return
 	}
 
 	msg := store.Message{
@@ -320,4 +268,3 @@ func (s *Server) handleScheduleMessage(w http.ResponseWriter, r *http.Request) {
 
 // P8 (2026-09-20): startDeadMansSwitchWorker удалён — был вторым DMS-воркером
 // (дубль-триггеры + broadcast всем = утечка). Остаётся deadMansSwitchLoop.
-

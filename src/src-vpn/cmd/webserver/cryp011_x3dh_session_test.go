@@ -34,16 +34,13 @@ func TestCRYP011_X3DHCalledOnSessionCreate(t *testing.T) {
 	if !dr.HasSession("alice", "bob") {
 		t.Fatal("session not stored after X3DH")
 	}
-	// Bob responds with same X3DH
 	if err := dr.CreateSessionAsResponder("bob", "alice", bobMat, aliceIK.Pub, ek); err != nil {
 		t.Fatalf("CreateSessionAsResponder: %v", err)
 	}
 	if !dr.HasSession("bob", "alice") {
 		t.Fatal("bob session missing after X3DH respond")
 	}
-	// Full encrypt roundtrip uses BootstrapPair (pairs RemotePub correctly) — covered by CRYP-010 + HTTP test.
 }
-
 
 func TestCRYP011_HTTPSessionEstablishThenDRMessage(t *testing.T) {
 	t.Setenv("VPN_DEV_BOOTSTRAP_PAIR", "1") // P15: bootstrap_pair gated by dev flag
@@ -70,17 +67,21 @@ func TestCRYP011_HTTPSessionEstablishThenDRMessage(t *testing.T) {
 		t.Fatal("no session after establish")
 	}
 
-	// Message must be DR-encrypted
-	msgBody := `{"from":"npub_a","to":"npub_b","text":"sess-ok"}`
+	// X2: message path is client-blind — POST client ciphertext (not server DR encrypt).
+	cipher := "nip44:c2Vzcy1vay1jaXBoZXI="
+	msgBody := `{"from":"npub_a","to":"npub_b","text":"` + cipher + `","encrypted":true}`
 	req2 := httptest.NewRequest(http.MethodPost, "/api/messages", strings.NewReader(msgBody))
 	w2 := httptest.NewRecorder()
 	srv.handleMessagesPost(w2, req2)
 	if w2.Code != 201 {
-		t.Fatalf("msg status %d", w2.Code)
+		t.Fatalf("msg status %d body=%s", w2.Code, w2.Body.String())
 	}
 	var msg store.Message
 	_ = json.Unmarshal(w2.Body.Bytes(), &msg)
-	if !chat.IsDRCiphertext(msg.Text) {
-		t.Fatalf("expected DR ciphertext after session, got %q", msg.Text[:minInt(30, len(msg.Text))])
+	if !chat.LooksLikeClientCiphertext(msg.Text) {
+		t.Fatalf("expected client ciphertext after X2, got %q", msg.Text)
+	}
+	if msg.Text != cipher {
+		t.Fatalf("want stored %q got %q", cipher, msg.Text)
 	}
 }

@@ -1,4 +1,4 @@
-// LEGACY: /api/vpn/wt/* is LAN-only WebTransport (Table 01 primary = WebRTC). Do not expand.
+// A11 CONFIRMED 2026-09-23: /api/vpn/wt/* gated OFF (enableWebTransportCombat=false). Do not expand.
 // File: startup_routes.go
 // P2-2 RESCUE 20260721: extracted from startup.go run().
 // All HTTP route registrations in one place.
@@ -72,13 +72,19 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 	http.HandleFunc("/api/vpn/signaling", apiChain(srv.handleVPNSignaling))
 
 http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
-	// P29 (2026-09-20): WebTransport — legacy LAN-only path (A11). Роуты за флагом
-	// VPN_WT_ENABLED=1; в проде 404, чтобы случайно не поднять второй транспорт.
-	if os.Getenv("VPN_WT_ENABLED") == "1" {
+	// A11 CONFIRMED 2026-09-23 — WT out of combat path (off by default).
+	// LEGACY archive: /api/vpn/wt/* was LAN-only WebTransport (Table 01 primary = WebRTC).
+	// Do not expand. Handlers remain in tree for archive/debug only.
+	// Production: VPN_WT_ENABLED unset/false → routes NOT registered (404).
+	// Opt-in lab only: VPN_WT_ENABLED=1
+	// explicit false constant keeps the gate obvious in review:
+	const enableWebTransportCombat = false
+	if enableWebTransportCombat && os.Getenv("VPN_WT_ENABLED") == "1" {
 		http.HandleFunc("/api/vpn/wt/stats", apiChain(srv.handleWTStats))
 		http.HandleFunc("/api/vpn/wt/start", apiChain(srv.handleWTStart))
 		http.HandleFunc("/api/vpn/wt/stop", apiChain(srv.handleWTStop))
 	}
+	// Parent: point any client webtransport.ts usage at archive stub (do not serve in prod).
 	http.HandleFunc("/api/vpn/turn/config", apiChain(srv.handleTurnConfig))
 	http.HandleFunc("/api/vpn/amnezia", apiChain(srv.handleAmneziaConfig))
 	http.HandleFunc("/api/vpn/amnezia/conf", apiChain(srv.handleAmneziaConfBuild))

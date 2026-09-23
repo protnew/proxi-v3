@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/unkillable-messenger/vpn/chat"
-	"github.com/unkillable-messenger/vpn/crypto"
 	"github.com/unkillable-messenger/vpn/store"
 )
 
-// CRYP-010: DR encrypt before SaveMessage; SQLite holds ciphertext; Bob decrypts to original.
+// CRYP-010 (X2 2026-09-23): server is blind — stores client ciphertext as-is;
+// GET returns ciphertext (no server auto-decrypt).
 func TestCRYP010_MessagePipelineStoresCiphertext(t *testing.T) {
 	db, err := store.NewStore(":memory:")
 	if err != nil {
@@ -21,23 +21,10 @@ func TestCRYP010_MessagePipelineStoresCiphertext(t *testing.T) {
 	}
 	defer db.Close()
 
-	dr := chat.NewDRSessionStore()
-	bobMat, err := crypto.NewX3DHBobMaterial()
-	if err != nil {
-		t.Fatal(err)
-	}
-	aliceIK, err := crypto.GenerateX3DHKeyPair()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := dr.BootstrapPair("npub_alice", "npub_bob", aliceIK, bobMat); err != nil {
-		t.Fatalf("bootstrap: %v", err)
-	}
+	srv := &Server{db: db, hub: chat.NewChatHub()}
 
-	srv := &Server{db: db, hub: chat.NewChatHub(), drSessions: dr}
-
-	plain := "forward-secret CRYP-010"
-	body := `{"from":"npub_alice","to":"npub_bob","text":"` + plain + `"}`
+	cipher := "nip44:Zm9yd2FyZC1zZWNyZXQgQ1JZUC0wMTA="
+	body := `{"from":"npub_alice","to":"npub_bob","text":"` + cipher + `","encrypted":true}`
 	req := httptest.NewRequest(http.MethodPost, "/api/messages", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	srv.handleMessagesPost(w, req)
@@ -49,17 +36,16 @@ func TestCRYP010_MessagePipelineStoresCiphertext(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
-	if created.Text == plain {
-		t.Fatal("API response must not return plaintext when DR used — expected ciphertext")
+	if created.Text != cipher {
+		t.Fatalf("API must echo client ciphertext, got %q", created.Text)
 	}
 	if !created.Encrypted {
 		t.Fatal("Encrypted flag must be true")
 	}
-	if !chat.IsDRCiphertext(created.Text) {
-		t.Fatalf("stored text must be dr1: ciphertext, got prefix %q", created.Text[:minInt(40, len(created.Text))])
+	if !chat.LooksLikeClientCiphertext(created.Text) {
+		t.Fatalf("stored text must look like client ciphertext, got %q", created.Text)
 	}
 
-	// Direct DB read — must be ciphertext
 	msgs, err := db.GetMessages(10, 0, "npub_bob")
 	if err != nil {
 		t.Fatal(err)
@@ -68,17 +54,11 @@ func TestCRYP010_MessagePipelineStoresCiphertext(t *testing.T) {
 		t.Fatal("no messages in DB")
 	}
 	dbMsg := msgs[0]
-	if dbMsg.Text == plain {
-		t.Fatal("SQLite must store ciphertext, found plaintext")
-	}
-	if !chat.IsDRCiphertext(dbMsg.Text) {
-		t.Fatalf("DB text not DR ciphertext: %q", dbMsg.Text[:minInt(40, len(dbMsg.Text))])
+	if dbMsg.Text != cipher {
+		t.Fatalf("SQLite must store client ciphertext, got %q", dbMsg.Text)
 	}
 
-	// Do NOT decrypt here — would advance ratchet and break GET auto-decrypt.
-	// Ciphertext-in-DB already proven above.
-
-	// GET API as Bob should auto-decrypt once
+	// GET as Bob — server blind: ciphertext returned unchanged
 	reqGet := httptest.NewRequest(http.MethodGet, "/api/messages?npub=npub_bob", nil)
 	ctx := context.WithValue(reqGet.Context(), "npub", "npub_bob")
 	reqGet = reqGet.WithContext(ctx)
@@ -96,8 +76,8 @@ func TestCRYP010_MessagePipelineStoresCiphertext(t *testing.T) {
 	if len(resp.Messages) == 0 {
 		t.Fatal("GET empty")
 	}
-	if resp.Messages[0].Text != plain {
-		t.Fatalf("GET decrypt got %q want %q", resp.Messages[0].Text, plain)
+	if resp.Messages[0].Text != cipher {
+		t.Fatalf("GET must return ciphertext (server blind), got %q want %q", resp.Messages[0].Text, cipher)
 	}
 }
 

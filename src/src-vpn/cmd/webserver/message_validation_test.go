@@ -39,9 +39,11 @@ func TestMessagesPost_Oversize(t *testing.T) {
 
 func TestMessagesPost_ExactLimit(t *testing.T) {
 	srv := setupTestServer(t)
-	text := strings.Repeat("y", vpnroot.MaxMessageLen)
+	// X2: DM must be client ciphertext; keep total length at MaxMessageLen.
+	prefix := "nip44:"
+	text := prefix + strings.Repeat("y", vpnroot.MaxMessageLen-len(prefix))
 	resp := postJSON(t, srv.URL+"/api/messages", map[string]interface{}{
-		"from": "alice", "to": "bob", "text": text,
+		"from": "alice", "to": "bob", "text": text, "encrypted": true,
 	})
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
@@ -53,7 +55,7 @@ func TestMessagesPost_ExactLimit(t *testing.T) {
 func TestMessagesPost_Normal(t *testing.T) {
 	srv := setupTestServer(t)
 	resp := postJSON(t, srv.URL+"/api/messages", map[string]interface{}{
-		"from": "alice", "to": "bob", "text": "hello validation suite",
+		"from": "alice", "to": "bob", "text": "nip44:aGVsbG8gdmFsaWRhdGlvbiBzdWl0ZQ==", "encrypted": true,
 	})
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
