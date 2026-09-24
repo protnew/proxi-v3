@@ -6,14 +6,14 @@
 package main
 
 import (
-	"strconv"
-	vpnroot "github.com/unkillable-messenger/vpn"
-	"github.com/unkillable-messenger/vpn/auth"
 	"encoding/hex"
 	"encoding/json"
+	vpnroot "github.com/unkillable-messenger/vpn"
+	"github.com/unkillable-messenger/vpn/auth"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -68,21 +68,17 @@ func (srv *Server) registerRoutes(authSvc *auth.AuthService, distDir, port strin
 			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "Use GET or POST")
 		}
 	}))
-		// INF-010: VPN Nostr signaling (kind:30090)
+	// INF-010: VPN Nostr signaling (kind:30090)
 	http.HandleFunc("/api/vpn/signaling", apiChain(srv.handleVPNSignaling))
 
-http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
+	http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 	// A11 CONFIRMED 2026-09-23 — WT out of combat path (off by default).
-	// LEGACY archive: /api/vpn/wt/* was LAN-only WebTransport (Table 01 primary = WebRTC).
-	// Do not expand. Handlers remain in tree for archive/debug only.
-	// Production: VPN_WT_ENABLED unset/false → routes NOT registered (404).
-	// Opt-in lab only: VPN_WT_ENABLED=1
-	// explicit false constant keeps the gate obvious in review:
-	const enableWebTransportCombat = false
-	if enableWebTransportCombat && os.Getenv("VPN_WT_ENABLED") == "1" {
-		http.HandleFunc("/api/vpn/wt/stats", apiChain(srv.handleWTStats))
-		http.HandleFunc("/api/vpn/wt/start", apiChain(srv.handleWTStart))
-		http.HandleFunc("/api/vpn/wt/stop", apiChain(srv.handleWTStop))
+	// F4: WT routes live only behind VPN_WT_ENABLED=1 and the auth chain.
+	// Primary transport remains WebRTC; WT is fallback adapter #2 after D-AUTH-EXIT.
+	if os.Getenv("VPN_WT_ENABLED") == "1" {
+		http.HandleFunc("/api/vpn/wt/stats", protectedApiChain(srv.handleWTStats))
+		http.HandleFunc("/api/vpn/wt/start", protectedApiChain(srv.handleWTStart))
+		http.HandleFunc("/api/vpn/wt/stop", protectedApiChain(srv.handleWTStop))
 	}
 	// Parent: point any client webtransport.ts usage at archive stub (do not serve in prod).
 	http.HandleFunc("/api/vpn/turn/config", apiChain(srv.handleTurnConfig))
@@ -121,7 +117,7 @@ http.HandleFunc("/api/vpn/rpc", apiChain(srv.handleVpnRPC))
 		}
 		publicApiChain(srv.handleFileGet)(w, r)
 	})
-	
+
 	// Media endpoints (v12 content_manifests)
 	http.HandleFunc("/api/media/upload", apiChain(srv.handleMediaUpload))
 	http.HandleFunc("/api/media/", srv.handleMediaGet)

@@ -676,7 +676,7 @@ func TestHandleReq(t *testing.T) {
 	t.Run("REQ respects limit from filter", func(t *testing.T) {
 		r := NewRelay(100, nil)
 		conn := newMockConn()
-		client := &Client{conn: conn, subscriptions: make(map[string]*Subscription)}
+		client := &Client{conn: conn, subscriptions: make(map[string]*Subscription), AuthPubkey: "pk1"}
 
 		// Pre-populate 5 events
 		r.mu.Lock()

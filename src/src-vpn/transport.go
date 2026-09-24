@@ -3,7 +3,6 @@ package vpn
 import (
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"encoding/binary"
 	"fmt"
 	"net"
@@ -169,6 +168,13 @@ func (t *UDPTransport) Stats() TransportStats {
 
 // encryptPacket does AES-GCM encrypt with sequence number.
 // Wire format: [seq:8 bytes big-endian][nonce:12 bytes][ciphertext+tag]
+
+func counterNonce(size int, seq uint64) []byte {
+	n := make([]byte, size)
+	binary.BigEndian.PutUint64(n[size-8:], seq)
+	return n
+}
+
 func encryptPacket(key, plaintext []byte, seq uint64) ([]byte, error) {
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -180,11 +186,8 @@ func encryptPacket(key, plaintext []byte, seq uint64) ([]byte, error) {
 		return nil, fmt.Errorf("new gcm: %w", err)
 	}
 
-	// Generate random nonce
-	nonce := make([]byte, aead.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("generate nonce: %w", err)
-	}
+	// Counter-nonce from seq (not random): birthday bound of random 96-bit nonces.
+	nonce := counterNonce(aead.NonceSize(), seq)
 
 	// Associated data is the sequence number
 	var seqBuf [8]byte

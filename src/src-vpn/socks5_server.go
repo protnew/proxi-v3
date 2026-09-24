@@ -1,6 +1,7 @@
 package vpn
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 type SOCKS5Server struct {
 	listenAddr    string
 	upstreamSOCKS string // empty = direct egress; else host:port upstream SOCKS5
+	chain         *Chain // D1: when set, dial goes DC→WT→userspace→Tor→Nostr, not the NIC
 	ln            net.Listener
 	running       atomic.Bool
 	bytesIn       atomic.Int64
@@ -36,9 +38,9 @@ func NewSOCKS5Server(listenAddr, upstreamSOCKS string) *SOCKS5Server {
 	}
 }
 
-func (s *SOCKS5Server) Addr() string { return s.listenAddr }
+func (s *SOCKS5Server) Addr() string     { return s.listenAddr }
 func (s *SOCKS5Server) Upstream() string { return s.upstreamSOCKS }
-func (s *SOCKS5Server) IsRunning() bool { return s.running.Load() }
+func (s *SOCKS5Server) IsRunning() bool  { return s.running.Load() }
 func (s *SOCKS5Server) Stats() (in, out, conns int64) {
 	return s.bytesIn.Load(), s.bytesOut.Load(), s.conns.Load()
 }
@@ -198,7 +200,14 @@ func (s *SOCKS5Server) reply(c net.Conn, code byte) {
 	_, _ = c.Write([]byte{0x05, code, 0x00, 0x01, 0, 0, 0, 0, 0, 0})
 }
 
+// UseChain attaches the D1 transport chain. Stage 0 stays SOCKS; the chain is the upstream.
+func (s *SOCKS5Server) UseChain(c *Chain) { s.chain = c }
+
 func (s *SOCKS5Server) dialTarget(target string) (net.Conn, error) {
+	if s.chain != nil {
+		conn, _, err := s.chain.Dial(context.Background(), target)
+		return conn, err
+	}
 	d := net.Dialer{Timeout: 20 * time.Second}
 	if s.upstreamSOCKS == "" {
 		return d.Dial("tcp", target)

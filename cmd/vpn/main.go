@@ -1,3 +1,4 @@
+// LEGACY / dead: not the live WT server. Live code is src/src-vpn/webtransport_server.go. Do not wire.
 package main
 
 import (

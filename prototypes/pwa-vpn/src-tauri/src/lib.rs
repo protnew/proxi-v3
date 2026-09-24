@@ -1,3 +1,4 @@
+mod core_spawn;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -14,6 +15,7 @@ pub fn run() {
             start_vpn,
             stop_vpn,
             get_system_info,
+            helper_spawn_plan,
         ])
         .setup(|app| {
             // Set up system tray
@@ -69,4 +71,11 @@ fn get_system_info() -> String {
     let os = std::env::consts::OS;
     let arch = std::env::consts::ARCH;
     format!("{{\"os\":\"{}\",\"arch\":\"{}\"}}", os, arch)
+}
+
+
+/// D8 stage 1: elevated helper args. Does not call vpn_bridge.
+#[tauri::command]
+fn helper_spawn_plan(bin: String) -> Vec<String> {
+    core_spawn::helper_elevated_args(&bin)
 }

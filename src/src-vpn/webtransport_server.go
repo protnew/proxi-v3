@@ -144,6 +144,7 @@ func (s *WTServer) Start() error {
 	}
 	mux.HandleFunc("/wt", handler)
 	mux.HandleFunc("/webtransport", handler)
+	mux.HandleFunc("/masque", handleMASQUE)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	s.cancel = cancel
@@ -166,11 +167,17 @@ func (s *WTServer) handleSession(id uint64, sess *webtransport.Session) {
 		_ = sess.CloseWithError(0, "bye")
 		log.Printf("[WT] session %d closed", id)
 	}()
+	var budget streamBudget
 	ctx := sess.Context()
 	for {
 		stream, err := sess.AcceptStream(ctx)
 		if err != nil {
 			return
+		}
+		if !budget.take() {
+			s.writeFrame(stream, wtMsgError, []byte("stream limit"))
+			_ = stream.Close()
+			continue
 		}
 		go s.handleStream(id, stream)
 	}
@@ -198,6 +205,10 @@ func (s *WTServer) handleStream(sessionID uint64, stream *webtransport.Stream) {
 	}
 	targetStr := string(target)
 	log.Printf("[WT] session %d CONNECT %s", sessionID, targetStr)
+	if targetDenied(targetStr) {
+		s.writeFrame(stream, wtMsgError, []byte("target denied"))
+		return
+	}
 
 	conn, err := net.DialTimeout("tcp", targetStr, 10*time.Second)
 	if err != nil {

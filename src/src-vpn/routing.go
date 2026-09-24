@@ -124,13 +124,19 @@ func (m *Manager) cleanupSplitTunnelLocked() error {
 
 // DNSConfig stores DNS proxy settings.
 type DNSConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Listen   string `json:"listen"`   // e.g. "127.0.0.1:5353"
-	Upstream string `json:"upstream"` // e.g. "1.1.1.1:53"
+	Enabled   bool   `json:"enabled"`
+	Listen    string `json:"listen"`   // e.g. "127.0.0.1:5353"
+	Upstream  string `json:"upstream"` // e.g. "1.1.1.1:53"
+	ViaTunnel bool   `json:"viaTunnel"`
 }
 
-// StartDNSProxy starts a simple DNS forwarder that routes queries through the WG tunnel.
+// StartDNSProxy forwards UDP/53 to cfg.Upstream on the host network.
+// It does NOT send queries through the VPN tunnel. ViaTunnel=true refuses
+// to start rather than pretend the dial is tunneled (F6).
 func (m *Manager) StartDNSProxy(cfg DNSConfig) error {
+	if cfg.ViaTunnel {
+		return fmt.Errorf("DNS via tunnel is not wired; refuse direct upstream")
+	}
 	if !cfg.Enabled {
 		return nil
 	}

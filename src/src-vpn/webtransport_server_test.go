@@ -37,6 +37,8 @@ func TestWTServerStartStop(t *testing.T) {
 }
 
 func TestWTServerWebTransportTunnel(t *testing.T) {
+	setWTAllowPrivateForTest(true)
+	t.Cleanup(func() { setWTAllowPrivateForTest(false) })
 	srv, err := NewWTServer("127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

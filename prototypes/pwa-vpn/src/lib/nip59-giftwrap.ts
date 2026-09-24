@@ -22,15 +22,15 @@ export type VpnInvitePayload = {
   type: 'vpn_invite' | 'vpn_request'
   from: string
   to: string
-  /** WebRTC SDP offer/answer or session descriptor JSON string */
+  onion?: string
+  wtAddr?: string
+  wtCertHash?: string
+  token?: string
+  exp?: number
   sdp?: string
-  /** ICE candidates dump (optional) */
   ice?: string
-  /** human note */
   note?: string
-  /** unix ms */
   ts: number
-  /** protocol version */
   v: 1
 }
 

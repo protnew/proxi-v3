@@ -4,7 +4,6 @@
 package main
 
 import (
-
 	"encoding/json"
 
 	"io"
@@ -12,10 +11,9 @@ import (
 
 	"net/http"
 
-	"time"
 	"github.com/go-playground/validator/v10"
 	"github.com/unkillable-messenger/vpn"
-
+	"time"
 )
 
 func (s *Server) handleVpnRPC(w http.ResponseWriter, r *http.Request) {
@@ -54,9 +52,7 @@ var startTime time.Time
 
 var distDir string
 
-
 var validate = validator.New()
-
 
 func (s *Server) handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -97,7 +93,6 @@ func (s *Server) handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleDNSProxy — POST /api/vpn/dns
-
 
 func (s *Server) handleDNSProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -143,9 +138,6 @@ func (s *Server) handleDNSProxy(w http.ResponseWriter, r *http.Request) {
 
 // nhooyrWSConn adapts nhooyr.io/websocket.Conn to nostr.WebSocketConn.
 
-
-
-
 // ========== WebTransport ==========
 
 var wtServer *vpn.WTServer
@@ -177,7 +169,11 @@ func (s *Server) handleWTStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Start WT server on port 4433 (QUIC default alt port)
-	srv, err := vpn.NewWTServer("0.0.0.0:4433")
+	bind := os.Getenv("WT_BIND")
+	if bind == "" || bind == "0.0.0.0:4433" {
+		bind = "127.0.0.1:0"
+	}
+	srv, err := vpn.NewWTServer(bind)
 	if err != nil {
 		writeError(w, 500, "WT_INIT_ERROR", err.Error())
 		return

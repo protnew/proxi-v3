@@ -27,6 +27,9 @@ func corsAllowedOrigins() []string {
 			"http://127.0.0.1:4173",
 			"http://localhost:8090",
 			"http://127.0.0.1:8090",
+			"http://tauri.localhost",
+			"https://tauri.localhost",
+			"tauri://localhost",
 		}
 	}
 	parts := strings.Split(raw, ",")
@@ -144,4 +147,3 @@ func wsRequestedProtocols(r *http.Request) []string {
 	}
 	return out
 }
-

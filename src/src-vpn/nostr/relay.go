@@ -254,11 +254,13 @@ func (r *Relay) handleReq(client *Client, raw []json.RawMessage) {
 
 	// P1: DM (kind 4) and VPN signaling (kind 30090) are private — a
 	// subscription may only ever see its own identity's events.
-	if containsSensitiveKind(filter.Kinds) {
+	if containsSensitiveKind(filter.Kinds) || len(filter.Kinds) == 0 {
 		if client.AuthPubkey == "" {
 			client.sendNotice("auth required for kinds 4/30090")
 			return
 		}
+	}
+	if containsSensitiveKind(filter.Kinds) {
 		filter.Authors = []string{client.AuthPubkey}
 	}
 
@@ -302,6 +304,9 @@ func (r *Relay) handleReq(client *Client, raw []json.RawMessage) {
 					Sig:       se.Sig,
 					CreatedAt: se.CreatedAt,
 				}
+				if !matchFilter(&evt, &filter) || !deliveryAllowed(client, &evt) {
+					continue
+				}
 				msg := []interface{}{"EVENT", subID, evt}
 				client.send(msg)
 			}
@@ -315,7 +320,7 @@ func (r *Relay) handleReq(client *Client, raw []json.RawMessage) {
 			limit = 100
 		}
 		for i := len(r.events) - 1; i >= 0 && matched < limit; i-- {
-			if matchFilter(&r.events[i], &filter) {
+			if matchFilter(&r.events[i], &filter) && deliveryAllowed(client, &r.events[i]) {
 				msg := []interface{}{"EVENT", subID, r.events[i]}
 				client.send(msg)
 				matched++
@@ -342,7 +347,6 @@ func (r *Relay) handleClose(client *Client, raw []json.RawMessage) {
 }
 
 // verifyEventSig checks the schnorr signature of an event over its ID (NIP-01).
-
 
 func (c *Client) send(v interface{}) {
 	c.mu.Lock()
@@ -386,7 +390,6 @@ func (r *Relay) GetStats() map[string]interface{} {
 		"uptime":     fmt.Sprintf("%d", time.Now().Unix()),
 	}
 }
-
 
 // InjectLocalEvent publishes a server-side event into the relay pipeline (INF-010).
 // Used for VPN signaling without a remote WS client. Skips ID/sig crypto verification

@@ -40,7 +40,7 @@ import * as secp from "@noble/secp256k1";
     return { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token }
   }
 
-  async function startWTServer(): Promise<{ wtAddr: string; certHash: string }> {
+  async function startWTServer(explicitHost?: string): Promise<{ wtAddr: string; certHash: string }> {
     const h = await authHeaders()
     const start = await fetch('/api/vpn/wt/start', { method: 'POST', headers: h, body: '{}' })
     if (!start.ok) throw new Error('WT start HTTP ' + start.status)
@@ -49,8 +49,7 @@ import * as secp from "@noble/secp256k1";
     // Prefer LAN host + actual WT port from addr
         // Prefer page hostname (LAN/localhost). Never publish 0.0.0.0 or bare [::].
     // Use window.location.hostname so friends on same LAN can connect.
-    let host = window.location.hostname || '127.0.0.1'
-    if (host === '[::]' || host === '::' || host === '0.0.0.0') host = '127.0.0.1'
+    const host = publishableWTHost(explicitHost)
     let port = '4433'
     if (typeof stats.addr === 'string' && stats.addr) {
       const m = String(stats.addr).match(/:(\d+)$/)
@@ -59,4 +58,12 @@ import * as secp from "@noble/secp256k1";
     const wtAddr = `${host}:${port}`
     return { wtAddr, certHash }
   }
-export { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders, startWTServer };
+
+  function publishableWTHost(explicitHost?: string): string {
+    const raw = (explicitHost || (typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_wt_host') : '') || '').trim()
+    const host = raw.replace(/^\[|\]$/g, '')
+    const loop = !host || host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '0.0.0.0'
+    if (loop) throw new Error('wtAddr refused: set a reachable host (not loopback / window.location)')
+    return host
+  }
+export { hexToBytes, bytesToHex, mySigningPubkey, normalizePeerId, authHeaders, startWTServer, publishableWTHost };

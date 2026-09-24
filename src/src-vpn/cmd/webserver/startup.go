@@ -6,10 +6,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"time"
 	"os/signal"
+	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/joho/godotenv"
@@ -154,13 +154,11 @@ func run() error {
 			log.Printf("[VPN-SIG] bad content on %s: %v", id, err)
 			return
 		}
-		if ve.From == "" {
-			ve.From = ev.PubKey
-		}
+		// F2: never trust content.from — publisher is ev.PubKey only.
+		ve.From = ev.PubKey
 		vpnSignaling.HandleIncomingEvent(ev.ID, ve)
 		log.Printf("[VPN-SIG] kind:30090 %s from=%s to=%s", ve.Type, ve.From, ve.To)
 	}
-
 
 	// Initialize Federation Relay
 	fedRelay = federation.NewFederatedRelay(nostrRelay)
@@ -242,19 +240,26 @@ func run() error {
 	go srv.startWALCheckpoint(context.Background())
 	srv.db.AutoBackup(context.Background(), filepath.Join(dataDir, "backups"), 24*time.Hour)
 
-	jwtSecret, err := requireJWTSecret()
+	jwtSecret, err := perBootJWTSecret()
 	if err != nil {
 		return err
 	}
 	authSvc := auth.NewAuthService(jwtSecret)
 	srv.authService = authSvc
 
+	// F11: bind loopback; if 8090 is taken, recover on :0 before routes advertise the port.
+	ln, err := listenLoopback(port)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+	port = portFromListener(ln)
+
 	// Register all HTTP routes (extracted to startup_routes.go)
 	srv.registerRoutes(authSvc, distDir, port)
 
 	// Create HTTP server
 	httpSrv := &http.Server{
-		Addr:              httpBindAddr(port),
+		Handler:           hostGate(nil),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
@@ -281,15 +286,15 @@ func run() error {
 	tlsKey := os.Getenv("TLS_KEY")
 	if tlsCert != "" && tlsKey != "" {
 		log.Printf("   TLS:  https (certs: %s)", tlsCert)
-		if err := httpSrv.ListenAndServeTLS(tlsCert, tlsKey); err != http.ErrServerClosed {
+		if err := httpSrv.ServeTLS(ln, tlsCert, tlsKey); err != http.ErrServerClosed {
 			return fmt.Errorf("HTTPS server error: %w", err)
 		}
 	} else {
-		if err := httpSrv.ListenAndServe(); err != http.ErrServerClosed {
+		if err := httpSrv.Serve(ln); err != http.ErrServerClosed {
 			return fmt.Errorf("HTTP server error: %w", err)
 		}
 	}
-	
+
 	<-idleConnsClosed
 	log.Println("✅ Server stopped")
 	return nil
@@ -300,17 +305,17 @@ func run() error {
 
 // INF-001: SQLite WAL checkpoint — runs every 24h
 func (srv *Server) startWALCheckpoint(ctx context.Context) {
-    ticker := time.NewTicker(24 * time.Hour)
-    defer ticker.Stop()
-    for {
-        select {
-        case <-ticker.C:
-            if srv.db != nil {
-                srv.db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE)")
-                log.Println("[infra] WAL checkpoint completed")
-            }
-        case <-ctx.Done():
-            return
-        }
-    }
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			if srv.db != nil {
+				srv.db.DB().Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+				log.Println("[infra] WAL checkpoint completed")
+			}
+		case <-ctx.Done():
+			return
+		}
+	}
 }

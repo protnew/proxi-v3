@@ -42,6 +42,7 @@ export interface VPNEvent {
   iceCandidates?: string[]
 }
 
+/** @deprecated R26b: new invites are kind 1059. 30090 is replay-only. */
 const KIND_VPN = 30090
 
 async function sha256Hex(data: string): Promise<string> {
@@ -195,30 +196,28 @@ export class NostrVPNSignaling {
     return id
   }
 
-  async inviteFriend(toPubkey: string, wtAddr: string, wtCertHash: string): Promise<string> {
-    const id = await this.sendVPNEvent('vpn-invite', toPubkey, { wtAddr, wtCertHash })
-    // OFF-001: also gift-wrap for offline pickup (NIP-59)
-    try {
-      const { seckey, pubkey } = signingIdentity()
-      const payload: VpnInvitePayload = {
-        type: 'vpn_invite',
-        from: pubkey,
-        to: toPubkey,
-        note: wtAddr ? `legacy-wt:${wtAddr}` : 'webrtc-ready',
-        ts: Date.now(),
-        v: 1,
-      }
-      const { wrap } = wrapVpnInvite(payload, seckey, toPubkey)
-      // publish on same WS
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify(['EVENT', wrap]))
-      }
-      publishGiftWrap(wrap)
-      console.log('[Nostr-VPN] gift-wrap invite published', wrap.id?.slice(0, 12))
-    } catch (e) {
-      console.warn('[Nostr-VPN] gift-wrap invite failed (live invite still sent)', e)
+  async inviteFriend(toPubkey: string, wtAddr: string, wtCertHash: string, onion?: string): Promise<string> {
+    // P0: one leg only. Plaintext kind 30090 leaked wtAddr to the relay.
+    const { seckey, pubkey } = signingIdentity()
+    const payload: VpnInvitePayload = {
+      type: 'vpn_invite',
+      from: pubkey,
+      to: toPubkey,
+      onion: onion || undefined,
+      wtAddr: wtAddr || undefined,
+      wtCertHash: wtCertHash || undefined,
+      token: crypto.randomUUID().replace(/-/g, ''),
+      exp: Date.now() + 15 * 60 * 1000,
+      ts: Date.now(),
+      v: 1,
     }
-    return id
+    const { wrap } = wrapVpnInvite(payload, seckey, toPubkey)
+    if (wrap.kind !== 1059) throw new Error('invite must be gift-wrap 1059')
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(['EVENT', wrap]))
+    }
+    publishGiftWrap(wrap)
+    return wrap.id
   }
 
   async requestVPN(fromPubkey: string): Promise<string> {
