@@ -1,4 +1,4 @@
-﻿package com.indestructible.messenger.messenger
+package com.indestructible.messenger.messenger
 
 import android.content.Context
 import android.util.Log
@@ -16,7 +16,7 @@ import com.indestructible.messenger.data.ProxiDatabase
 
 // P4: no public Nostr relays — DM/presence via local authenticated /nostr only.
 class ChatViewModel(
-    private val appContext: Context,
+    internal val appContext: Context,
     var serverUrl: String = "ws://10.0.2.2:8090/ws",
     var httpUrl: String = "http://10.0.2.2:8090",
 ) {
@@ -27,13 +27,13 @@ class ChatViewModel(
     var activeChatId: String? = null
         private set
 
-    private val db by lazy { ProxiDatabase.get(appContext) }
-    private var webSocket: WebSocket? = null
-    private var jwtToken: String = ""
+    internal val db by lazy { ProxiDatabase.get(appContext) }
+    internal var webSocket: WebSocket? = null
+    internal var jwtToken: String = ""
     @Volatile private var connecting = false
-    private var myPubKey: String = ""
+    internal var myPubKey: String = ""
     // P24: held for E2E only, never sent anywhere.
-    private var myPrivKeyHex: String = ""
+    internal var myPrivKeyHex: String = ""
 
     // Presence: peers observed via WS join events.
     val onlinePeers = mutableStateOf<Set<String>>(emptySet())
@@ -52,7 +52,7 @@ class ChatViewModel(
         }.toString())
     }
 
-    private fun noteTyping(from: String) {
+    internal fun noteTyping(from: String) {
         if (from == myPubKey || from.isEmpty()) return
         typingPeers.value = typingPeers.value + from
         // Auto-expire after 4s of silence.
@@ -77,7 +77,7 @@ class ChatViewModel(
         }.start()
     }
 
-    private fun ChatEntity.toModel() = Chat(
+    internal fun ChatEntity.toModel() = Chat(
         id = id, name = name, avatar = avatar,
         type = if (type == "GROUP") Chat.Type.GROUP else Chat.Type.DM,
         messages = emptyList(),
@@ -88,7 +88,7 @@ class ChatViewModel(
         members = members?.split(",")?.filter { it.isNotBlank() },
     )
 
-    private fun MessageEntity.toModel() = Message(
+    internal fun MessageEntity.toModel() = Message(
         id = id, from = fromPub, to = toPub, text = text,
         timestamp = timestamp, read = read, replyTo = replyTo,
         edited = edited, delivered = delivered,
@@ -102,16 +102,16 @@ class ChatViewModel(
         fileSize = fileSize, voiceDuration = voiceDuration,
     )
 
-    private fun persistMessage(m: MessageEntity) {
+    internal fun persistMessage(m: MessageEntity) {
         Thread { db.messages().upsert(m) }.start()
     }
 
-    private fun upsertChatEntity(e: ChatEntity) {
+    internal fun upsertChatEntity(e: ChatEntity) {
         Thread { db.chats().upsert(e) }.start()
     }
 
     /** Incoming message: ensure a chat row exists (DM or group) and bump unread. */
-    private fun ensureIncomingChat(fromPub: String, preview: String, ts: Long, chatId: String? = null) {
+    internal fun ensureIncomingChat(fromPub: String, preview: String, ts: Long, chatId: String? = null) {
         val cid = chatId ?: "dm:$fromPub"
         Thread {
             val existing = db.chats().byId(cid)
@@ -138,7 +138,7 @@ class ChatViewModel(
         }.start()
     }
 
-    private val client = OkHttpClient.Builder()
+    internal val client = OkHttpClient.Builder()
         .readTimeout(0, TimeUnit.MILLISECONDS)
         .pingInterval(30, TimeUnit.SECONDS)
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -327,7 +327,7 @@ class ChatViewModel(
         if (sent) markDeliveredLocal(msg.id, true)
     }
 
-    private fun markDeliveredLocal(msgId: String, ok: Boolean) {
+    internal fun markDeliveredLocal(msgId: String, ok: Boolean) {
         if (!ok) return
         android.os.Handler(android.os.Looper.getMainLooper()).post {
             val idx = messages.indexOfFirst { it.id == msgId }
@@ -341,7 +341,7 @@ class ChatViewModel(
      * returns false instead of ever downgrading to plaintext.
      * `group` marks group-fanout copies so the peer files them under the room.
      */
-    private fun sendEncryptedDm(
+    internal fun sendEncryptedDm(
         to: String, text: String,
         group: String? = null, replyTo: String? = null, msgId: String? = null,
     ): Boolean {
@@ -379,308 +379,6 @@ class ChatViewModel(
      * Create a group chat locally and invite members via E2E `groupmeta` DM.
      * Signal-style client fanout — no server-side group routing needed.
      */
-    fun createGroupChat(name: String, memberPubs: List<String>) {
-        val gid = "grp-${System.currentTimeMillis()}"
-        val chatId = "group:$gid"
-        val all = (memberPubs + myPubKey).distinct()
-        upsertChatEntity(ChatEntity(
-            id = chatId, name = name, avatar = "👥", type = "GROUP",
-            lastActivity = System.currentTimeMillis(),
-            members = all.joinToString(","),
-        ))
-        val meta = "groupmeta:" + JSONObject().apply {
-            put("id", gid); put("name", name)
-            put("members", org.json.JSONArray(all))
-        }.toString()
-        Thread {
-            for (m in memberPubs.filter { it != myPubKey }) {
-                sendEncryptedDm(m, meta)
-            }
-            val fresh = db.chats().all().map { it.toModel() }
-            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                chats.clear(); chats.addAll(fresh)
-            }
-        }.start()
-    }
-
-    /**
-     * Upload bytes to /api/files (JWT) then send an E2E file descriptor.
-     * The ciphertext carries `filemeta:{json}` — file metadata never leaves
-     * the E2E channel in plaintext.
-     */
-    fun sendAttachment(
-        to: String, fileName: String, bytes: ByteArray,
-        mime: String, voiceDurationSec: Int? = null,
-    ) {
-        Thread {
-            try {
-                val body = MultipartBody.Builder().setType(MultipartBody.FORM)
-                    .addFormDataPart(
-                        "file", fileName,
-                        bytes.toRequestBody(mime.toMediaType())
-                    ).build()
-                val req = Request.Builder()
-                    .url("$httpUrl/api/files/upload")
-                    .header("Authorization", "Bearer $jwtToken")
-                    .post(body).build()
-                val resp = client.newCall(req).execute()
-                val respBody = resp.body?.string() ?: ""
-                if (resp.code != 201 && resp.code != 200) {
-                    Log.e("ChatVM", "upload failed: ${resp.code} $respBody")
-                    return@Thread
-                }
-                val url = JSONObject(respBody).getString("url")
-                val meta = JSONObject().apply {
-                    put("url", url); put("name", fileName); put("size", bytes.size)
-                    put("mime", mime)
-                    if (voiceDurationSec != null) {
-                        put("kind", "voice"); put("dur", voiceDurationSec)
-                    } else put("kind", "file")
-                }
-                val descr = "filemeta:" + meta.toString()
-                val kind = if (voiceDurationSec != null) Message.Type.VOICE else Message.Type.FILE
-
-                val msg = Message(
-                    id = "msg_${System.currentTimeMillis()}",
-                    from = myPubKey, to = to, text = fileName,
-                    timestamp = System.currentTimeMillis(),
-                    type = kind, fileName = fileName,
-                    fileSize = bytes.size.toLong(), fileUrl = url,
-                    voiceDuration = voiceDurationSec,
-                )
-                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                    messages.add(msg)
-                }
-                persistMessage(MessageEntity(
-                    id = msg.id, chatId = "dm:$to", fromPub = myPubKey, toPub = to,
-                    text = fileName, timestamp = msg.timestamp, type = kind.name,
-                    outgoing = true, fileUrl = url, fileName = fileName,
-                    fileSize = bytes.size.toLong(), voiceDuration = voiceDurationSec,
-                ))
-
-                // E2E-wrap the descriptor (fail closed like sendMessage).
-                if (myPrivKeyHex.isEmpty()) return@Thread
-                val theirPubHex = if (to.startsWith("npub1")) {
-                    com.indestructible.messenger.crypto.Bech32.decodeNpub(to)
-                        .joinToString("") { "%02x".format(it) }
-                } else to
-                val payload = "nip44:" + Nip44.encryptFor(descr, myPrivKeyHex, theirPubHex)
-                val json = JSONObject().apply {
-                    put("type", "chat"); put("to", to); put("text", payload)
-                    put("encrypted", true); put("is_e2e", true)
-                    put("ts", System.currentTimeMillis() / 1000)
-                    put("id", msg.id)
-                }
-                webSocket?.send(json.toString())
-            } catch (e: Exception) {
-                Log.e("ChatVM", "sendAttachment error", e)
-            }
-        }.start()
-    }
-
-    // P11: filemeta comes from the peer and is attacker-controlled. Only a
-    // relative same-origin /api/files/... path may ever be fetched with the
-    // JWT; file names are reduced to their basename (no traversal).
-    private fun sanitizeFileUrl(raw: String?): String? {
-        if (raw.isNullOrBlank()) return null
-        val u = raw.trim()
-        if (!u.startsWith("/api/files/")) return null
-        if (u.contains("..") || u.contains('@') || u.contains("://") || u.contains('\\')) return null
-        return u
-    }
-
-    private fun sanitizeFileName(raw: String?): String =
-        raw?.substringAfterLast('/')?.substringAfterLast('\\')?.takeIf { it.isNotBlank() && it != "." && it != ".." }
-            ?: "file"
-
-    /** Download an attachment (JWT-authed) into app files dir. */
-    fun downloadAttachment(fileUrl: String, fileName: String, onDone: (java.io.File?) -> Unit) {
-        val safeUrl = sanitizeFileUrl(fileUrl) ?: run {
-            Log.e("ChatVM", "blocked non-relative attachment url")
-            onDone(null); return
-        }
-        val safeName = sanitizeFileName(fileName)
-        Thread {
-            try {
-                val req = Request.Builder()
-                    .url(httpUrl + safeUrl)
-                    .header("Authorization", "Bearer $jwtToken")
-                    .build()
-                val resp = client.newCall(req).execute()
-                if (resp.code != 200) { onDone(null); return@Thread }
-                val dir = java.io.File(appContext.filesDir, "attachments").apply { mkdirs() }
-                val out = java.io.File(dir, safeName)
-                resp.body?.byteStream()?.use { inp ->
-                    out.outputStream().use { inp.copyTo(it) }
-                }
-                android.os.Handler(android.os.Looper.getMainLooper()).post { onDone(out) }
-            } catch (e: Exception) {
-                Log.e("ChatVM", "downloadAttachment error", e)
-                android.os.Handler(android.os.Looper.getMainLooper()).post { onDone(null) }
-            }
-        }.start()
-    }
-
-    private fun handleIncoming(raw: String) {
-        try {
-            val json = JSONObject(raw)
-            val type = json.optString("type", "")
-
-            if (type == "join") {
-                val joined = json.optString("from", "")
-                if (joined.isNotEmpty() && joined != "system" && joined != myPubKey) {
-                    onlinePeers.value = onlinePeers.value + joined
-                }
-            }
-            if (type == "leave") {
-                val left = json.optString("from", "")
-                if (left.isNotEmpty()) onlinePeers.value = onlinePeers.value - left
-            }
-            if (type == "typing") {
-                noteTyping(json.optString("from", ""))
-            }
-            if (type == "key_exchange") {
-                // Call signaling envelope (PWA compat): signal JSON in publicKey.
-                val sig = json.optString("publicKey", "")
-                val from = json.optString("from", "")
-                if (sig.isNotEmpty() && from.isNotEmpty() && from != myPubKey) {
-                    CallManager.handleSignal(from, sig)
-                }
-            }
-            if (type == "message_deleted") {
-                val delId = json.optString("id", "")
-                if (delId.isNotEmpty()) {
-                    android.os.Handler(android.os.Looper.getMainLooper()).post {
-                        messages.removeAll { it.id == delId }
-                    }
-                    Thread { db.messages().delete(delId) }.start()
-                }
-            }
-
-            if ((type == "message" || type == "chat") && json.optString("text", "") != "connected") {
-                val from = json.optString("from", json.optString("sender", ""))
-                val to = json.optString("to", json.optString("recipient", ""))
-                val text = json.optString("text", json.optString("content", ""))
-
-                // Self-echo (server sends our own copies back for multi-device
-                // sync): skip early — E2E-decrypting our own outbound copy is
-                // keyed to the recipient, not us, and always fails MAC.
-                if (from == myPubKey) return
-
-                // P24: real NIP-44 decrypt. "nip44:" prefix marks client ciphertext.
-                val rawText = text
-                val finalText = if (rawText.startsWith("nip44:") && myPrivKeyHex.isNotEmpty()) {
-                    try {
-                        val theirPubHex = if (from.startsWith("npub1")) {
-                            com.indestructible.messenger.crypto.Bech32.decodeNpub(from)
-                                .joinToString("") { "%02x".format(it) }
-                        } else from
-                        Nip44.decryptFrom(rawText.removePrefix("nip44:"), myPrivKeyHex, theirPubHex)
-                    } catch (e: Exception) {
-                        Log.e("ChatVM", "E2E decrypt failed", e)
-                        "[не удалось расшифровать]"
-                    }
-                } else {
-                    rawText
-                }
-
-                if (finalText.isNotEmpty() && from != myPubKey) {
-                    val ts = json.optLong("timestamp", json.optLong("ts", System.currentTimeMillis()))
-                    val msgId = json.optString("id", "msg_${ts}")
-                    val replyToId = json.optString("replyTo", "").ifEmpty { null }
-                    val groupField = json.optString("group", "")
-
-                    // groupmeta:{json} — E2E group invite descriptor.
-                    if (finalText.startsWith("groupmeta:")) {
-                        try {
-                            val gm = JSONObject(finalText.removePrefix("groupmeta:"))
-                            val gid = gm.getString("id")
-                            val gname = gm.optString("name", "Группа")
-                            val arr = gm.optJSONArray("members")
-                            val members = mutableListOf<String>()
-                            if (arr != null) for (i in 0 until arr.length()) {
-                                members.add(arr.getString(i))
-                            }
-                            if (myPubKey.isNotEmpty() && !members.contains(myPubKey)) {
-                                members.add(myPubKey)
-                            }
-                            val gChatId = "group:$gid"
-                            Thread {
-                                db.chats().upsert(ChatEntity(
-                                    id = gChatId, name = gname, avatar = "👥",
-                                    type = "GROUP", lastActivity = ts,
-                                    members = members.joinToString(","),
-                                ))
-                                val fresh = db.chats().all().map { it.toModel() }
-                                android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                    chats.clear(); chats.addAll(fresh)
-                                }
-                            }.start()
-                        } catch (e: Exception) {
-                            Log.e("ChatVM", "bad groupmeta", e)
-                        }
-                        return
-                    }
-
-                    val chatId = if (groupField.isNotEmpty()) groupField else "dm:$from"
-
-                    // filemeta:{json} — decrypted attachment descriptor.
-                    var mType = Message.Type.TEXT
-                    var mText = finalText
-                    var fileUrl: String? = null
-                    var fileName: String? = null
-                    var fileSize: Long? = null
-                    var voiceDur: Int? = null
-                    if (finalText.startsWith("filemeta:")) {
-                        try {
-                            val meta = JSONObject(finalText.removePrefix("filemeta:"))
-                            // P11: accept only relative same-origin file paths;
-                            // a hostile url/name degrades to a plain text bubble.
-                            fileUrl = sanitizeFileUrl(meta.getString("url"))
-                            fileName = sanitizeFileName(meta.optString("name", "file"))
-                            fileSize = meta.optLong("size")
-                            voiceDur = if (meta.has("dur")) meta.getInt("dur") else null
-                            if (fileUrl != null) {
-                                mType = if (meta.optString("kind") == "voice")
-                                    Message.Type.VOICE else Message.Type.FILE
-                                mText = fileName ?: "file"
-                            } else {
-                                mText = fileName ?: "file"
-                            }
-                        } catch (e: Exception) {
-                            Log.e("ChatVM", "bad filemeta", e)
-                        }
-                    }
-
-                    persistMessage(MessageEntity(
-                        id = msgId, chatId = chatId, fromPub = from, toPub = to,
-                        text = mText, timestamp = ts, outgoing = false,
-                        type = mType.name, fileUrl = fileUrl, fileName = fileName,
-                        fileSize = fileSize, voiceDuration = voiceDur,
-                        replyTo = replyToId,
-                    ))
-                    ensureIncomingChat(from, mText, ts, chatId)
-                    Thread {
-                        val senderName = db.contacts().byPubkey(from)?.name
-                            ?: "${from.take(8)}…${from.takeLast(4)}"
-                        Notifier.notifyIncoming(appContext, senderName, msgId)
-                    }.start()
-                    if (activeChatId == chatId) {
-                        messages.add(Message(
-                            id = msgId, from = from, to = to,
-                            text = mText, timestamp = ts, type = mType,
-                            fileUrl = fileUrl, fileName = fileName,
-                            fileSize = fileSize, voiceDuration = voiceDur,
-                            replyTo = replyToId,
-                        ))
-                        Thread { db.messages().markIncomingRead(chatId); db.chats().markRead(chatId) }.start()
-                    }
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("ChatVM", "Parse error: ${raw.take(100)}", e)
-        }
-    }
 
     fun setActiveChat(chatId: String) {
         activeChatId = chatId
@@ -754,4 +452,3 @@ class ChatViewModel(
         connectionStatus.value = "disconnected"
     }
 }
-

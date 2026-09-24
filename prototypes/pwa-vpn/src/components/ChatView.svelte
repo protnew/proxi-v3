@@ -14,6 +14,9 @@
   import { sendFile } from '../lib/peer-manager'
   import { startRecording as startVoiceRecord, stopRecording as stopVoiceRecord } from '../lib/voice'
   import EmojiPicker from './EmojiPicker.svelte'
+  import ChatHeader from './ChatHeader.svelte'
+  import MessageList from './MessageList.svelte'
+  import ChatComposer from './ChatComposer.svelte'
   import type { Message, ChatView } from '../stores/messenger'
   let inputText = $state('')
   let messagesEl: HTMLDivElement | undefined = $state()
@@ -343,115 +346,11 @@ function processMessageUrls(text: string) {
 }} />
 {#if currentChat}
   <div class="chat-area">
-    <div class="chat-header">
-      <button class="back-btn" onclick={() => dispatch('back')} title="Назад">‹ Назад</button>
-      <button class="back-btn" onclick={goBack}>←</button>
-      <div class="avatar">{currentChat.avatar}</div>
-      <div class="peer-info">
-        <span class="peer-name">{currentChat.name}</span>
-        <span class="peer-status">
-          {#if currentChat.typing && currentChat.typing.length > 0}
-            <em>печатает...</em>
-          {:else}
-            онлайн недавно <!-- P31-presence -->
-          {/if}
-        </span>
-      </div>
-      <button class="hbtn" type="button" title="Звонок" aria-label="Звонок" onclick={onCallClick}>📞</button>
-      <button class="hbtn" type="button" title="Поиск" aria-label="Поиск" onclick={onSearchClick}>🔍</button>
-      <button class="hbtn" type="button" title="Меню" aria-label="Меню" onclick={onMenuClick}>⋮</button>
-    </div>
-        {#if showSearch}
-      <div class="search-panel" data-testid="chat-search-panel">
-        <input type="search" placeholder="Поиск…" bind:value={searchQ} oninput={onSearchInput} data-testid="chat-search-input" />
-        {#each searchHits.slice(0, 8) as hit}
-          <div class="search-hit">{hit.chatName}: {hit.message.text.slice(0, 80)}</div>
-        {/each}
-      </div>
-    {/if}
-    {#if showHeaderMenu}
-      <div class="header-menu" data-testid="chat-header-menu">
-        <button type="button" onclick={() => { showHeaderMenu = false; toast('Инфо чата — скоро', 'info') }}>О чате</button>
-        <button type="button" onclick={() => { showHeaderMenu = false; onSearchClick() }}>Поиск</button>
-      </div>
-    {/if}
-    <div class="messages" bind:this={messagesEl}
-      ondragover={(e) => { e.preventDefault(); e.stopPropagation() }}
-      ondrop={(e) => {
-        e.preventDefault(); e.stopPropagation()
-        const file = e.dataTransfer?.files?.[0]
-        if (file) handleFileSelect({ target: { files: [file], value: '' } } as any)
-      }}
-    >
-      {#each currentChat.messages as msg, i (msg.id)}
-        {@const ds = getDate(msg.timestamp)}
-        {@const prevDs = i > 0 ? getDate(currentChat.messages[i - 1].timestamp) : ''}
-        {#if ds !== prevDs}
-          <div class="date-sep"><span>{ds}</span></div>
-        {/if}
-        <div class="msg-row" class:mine={isMine(msg)} oncontextmenu={(e) => onContext(e, msg)} role="article">
-          <div class="bubble" class:mine={isMine(msg)}>
-            {#if msg.replyTo}
-              <div class="reply-ref">↩ {getReplyText(msg.replyTo)}</div>
-            {/if}
-            {#if msg.forwardedFrom}
-              <div class="fwd-ref">↪ Переслано от {getName(msg.forwardedFrom)}</div>
-            {/if}
-            {#if msg.type === 'text'}
-              <div class="msg-text">{msg.text}</div>
-              {#if msg.edited}<span class="edited">(ред.)</span>{/if}
-            {:else if msg.type === 'voice'}
-              <div class="voice-msg">
-                <button class="play-btn" onclick={() => { if (msg.fileUrl) new Audio(msg.fileUrl).play() }}>▶️</button>
-                <div class="voice-bars">{#each Array(20) as _}<div class="bar"></div>{/each}</div>
-                <span class="dur">{msg.voiceDuration || 0}s</span>
-              </div>
-            {:else if msg.type === 'file'}
-              <button class="file-msg" onclick={() => downloadFile(msg)}>
-                <span>📄</span>
-                <div class="file-info">
-                  <span class="fname">{msg.fileName || 'file'}</span>
-                  <span class="fsize">{formatSize(msg.fileSize || 0)}</span>
-                </div>
-              </button>
-            {:else if msg.type === 'image'}
-              <div class="image-msg">
-                {#if msg.fileUrl}
-                  <img src={msg.fileUrl} alt={msg.fileName || 'image'} onclick={() => window.open(msg.fileUrl, '_blank')} />
-                {:else}
-                  <span>🖼️ {msg.fileName || 'image'} ({formatSize(msg.fileSize || 0)})</span>
-                {/if}
-              </div>
-            {/if}
-            {#if msg.reactions && Object.keys(msg.reactions).length > 0}
-              <div class="reactions">
-                {#each Object.entries(msg.reactions) as [emoji, pks]}
-                  <button class="react" onclick={() => doReact(msg, emoji)}>{emoji} {pks.length}</button>
-                {/each}
-              </div>
-            {/if}
-            <div class="meta">
-              <span class="mtime">{formatTime(msg.timestamp)}</span>
-              {#if isMine(msg)}
-                <span class="check" title={msg.deliveryStatus || (msg.read ? 'read' : 'sent')}>
-                  {#if msg.deliveryStatus === 'pending'}⏳
-                  {:else if msg.deliveryStatus === 'failed'}⚠
-                  {:else if msg.deliveryStatus === 'delivered' || msg.read}✓✓
-                  {:else if msg.deliveryStatus === 'sent'}✓
-                  {:else}⏳{/if}
-                </span>
-              {/if}
-            </div>
-          </div>
-        </div>
-      {/each}
-      {#if currentChat.messages.length === 0}
-        <div class="no-msg">
-          <p>Напишите первое сообщение</p>
-          <p class="hint">Если друг сейчас не в сети, оно уйдёт позже</p>
-        </div>
-      {/if}
-    </div>
+    <ChatHeader {currentChat} {showSearch} bind:searchQ {searchHits} {showHeaderMenu}
+      onBack={() => dispatch('back')} {goBack} {onCallClick} {onSearchClick} {onMenuClick} {onSearchInput}
+      onAbout={() => { showHeaderMenu = false; toast('Инфо чата — скоро', 'info') }} />
+        <MessageList {currentChat} bind:messagesEl {isMine} {getReplyText} {getName}
+      {formatTime} {formatSize} {getDate} {onContext} {downloadFile} {doReact} {handleFileSelect} />
     {#if contextMenu}
       <div class="ctx-menu" style="left:{contextMenu.x}px;top:{contextMenu.y}px">
         <button onclick={() => { const m = currentChat?.messages.find(x => x.id === contextMenu?.msgId); if (m) doReply(m) }}>↩ Ответить</button>
@@ -467,46 +366,11 @@ function processMessageUrls(text: string) {
         </div>
       </div>
     {/if}
-    {#if replyTo}
-      <div class="reply-bar">
-        <span>↩ {replyTo.text.slice(0, 50)}{replyTo.text.length > 50 ? '...' : ''}</span>
-        <button onclick={() => replyTo = null}>✕</button>
-      </div>
-    {/if}
-    {#if editingMsg}
-      <div class="reply-bar editing">
-        <span>✏️ Редактирование: {editingMsg.text.slice(0, 50)}</span>
-        <button onclick={() => { editingMsg = null; inputText = '' }}>✕</button>
-      </div>
-    {/if}
-    <div class="input-area">
-      <button class="ibtn" onclick={() => showEmoji = !showEmoji} aria-label="Смайлики" title="Смайлики">😊</button>
-      <EmojiPicker {showEmoji} onSelect={addEmoji} />
-      <button class="ibtn" onclick={() => document.getElementById('f-in')?.click()} aria-label="Файл" title="Файл">📎</button>
-      <input id="f-in" type="file" hidden onchange={handleFileSelect} />
-      <textarea
-        placeholder={editingMsg ? 'Редактировать сообщение...' : 'Сообщение'}
-        bind:value={inputText}
-        onkeydown={handleKey}
-        rows="1"
-      ></textarea>
-      {#if inputText.trim()}
-        <button class="send-btn" onclick={sendMessage} aria-label="Отправить" title="Отправить">➤</button>
-      {:else}
-        <button class="mic-btn" class:rec={isRecording} aria-label="Голосовое" title="Голосовое"
-          onmousedown={startRecording} onmouseup={stopRecording} onmouseleave={() => isRecording && stopRecording()}>
-          {isRecording ? '⏺' : '🎤'}
-        </button>
-      {/if}
-    </div>
-    <!-- Upload progress -->
-    {#if uploading}
-      <div class="upload-bar">
-        <span>📤 {uploadName}</span>
-        <div class="progress-track"><div class="progress-fill" style="width:{uploadProgress}%"></div></div>
-        <span>{uploadProgress}%</span>
-      </div>
-    {/if}
+    <ChatComposer bind:inputText bind:showEmoji {isRecording} {replyTo} {editingMsg}
+      {uploading} {uploadName} {uploadProgress} {addEmoji} {handleKey} {sendMessage}
+      {startRecording} {stopRecording} {handleFileSelect}
+      clearReply={() => replyTo = null}
+      clearEdit={() => { editingMsg = null; inputText = '' }} />
   </div>
 {:else}
   <div class="empty">

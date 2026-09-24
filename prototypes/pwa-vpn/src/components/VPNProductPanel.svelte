@@ -1,4 +1,7 @@
 ﻿<script lang="ts">
+  import VPNGivePanel from "./VPNGivePanel.svelte"
+  import VPNRequestPanel from "./VPNRequestPanel.svelte"
+  import VPNTunnelPanel from "./VPNTunnelPanel.svelte"
   import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
   import { rtcVPN } from '../lib/webrtc-vpn'
   import { getLocalTabP2P, type TabP2PStatus } from '../lib/local-tab-p2p'
@@ -71,7 +74,6 @@ async function startVPNSignaling(targetPubkey: string) {
   let tunnelBusy = $state(false)
   let transportMode = $state<string>('')  // 'P2P' | 'Nostr Relay' | ''
   let dismissedFrom = $state<Record<string, number>>({})
-  // Real x-only pubkeys of demo secrets '1'*64 / '2'*64 (P1 signed auth)
   const DEMO_ALICE = '4f355bdcb7cc0af728ef3cceb9615d90684bb5b2ca5f859ab0f0b704075871aa'
   const DEMO_BOB = '466d7fcae563e5cb09a0d1870bb580344804617879a14949cf22285f1bae3f27'
   let lanPhoneUrl = $state('')
@@ -108,7 +110,6 @@ async function startVPNSignaling(targetPubkey: string) {
     } catch { /* offline */ }
   })
   async function startInAppTunnel() {
-    // Product path: in-app WebRTC DataChannel (VPN-101). Amnezia kernel is Advanced.
     tunnelBusy = true
     try {
       await localP2P.startAsHost()
@@ -190,8 +191,6 @@ async function startVPNSignaling(targetPubkey: string) {
       addLog('Ошибка: ' + (e as Error).message)
     }
   }
-  // P11: requestVPN was merged into giveVPN (dead code) — button «Запросить VPN»
-  // called an undefined function. Split into its own handler.
   async function requestVPN() {
     if (!friendId.trim()) applyDemoPartner()
     if (!friendId.trim()) { addLog('Введите ID друга'); return }
@@ -336,8 +335,6 @@ async function startVPNSignaling(targetPubkey: string) {
       console.log('[VPN] WebRTC SW tunnel registered')
     }
   }
-  // P11: exit-node side — peer sent rtc-offer, we answer and become the exit.
-  // Was referenced but never defined (dead reference → 'rtc-offer' events dropped).
   async function handleRTCOffer(event: { from: string; rtcSdp?: string; iceCandidates?: string[] }) {
     try {
       await ensureNostr()
@@ -486,45 +483,13 @@ async function startVPNSignaling(targetPubkey: string) {
   {/if}
 </div>
 {#if showInviteModal}
-  <div class="modal-overlay" onclick={() => showInviteModal = false}>
-    <div class="modal" onclick={(e) => e.stopPropagation()} data-testid="vpn-invite-modal">
-      <h3>📡 Поделиться VPN с другом</h3>
-      <p>ID друга (hex pubkey или demo-ключ 111…/222…):</p>
-      <input type="text" placeholder="pubkey друга..." bind:value={friendId} data-testid="vpn-friend-id" />
-      <div class="modal-buttons">
-        <button class="cancel" onclick={() => showInviteModal = false}>Отмена</button>
-        <button class="confirm" data-testid="vpn-share-confirm" onclick={giveVPN}>Раздать</button>
-      </div>
-    </div>
-  </div>
+  <VPNGivePanel bind:friendId onCancel={() => showInviteModal = false} onConfirm={giveVPN} />
 {/if}
 {#if showRequestModal}
-  <div class="modal-overlay" onclick={() => showRequestModal = false}>
-    <div class="modal" onclick={(e) => e.stopPropagation()}>
-      <h3>🤝 Запросить VPN у друга</h3>
-      <p>ID друга (hex pubkey):</p>
-      <input type="text" placeholder="pubkey друга..." bind:value={friendId} />
-      <div class="modal-buttons">
-        <button class="cancel" onclick={() => showRequestModal = false}>Отмена</button>
-        <button class="confirm" onclick={requestVPN}>Запросить</button>
-      </div>
-    </div>
-  </div>
+  <VPNRequestPanel bind:friendId onCancel={() => showRequestModal = false} onConfirm={requestVPN} />
 {/if}
 {#if incomingEvent}
-  <div class="modal-overlay" data-testid="vpn-incoming-modal">
-    <div class="modal">
-      <h3>{incomingEvent.type === 'vpn-invite' ? '📡 Друг предлагает VPN!' : '🤝 Друг просит VPN'}</h3>
-      <p>От: <code>{incomingEvent.from.slice(0, 24)}…</code></p>
-      {#if incomingEvent.wtAddr}<p>Exit: <code>{incomingEvent.wtAddr}</code></p>{/if}
-      <div class="modal-buttons">
-        <button class="cancel" data-testid="vpn-reject" onclick={rejectVPN}>Отклонить</button>
-        <button class="confirm" data-testid="vpn-accept" onclick={acceptVPN}>
-          {incomingEvent.type === 'vpn-invite' ? 'Принять' : 'Разрешить'}
-        </button>
-      </div>
-    </div>
-  </div>
+  <VPNTunnelPanel {incomingEvent} onReject={rejectVPN} onAccept={acceptVPN} />
 {/if}
 <style>
 @import "./vpn-panel.css";

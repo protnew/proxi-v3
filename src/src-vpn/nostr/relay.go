@@ -1,10 +1,9 @@
-﻿package nostr
+package nostr
 
 import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/unkillable-messenger/vpn/store"
 )
 
@@ -344,101 +342,7 @@ func (r *Relay) handleClose(client *Client, raw []json.RawMessage) {
 }
 
 // verifyEventSig checks the schnorr signature of an event over its ID (NIP-01).
-func verifyEventSig(e *Event) error {
-	if e.Sig == "" {
-		return errors.New("missing sig")
-	}
-	sigBytes, err := hex.DecodeString(e.Sig)
-	if err != nil {
-		return errors.New("bad sig hex")
-	}
-	sig, err := schnorr.ParseSignature(sigBytes)
-	if err != nil {
-		return errors.New("bad schnorr sig")
-	}
-	pkBytes, err := hex.DecodeString(e.PubKey)
-	if err != nil || len(pkBytes) != 32 {
-		return errors.New("bad pubkey hex")
-	}
-	pk, err := schnorr.ParsePubKey(pkBytes)
-	if err != nil {
-		return errors.New("bad x-only pubkey")
-	}
-	idBytes, err := hex.DecodeString(e.ID)
-	if err != nil {
-		return errors.New("bad id hex")
-	}
-	if !sig.Verify(idBytes, pk) {
-		return errors.New("signature verification failed")
-	}
-	return nil
-}
 
-// containsSensitiveKind reports whether the filter asks for private kinds.
-func containsSensitiveKind(kinds []int) bool {
-	for _, k := range kinds {
-		if k == 4 || k == 30090 {
-			return true
-		}
-	}
-	return false
-}
-
-// deliveryAllowed: private-kind events reach only the author and p-tag peers.
-func deliveryAllowed(c *Client, e *Event) bool {
-	if e.Kind != 4 && e.Kind != 30090 {
-		return true
-	}
-	if c.AuthPubkey == "" {
-		return false
-	}
-	if strings.EqualFold(e.PubKey, c.AuthPubkey) {
-		return true
-	}
-	for _, t := range e.Tags {
-		if len(t) >= 2 && t[0] == "p" && strings.EqualFold(t[1], c.AuthPubkey) {
-			return true
-		}
-	}
-	return false
-}
-
-// matchFilter checks if an event matches a NIP-01 filter.
-func matchFilter(event *Event, filter *Filter) bool {	if len(filter.IDs) > 0 && !contains(filter.IDs, event.ID) {
-		return false
-	}
-	if len(filter.Authors) > 0 && !contains(filter.Authors, event.PubKey) {
-		return false
-	}
-	if len(filter.Kinds) > 0 && !containsInt(filter.Kinds, event.Kind) {
-		return false
-	}
-	if filter.Since != nil && event.CreatedAt < *filter.Since {
-		return false
-	}
-	if filter.Until != nil && event.CreatedAt > *filter.Until {
-		return false
-	}
-	return true
-}
-
-func contains(slice []string, val string) bool {
-	for _, s := range slice {
-		if s == val {
-			return true
-		}
-	}
-	return false
-}
-
-func containsInt(slice []int, val int) bool {
-	for _, s := range slice {
-		if s == val {
-			return true
-		}
-	}
-	return false
-}
 
 func (c *Client) send(v interface{}) {
 	c.mu.Lock()
@@ -496,7 +400,8 @@ func (r *Relay) InjectLocalEvent(event Event) {
 	if event.ID == "" {
 		event.ID = ComputeEventID(&event)
 	}
-	if r.db != nil {
+	// R11: Sig=="local" is an unsafe local-only marker — never persist as a Nostr event.
+	if event.Sig != "local" && r.db != nil {
 		if err := r.db.SaveNostrEvent(store.NostrEvent{
 			ID: event.ID, PubKey: event.PubKey, Kind: event.Kind,
 			Tags: event.Tags, Content: event.Content, Sig: event.Sig, CreatedAt: event.CreatedAt,
