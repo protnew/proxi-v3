@@ -32,10 +32,8 @@ func (s *Store) bindMessageKey(dbPath string) error {
 		return nil
 	}
 	if dbPath == "" || dbPath == ":memory:" {
-		if _, err := rand.Read(s.msgKey[:]); err != nil {
-			return err
-		}
-		return nil
+		_, err := rand.Read(s.msgKey[:])
+		return err
 	}
 	if _, err := s.db.Exec(`CREATE TABLE IF NOT EXISTS atrest_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)`); err != nil {
 		return err
@@ -54,18 +52,32 @@ func (s *Store) bindMessageKey(dbPath string) error {
 		if _, err := s.db.Exec(`INSERT OR REPLACE INTO atrest_meta(k, v) VALUES ('key_id', ?)`, id); err != nil {
 			return err
 		}
+		return s.writeFreshMessageKey(id)
 	}
+	return s.loadMessageKeyFile(id)
+}
+
+func (s *Store) loadMessageKeyFile(id string) error {
 	path, err := messageKeyPathByID(id)
 	if err != nil {
 		return err
 	}
-	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
-		raw, err := unprotectKey(data)
-		if err != nil || len(raw) != 32 {
-			return fmt.Errorf("message key unreadable")
-		}
-		copy(s.msgKey[:], raw)
-		return nil
+	data, err := os.ReadFile(path)
+	if err != nil || len(data) == 0 {
+		return fmt.Errorf("message key file missing/corrupt for key_id=%s", id)
+	}
+	raw, err := unprotectKey(data)
+	if err != nil || len(raw) != 32 {
+		return fmt.Errorf("message key file missing/corrupt for key_id=%s", id)
+	}
+	copy(s.msgKey[:], raw)
+	return nil
+}
+
+func (s *Store) writeFreshMessageKey(id string) error {
+	path, err := messageKeyPathByID(id)
+	if err != nil {
+		return err
 	}
 	if _, err := rand.Read(s.msgKey[:]); err != nil {
 		return err
@@ -77,7 +89,11 @@ func (s *Store) bindMessageKey(dbPath string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
 	}
-	return os.WriteFile(path, blob, 0600)
+	if err := os.WriteFile(path, blob, 0600); err != nil {
+		_, _ = s.db.Exec(`DELETE FROM atrest_meta WHERE k = 'key_id' AND v = ?`, id)
+		return err
+	}
+	return nil
 }
 
 func (s *Store) sealColumn(plain string) (string, error) {

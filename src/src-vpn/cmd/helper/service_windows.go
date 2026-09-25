@@ -3,6 +3,7 @@
 package main
 
 import (
+	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
 
@@ -37,4 +38,22 @@ func probeSCM() error {
 		return err
 	}
 	return m.Disconnect()
+}
+
+func uninstallHelperService() error {
+	m, err := mgr.Connect()
+	if err != nil {
+		return err
+	}
+	defer m.Disconnect()
+	s, err := m.OpenService(helperServiceName)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+	st, qerr := s.Query()
+	if qerr == nil && st.State == svc.Running {
+		_, _ = s.Control(svc.Stop)
+	}
+	return s.Delete()
 }

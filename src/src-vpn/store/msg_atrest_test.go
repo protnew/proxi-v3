@@ -2,6 +2,8 @@ package store
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -95,5 +97,62 @@ func TestMC1_OSKeyNotRaw(t *testing.T) {
 	}
 	if !bytes.Equal(back, raw) {
 		t.Fatal("roundtrip")
+	}
+}
+
+func TestMC1_MissingKeyFileFailClosed(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "msgs.db")
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SaveMessage(Message{ID: "m-miss", From: "a", To: "b", Text: "keep", Timestamp: 9}); err != nil {
+		t.Fatal(err)
+	}
+	var id string
+	if err := s.db.QueryRow(`SELECT v FROM atrest_meta WHERE k = 'key_id'`).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	keyPath, err := messageKeyPathByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if err := os.Remove(keyPath); err != nil {
+		t.Fatal(err)
+	}
+	_, err = NewStore(dbPath)
+	if err == nil || !strings.Contains(err.Error(), "message key file missing/corrupt for key_id="+id) {
+		t.Fatalf("err=%v", err)
+	}
+	if _, statErr := os.Stat(keyPath); !os.IsNotExist(statErr) {
+		t.Fatal("key file was recreated")
+	}
+}
+
+func TestMC1_FreshDBCreatesKey(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "fresh.db")
+	s, err := NewStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	var id string
+	if err := s.db.QueryRow(`SELECT v FROM atrest_meta WHERE k = 'key_id'`).Scan(&id); err != nil || id == "" {
+		t.Fatal(err, id)
+	}
+	keyPath, err := messageKeyPathByID(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(keyPath) })
+	st, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.Size() == 0 {
+		t.Fatal("empty key file")
 	}
 }

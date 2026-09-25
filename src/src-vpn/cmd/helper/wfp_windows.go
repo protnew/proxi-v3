@@ -4,6 +4,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/tailscale/wf"
@@ -130,4 +132,143 @@ func alreadyExists(err error) bool {
 	}
 	s := err.Error()
 	return strings.Contains(s, "already exists") || strings.Contains(s, "ERROR_ALREADY_EXISTS") || strings.Contains(s, "0x80320009")
+}
+
+func knownKillSwitchRuleIDs() []wf.RuleID {
+	ids := make([]wf.RuleID, 0, 16)
+	for i := uint32(0); i < 4; i++ {
+		for _, base := range []uint32{0x1000, 0x2000, 0x3000, 0x4000} {
+			ids = append(ids, wf.RuleID(windows.GUID{Data1: base + i, Data4: proxiSublayerGUID.Data4}))
+		}
+	}
+	return ids
+}
+
+func missingWFP(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	return strings.Contains(s, "not found") || strings.Contains(s, "does not exist") || strings.Contains(s, "0x80320003") || strings.Contains(s, "0x80320007") || strings.Contains(s, "0x80320008")
+}
+
+func enumKillSwitch() (string, int, error) {
+	session, err := wf.New(&wf.Options{Name: "PROXI", Description: "Proxi kill-switch enum", Dynamic: false})
+	if err != nil {
+		return "", 0, err
+	}
+	defer session.Close()
+	want := wf.SublayerID(proxiSublayerGUID)
+	subs, err := session.Sublayers()
+	if err != nil {
+		return "", 0, err
+	}
+	found := false
+	guid := windows.GUID(proxiSublayerGUID).String()
+	for _, sl := range subs {
+		if sl == nil {
+			continue
+		}
+		if sl.ID == want || sl.Name == WFPSublayerName {
+			found = true
+			guid = windows.GUID(sl.ID).String()
+		}
+	}
+	if !found {
+		return guid, 0, fmt.Errorf("sublayer %s not in WFP enum", WFPSublayerName)
+	}
+	rules, err := session.Rules()
+	if err != nil {
+		return guid, 0, err
+	}
+	n := 0
+	for _, r := range rules {
+		if r != nil && r.Sublayer == want {
+			n++
+		}
+	}
+	return guid, n, nil
+}
+
+func removeKillSwitch() error {
+	session, err := wf.New(&wf.Options{Name: "PROXI", Description: "Proxi kill-switch remove", Dynamic: false})
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+	var problems []string
+	for _, id := range knownKillSwitchRuleIDs() {
+		if err := session.DeleteRule(id); err != nil && !missingWFP(err) {
+			problems = append(problems, err.Error())
+		}
+	}
+	if err := session.DeleteSublayer(wf.SublayerID(proxiSublayerGUID)); err != nil && !missingWFP(err) {
+		problems = append(problems, "sublayer: "+err.Error())
+	}
+	if err := session.DeleteProvider(proxiProviderID); err != nil && !missingWFP(err) {
+		problems = append(problems, "provider: "+err.Error())
+	}
+	if len(problems) > 0 {
+		return fmt.Errorf("%s", strings.Join(problems, "; "))
+	}
+	return nil
+}
+
+func rollbackNotePath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), "WFP-ROLLBACK.txt")
+}
+
+func armRollbackNote() {
+	path := rollbackNotePath()
+	if path == "" {
+		return
+	}
+	_ = os.WriteFile(path, []byte("helper.exe --killswitch-remove\nnetsh wfp show filters\n"), 0600)
+}
+
+func clearRollbackNote() {
+	path := rollbackNotePath()
+	if path == "" {
+		return
+	}
+	_ = os.Remove(path)
+}
+
+func printRollback() {
+	emit("ROLLBACK: helper.exe --killswitch-remove")
+	emit("ROLLBACK: netsh wfp show filters")
+}
+
+func runKillSwitchTest() error {
+	armRollbackNote()
+	if err := installKillSwitch(0); err != nil {
+		return err
+	}
+	guid, n, err := enumKillSwitch()
+	if err != nil {
+		_ = removeKillSwitch()
+		printRollback()
+		return err
+	}
+	emit(fmt.Sprintf("sublayer GUID=%s filters=%d", guid, n))
+	if n == 0 {
+		_ = removeKillSwitch()
+		printRollback()
+		return fmt.Errorf("enum saw sublayer but 0 filters")
+	}
+	if err := removeKillSwitch(); err != nil {
+		printRollback()
+		return err
+	}
+	if _, n2, err2 := enumKillSwitch(); err2 == nil {
+		printRollback()
+		return fmt.Errorf("sublayer still present filters=%d", n2)
+	}
+	clearRollbackNote()
+	emit("killswitch-removed")
+	return nil
 }
