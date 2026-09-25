@@ -31,6 +31,17 @@ func main() {
 				fail(err)
 			}
 			os.Exit(0)
+		case "--connect-smoke":
+			hold := false
+			for _, a := range os.Args[2:] {
+				if a == "--hold" {
+					hold = true
+				}
+			}
+			if err := runConnectSmoke(hold); err != nil {
+				fail(err)
+			}
+			os.Exit(0)
 		case "--install":
 			exe, err := os.Executable()
 			if err != nil {

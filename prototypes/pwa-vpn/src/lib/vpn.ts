@@ -5,7 +5,7 @@
 import { writable } from 'svelte/store'
 import { API_BASE } from './api'
 
-export type VpnUiStatus = 'disconnected' | 'connecting' | 'connected' | 'sharing' | 'error'
+export type VpnUiStatus = 'disconnected' | 'connecting' | 'connected' | 'sharing' | 'error' | 'core_down' | 'locked'
 
 export interface VpnBackendStatus {
   state: string
@@ -72,9 +72,12 @@ function mapState(state: string): VpnUiStatus {
   }
 }
 
+let pollFails = 0
+
 export async function refreshVPNStatus(): Promise<VpnBackendStatus | null> {
   try {
     const st = await vpnRpc<VpnBackendStatus>('get_status')
+    pollFails = 0
     vpnStatus.set(mapState(st?.state || 'disconnected'))
     vpnStats.update(s => ({
       ...s,
@@ -93,7 +96,10 @@ export async function refreshVPNStatus(): Promise<VpnBackendStatus | null> {
     }))
     return st
   } catch (e) {
-    vpnStats.update(s => ({ ...s, lastError: e instanceof Error ? e.message : String(e) }))
+    pollFails++
+    const msg = pollFails >= 3 ? 'Ядро не отвечает' : (e instanceof Error ? e.message : String(e))
+    if (pollFails >= 3) vpnStatus.set('core_down')
+    vpnStats.update(s => ({ ...s, lastError: msg }))
     return null
   }
 }
@@ -194,9 +200,21 @@ export async function checkEgressIP(): Promise<string> {
 }
 
 export async function disconnectVPN(): Promise<void> {
-  try { await vpnRpc('disconnect') } catch (e) { console.warn(e) }
+  let clean = false
+  try {
+    await vpnRpc('disconnect')
+    const st = await vpnRpc<VpnBackendStatus>('get_status')
+    clean = !st?.state || st.state === 'disconnected' || st.state === 'off'
+  } catch (e) {
+    console.warn(e)
+  }
   stopPolling()
   lastMode = ''
+  if (!clean) {
+    vpnStatus.set('error')
+    vpnStats.update(s => ({ ...s, lastError: 'Повторить отключение' }))
+    return
+  }
   vpnStatus.set('disconnected')
   vpnStats.update(s => ({
     ...s,
