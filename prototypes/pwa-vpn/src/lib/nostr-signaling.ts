@@ -1,3 +1,4 @@
+import { wsAuthProtocols } from './ws-auth'
 /**
  * Nostr client — minimal WebSocket relay connection for VPN signaling
  * No external nostr-tools dependency — pure WebSocket + JSON
@@ -16,8 +17,7 @@ function defaultRelays(): string[] {
   const loc = typeof window !== 'undefined' ? window.location : null
   if (!loc) return ['ws://127.0.0.1:8090/nostr']
   const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:'
-  const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
-  return [`${proto}//${loc.host}/nostr${tok ? `?token=${encodeURIComponent(tok)}` : ''}`]
+  return [`${proto}//${loc.host}/nostr`]
 }
 
 export interface VPNSignal {
@@ -58,7 +58,8 @@ export class NostrSignaling {
 
     for (const relayUrl of this.relays) {
       try {
-        const ws = new WebSocket(relayUrl)
+        const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
+        const ws = new WebSocket(relayUrl, wsAuthProtocols(tok))
         ws.onopen = () => {
           ws.send(subMsg)
           console.log(`[Nostr] Connected to ${relayUrl.split('?')[0]}`)

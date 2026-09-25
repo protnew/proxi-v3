@@ -1,3 +1,4 @@
+import { wsAuthProtocols } from './ws-auth'
 /**
  * Nostr Data Relay - VPN traffic transport over Nostr events.
  * Architecture table 58_TURN_Fallback: Phase 1.5 fallback for 15% NAT.
@@ -21,7 +22,6 @@
 import * as secp from "@noble/secp256k1"
 import { signEvent } from "./identity"
 import { getPubkey, getSeckey } from "./api"
-import { getStoredToken } from "./api-core"
 
 // ─── Helpers ───
 function hexToBytes(hex: string): Uint8Array {
@@ -48,9 +48,8 @@ function relayWsUrl(): string {
   const loc = typeof window !== "undefined" ? window.location : null
   if (!loc) return "ws://127.0.0.1:8090/nostr"
   const proto = loc.protocol === "https:" ? "wss:" : "ws:"
-  // P9: /nostr требует JWT — добавляем ?token= (WS не умеет Authorization header)
-  const tok = getStoredToken()
-  return `${proto}//${loc.host}/nostr${tok ? `?token=${encodeURIComponent(tok)}` : ''}`
+  // P9: JWT rides in Sec-WebSocket-Protocol, not the URL.
+  return `${proto}//${loc.host}/nostr`
 }
 
 // ─── Protocol ───
@@ -112,7 +111,8 @@ export class NostrDataRelay {
 
     this.status = "connecting"
     const url = relayWsUrl()
-    this.ws = new WebSocket(url)
+    const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
+    this.ws = new WebSocket(url, wsAuthProtocols(tok))
 
     return new Promise((resolve, reject) => {
       if (!this.ws) return reject(new Error("No WebSocket"))

@@ -26,6 +26,7 @@
  *   to:    userId for DM, "broadcast" or "" for public
  */
 
+import { wsAuthProtocols } from './ws-auth'
 import type { Message } from '../stores/messenger';
 import { makeChatPayload } from './api-payload';
 import * as secp from '@noble/secp256k1';
@@ -243,15 +244,11 @@ let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let lastStatus: Record<string, any> = { connected: false, relays: 0 };
 
 function buildWsUrl(): string {
-  const base = `${WS_BASE}/ws`;
-  const token = getStoredToken();
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+  return `${WS_BASE}/ws`;
 }
 
-function wsProtocols(): string | string[] | undefined {
-  // Token rides on ?token= (see buildWsUrl). Do NOT send Sec-WebSocket-Protocol:
-  // Vite proxy + Chromium then fail with "HTTP Authentication failed".
-  return undefined;
+function wsProtocols(): string[] {
+  return wsAuthProtocols(getStoredToken());
 }
 
 /** X3/P5: classify WS payload for hub override (key_exchange + call signals). Exported for vitest. */
@@ -355,12 +352,12 @@ export async function connectRelays(): Promise<number> {
   }
 
   const wsToken = getStoredToken();
-  console.log('[api] connectRelays: token=' + (wsToken ? wsToken.slice(0, 20) + '...' : 'NONE') + ', pubkey=' + (cachedIdentity?.pubkey || 'NONE').slice(0, 16));
+  console.log('[api] connectRelays: hasToken=' + Boolean(wsToken) + ', pubkey=' + (cachedIdentity?.pubkey || 'NONE').slice(0, 16));
 
   return new Promise<number>((resolve) => {
     let resolved = false;
     try {
-      const ws = new WebSocket(buildWsUrl());
+      const ws = new WebSocket(buildWsUrl(), wsProtocols());
       wsConnection = ws;
 
       ws.onopen = () => {

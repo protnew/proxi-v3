@@ -27,7 +27,12 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userId := ""
-	tokenStr := r.URL.Query().Get("token")
+	noteQueryTokenDeprecated("/ws", r)
+	tokenStr, tokErr := wsToken(r)
+	if tokErr != nil {
+		http.Error(w, `{"error":"UNAUTHORIZED","message":"bad subprotocol"}`, http.StatusUnauthorized)
+		return
+	}
 	if s.authService != nil {
 		if tokenStr == "" {
 			http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
@@ -38,27 +43,21 @@ func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, `{"error":"UNAUTHORIZED","message":"invalid token"}`, http.StatusUnauthorized)
 			return
 		}
-		// Prefer full npub for DM routing; fallback to UserID
 		if claims.Npub != "" {
 			userId = claims.Npub
 		} else {
 			userId = claims.UserID
 		}
 	} else {
-		// Legacy open mode (tests / no auth)
-		if tokenStr != "" {
-			userId = tokenStr
-		}
-		if userId == "" {
-			userId = r.URL.Query().Get("userId")
-		}
+		userId = r.URL.Query().Get("userId")
 		if userId == "" {
 			userId = "anon-" + randomHex(4)
 		}
 	}
 
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"*"},
+		OriginPatterns: acceptOriginPatterns(r),
+		Subprotocols:   wsAcceptProtocols(r),
 	})
 	if err != nil {
 		log.Printf("WS accept error: %v", err)

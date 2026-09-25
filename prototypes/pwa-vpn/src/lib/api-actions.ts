@@ -1,3 +1,4 @@
+import { wsAuthProtocols } from './ws-auth'
 /**
  * REST API wrappers and direct function exports.
  * Split from api.ts to stay under 500 LOC limit.
@@ -27,8 +28,8 @@ export function connectWebSocket(token: string, onMessage: (msg: any) => void): 
   const WS_BASE = (import.meta as any).env?.VITE_API_URL?.replace(/^http/, 'ws') || 
     (typeof location !== 'undefined' ? `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}` : 'ws://localhost:8090');
   // Query token survives Vite ws proxy; subprotocol kept for direct :8090 clients.
-  const wsUrl = token ? `${WS_BASE}/ws?token=${encodeURIComponent(token)}` : `${WS_BASE}/ws`;
-  const ws = new WebSocket(wsUrl);
+  const wsUrl = `${WS_BASE}/ws`;
+  const ws = new WebSocket(wsUrl, wsAuthProtocols(token));
   ws.onmessage = (event) => {
     try { onMessage(JSON.parse(event.data)); } catch { onMessage({ type: 'raw', data: event.data }); }
   };

@@ -1,3 +1,4 @@
+import { wsAuthProtocols } from './ws-auth'
 /**
  * Nostr Chat Transport — kind:4 DMs over public relays
  * Replaces Go WebSocket for serverless operation
@@ -22,8 +23,7 @@ function defaultRelays(): string[] {
   if (!loc) return ['ws://127.0.0.1:8090/nostr']
   const proto = loc.protocol === 'https:' ? 'wss:' : 'ws:'
   // /nostr requires JWT (P9) — WS cannot send Authorization header
-  const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
-  return [`${proto}//${loc.host}/nostr${tok ? `?token=${encodeURIComponent(tok)}` : ''}`]
+  return [`${proto}//${loc.host}/nostr`]
 }
 
 export interface NostrMessage {
@@ -97,7 +97,8 @@ export class NostrChat {
     // BAG-30: /nostr is JWT-protected — without a token the handshake is a
     // guaranteed 401 and the close-handler would retry forever.
     const urls = this.relayResolver()
-    if (!urls.some(u => u.includes('token='))) {
+    const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
+    if (!tok) {
       console.log('[Nostr] No JWT yet — skipping /nostr connect')
       return 0
     }
@@ -118,7 +119,8 @@ export class NostrChat {
     const url = urls[Math.min(idx, urls.length - 1)]
     return new Promise((resolve) => {
       try {
-        const ws = new WebSocket(url)
+        const tok = typeof localStorage !== 'undefined' ? localStorage.getItem('proxi_token') : null
+        const ws = new WebSocket(url, wsAuthProtocols(tok))
         let settled = false
         ws.onopen = () => {
           ws.send(subMsg)

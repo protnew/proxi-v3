@@ -23,8 +23,13 @@ func (s *Server) handleNostrWS(w http.ResponseWriter, r *http.Request) {
 	// P9: /nostr требует JWT (Bearer или ?token=) когда auth включён —
 	// анонимная запись в relay закрыта; подписи событий проверяет сам relay (NIP-01).
 	authPubkey := ""
+	noteQueryTokenDeprecated("/nostr", r)
 	if s.authService != nil {
-		tok := requestToken(r)
+		tok, tokErr := wsToken(r)
+		if tokErr != nil {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"bad subprotocol"}`, http.StatusUnauthorized)
+			return
+		}
 		if tok == "" {
 			http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
 			return
@@ -43,8 +48,8 @@ func (s *Server) handleNostrWS(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"*"},
-		Subprotocols:   wsRequestedProtocols(r),
+		OriginPatterns: acceptOriginPatterns(r),
+		Subprotocols:   wsAcceptProtocols(r),
 	})
 	if err != nil {
 		log.Printf("[nostr] upgrade error: %v", err)
