@@ -13,11 +13,9 @@ import (
 	"github.com/unkillable-messenger/vpn/bot"
 	"github.com/unkillable-messenger/vpn/chat"
 	"github.com/unkillable-messenger/vpn/identity"
-	"github.com/unkillable-messenger/vpn/store"
 
 	"nhooyr.io/websocket"
 )
-
 
 // handleWS upgrades HTTP to WebSocket and registers client.
 // AUTH-009: when authService is set, a valid JWT is required.
@@ -156,7 +154,7 @@ func (s *Server) initHub() {
 	}
 	s.hub.OnMessage = func(msg *chat.Message) {
 		// P5: never log message bodies on the hot path (metadata only).
-		log.Printf("💬 [%s→%s] type=%s encrypted=%v len=%d", msg.From, msg.To, msg.Type, msg.ClaimedEncrypted(), len(msg.Text))
+		log.Printf("💬 [%s→%s] %s", msg.From, msg.To, blindLogLine(msg))
 
 		// Process bot commands — skip ciphertext (bots need plaintext; E2E DMs are opaque).
 		if msg.Type == "chat" && msg.Text != "" && !msg.ClaimedEncrypted() && !chat.LooksLikeClientCiphertext(msg.Text) {
@@ -177,25 +175,10 @@ func (s *Server) initHub() {
 		// Save chat messages to SQLite (skip empty text — MSG-003)
 		// P5: persist ciphertext as-is with Encrypted=true; refuse claimed-encrypted plaintext.
 		if msg.Type == "chat" && strings.TrimSpace(msg.Text) != "" {
-			if msg.ClaimedEncrypted() && !chat.LooksLikeClientCiphertext(msg.Text) {
-				log.Printf("P5 refuse persist: encrypted flag without ciphertext from %s", truncate(msg.From, 16))
+			if err := saveIncomingChat(s.db, msg); err != nil {
+				log.Printf("P5 refuse persist: %s from %s", err.Error(), truncate(msg.From, 16))
 				return
 			}
-			msg.NormalizeE2EFlags()
-			msgID := fmt.Sprintf("msg-%d-%s", msg.Ts, randomHex(4))
-			storeMsg := store.Message{
-				ID:            msgID,
-				From:          msg.From,
-				To:            msg.To,
-				Text:          msg.Text,
-				Encrypted:     msg.ClaimedEncrypted(),
-				Timestamp:     msg.Ts,
-				ReplyTo:       msg.ReplyTo,
-				ForwardedFrom: msg.ForwardedFrom,
-				TTL:           msg.TTL,
-				Group:         msg.Group,
-			}
-			// Enrich reply with preview text
 			if msg.ReplyTo != "" {
 				if orig, err := s.db.GetMessageByID(msg.ReplyTo); err == nil {
 					msg.ReplyToText = orig.Text
@@ -204,11 +187,6 @@ func (s *Server) initHub() {
 						msg.ReplyToText = orig.Text[:80] + "..."
 					}
 				}
-			}
-			// Assign server-generated ID back to message for WS broadcast
-			msg.ID = msgID
-			if err := s.db.SaveMessage(storeMsg); err != nil {
-				log.Printf("ERROR: save message: %v", err)
 			}
 		}
 	}

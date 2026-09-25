@@ -14,6 +14,7 @@ type Store struct {
 	db          *sql.DB
 	identityKey [32]byte // P6: AES-256 key outside SQLite for nsec/seed_phrase
 	keyPath     string   // where the key came from (file path / env / :memory:)
+	msgKey      [32]byte
 }
 
 // DB returns the underlying database connection (for admin operations).
@@ -72,6 +73,14 @@ func NewStore(dbPath string) (*Store, error) {
 	if err := s.migrateIdentityAtRest(); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate identity at rest: %w", err)
+	}
+	if err := s.bindMessageKey(dbPath); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("message key: %w", err)
+	}
+	if err := s.vacuumPlaintextColumns(); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("vacuum message columns: %w", err)
 	}
 	return s, nil
 }
@@ -289,11 +298,9 @@ func nowUnix() int64 {
 // Scheduled Messages (moved to store_deadman.go)
 // ---------------------------------------------------------------------------
 
-
 // ---------------------------------------------------------------------------
 // Group Members & Nostr Events (moved to store_nostr.go)
 // ---------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------
 // Push Subscriptions (Web Push VAPID)

@@ -53,7 +53,6 @@ func validateVacuumPath(dstPath string, allowedDir string) (string, error) {
 	return abs, nil
 }
 
-
 // Backup creates a backup of the SQLite database using VACUUM INTO.
 func (s *Store) Backup(dstPath string) error {
 	if s.db == nil {
@@ -197,6 +196,9 @@ func (s *Store) Restore(srcPath string, dbPath string) error {
 	}
 
 	s.db = db
+	if err := s.bindMessageKey(dbPath); err != nil {
+		return fmt.Errorf("store: rebind message key: %w", err)
+	}
 	return nil
 }
 

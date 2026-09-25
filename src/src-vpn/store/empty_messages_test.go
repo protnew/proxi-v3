@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
@@ -172,8 +173,19 @@ func TestCryptoEraseMessageRollsBackWipeWhenDeleteFails(t *testing.T) {
 	if err := s.DB().QueryRow(`SELECT text, erased_at FROM messages WHERE id = 'secret'`).Scan(&text, &erasedAt); err != nil {
 		t.Fatal(err)
 	}
-	if text != "keep on rollback" || erasedAt != 0 {
-		t.Fatalf("transaction did not roll back: text=%q erased_at=%d", text, erasedAt)
+	if erasedAt != 0 {
+		t.Fatalf("transaction did not roll back: erased_at=%d", erasedAt)
+	}
+	if strings.HasPrefix(text, "keep on rollback") || !strings.HasPrefix(text, "enc2:") {
+		t.Fatalf("column must stay sealed, got %q", text)
+	}
+	got, gerr := s.GetMessageByID("secret")
+	if gerr != nil || got == nil || got.Text != "keep on rollback" {
+		txt := ""
+		if got != nil {
+			txt = got.Text
+		}
+		t.Fatalf("readable text after rollback: %v %q", gerr, txt)
 	}
 	if n, err := s.DeleteEmptyMessages(true); err != nil || n != 0 {
 		t.Fatalf("cleanup after rolled-back erase: deleted=%d err=%v", n, err)

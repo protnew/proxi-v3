@@ -3,9 +3,9 @@ package chat
 import (
 	"context"
 	"log"
+	"nhooyr.io/websocket"
 	"sync"
 	"time"
-	"nhooyr.io/websocket"
 )
 
 const (
@@ -54,6 +54,7 @@ type ChatHub struct {
 	OnMessage func(msg *Message)
 
 	workerPool chan *Message
+	down       bool
 }
 
 // NewChatHub creates a new ChatHub.

@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -42,41 +41,13 @@ type Channel struct {
 // Contact represents a known peer/friend with access roles.
 
 func (s *Store) SaveMessage(msg Message) error {
-	// MSG-003: never persist empty bubbles
-	if len(msg.Text) == 0 || len(strings.TrimSpace(msg.Text)) == 0 {
-		return nil
-	}
-	// SEC-002: reject oversized payloads
-	if len(msg.Text) > MaxMessageLen {
-		return fmt.Errorf("message too long: %d > %d", len(msg.Text), MaxMessageLen)
-	}
-	_, err := s.db.Exec(
-		`INSERT OR REPLACE INTO messages (id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, group_id)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		msg.ID, msg.From, msg.To, msg.Text, boolToInt(msg.Encrypted), msg.Timestamp,
-		msg.ReplyTo, msg.ForwardedFrom, msg.Attachments, msg.TTL, msg.Group,
-	)
-	if err != nil {
-		return fmt.Errorf("save message %s: %w", msg.ID, err)
-	}
-	return nil
+	return s.persistSealed(msg)
 }
 
 // EditMessage updates the text of an existing message. Returns error if not found.
 
 func (s *Store) EditMessage(messageID, newText, senderNpub string) error {
-	res, err := s.db.Exec(
-		`UPDATE messages SET text = ? WHERE id = ? AND sender = ? AND IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0`,
-		newText, messageID, senderNpub,
-	)
-	if err != nil {
-		return fmt.Errorf("edit message %s: %w", messageID, err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("message %s not found or unauthorized", messageID)
-	}
-	return nil
+	return s.editSealed(messageID, newText, senderNpub)
 }
 
 // DeleteMessage soft-deletes a user message. SEC erasure is a separate, transactional path.
@@ -125,6 +96,9 @@ func (s *Store) GetMessages(limit int, since int64, npub string) ([]Message, err
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
 		m.Encrypted = enc != 0
+		if err := s.reveal(&m); err != nil {
+			return nil, err
+		}
 		msgs = append(msgs, m)
 	}
 	if err := rows.Err(); err != nil {
@@ -150,6 +124,9 @@ func (s *Store) GetMessageByID(id string) (*Message, error) {
 		return nil, fmt.Errorf("message %s not found: %w", id, err)
 	}
 	m.Encrypted = enc != 0
+	if err := s.reveal(&m); err != nil {
+		return nil, err
+	}
 	return &m, nil
 }
 
@@ -301,45 +278,7 @@ func (s *Store) GetReadReceipts(messageID string) ([]string, error) {
 // MarkAllRead marks all messages before a timestamp as read by a user.
 
 func (s *Store) SearchMessages(query string, npub string, limit int) ([]Message, error) {
-	var rows *sql.Rows
-	var err error
-	if npub == "" {
-		rows, err = s.db.Query(
-			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, IFNULL(group_id, '')
-		 FROM messages
-		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND text LIKE ?
-		 ORDER BY timestamp DESC
-		 LIMIT ?`,
-			"%"+query+"%", limit,
-		)
-	} else {
-		rows, err = s.db.Query(
-			`SELECT id, sender, recipient, text, encrypted, timestamp, reply_to, forwarded_from, attachments, ttl, IFNULL(group_id, '')
-		 FROM messages
-		 WHERE IFNULL(is_deleted, 0) = 0 AND IFNULL(deleted_at, 0) = 0 AND text LIKE ?
-		   AND (recipient = 'broadcast' OR sender = ? OR recipient = ?)
-		 ORDER BY timestamp DESC
-		 LIMIT ?`,
-			"%"+query+"%", npub, npub, limit,
-		)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("search messages: %w", err)
-	}
-	defer rows.Close()
-
-	var msgs []Message
-	for rows.Next() {
-		var m Message
-		var enc int
-		if err := rows.Scan(&m.ID, &m.From, &m.To, &m.Text, &enc, &m.Timestamp,
-			&m.ReplyTo, &m.ForwardedFrom, &m.Attachments, &m.TTL, &m.Group); err != nil {
-			return nil, fmt.Errorf("scan message: %w", err)
-		}
-		m.Encrypted = enc != 0
-		msgs = append(msgs, m)
-	}
-	return msgs, rows.Err()
+	return s.searchOpened(query, npub, limit)
 }
 
 // CleanExpiredMessages SEC-002: wipe and delete expired TTL rows atomically.

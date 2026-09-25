@@ -14,7 +14,6 @@ import (
 	"nhooyr.io/websocket"
 )
 
-
 // Client represents a connected WebSocket user.
 
 func (c *Client) Serve(ctx context.Context) {
@@ -39,7 +38,7 @@ func (c *Client) Serve(ctx context.Context) {
 	}()
 
 	c.ReadPump(ctx) // blocks until read-side closes (peer sends close frame or drops)
-	
+
 	// Once ReadPump exits, the connection is dead. Cancel the context to stop other pumps.
 	if c.cancel != nil {
 		c.cancel()
@@ -87,7 +86,7 @@ func (c *Client) ReadPump(ctx context.Context) {
 		c.hub.Unregister(c)
 		return
 	}
-	
+
 	defer func() {
 		c.hub.Unregister(c)
 	}()
@@ -178,6 +177,14 @@ func (c *Client) ReadPump(ctx context.Context) {
 			msg.Ts = time.Now().Unix()
 		}
 
+		if isCallSignal(msg.Type) {
+			if err := c.hub.deliverCall(msg); err != nil {
+				fail, _ := (&Message{Type: "call-error", From: c.UserID, To: c.UserID}).Encode()
+				c.hub.SendTo(c.UserID, fail)
+			}
+			continue
+		}
+
 		// P5: refuse chat frames that claim E2E without ciphertext (no plaintext under encrypted:true).
 		if msg.Type == TypeChat {
 			claimed := msg.ClaimedEncrypted()
@@ -218,7 +225,7 @@ func (c *Client) WritePump(ctx context.Context) {
 	if c.Conn == nil {
 		return
 	}
-	
+
 	// Removed synchronous c.Conn.Close from WritePump to avoid blocking
 
 	for {
