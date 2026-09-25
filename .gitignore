@@ -100,3 +100,6 @@ data/
 *.err
 $prof
 src/src-tauri/binaries/
+
+# helper smoke-run artifacts (exe, logs, dup wintun.dll — source of truth: cmd/helper/wintun.dll)
+src/src-vpn/cmd/helper/bin/
