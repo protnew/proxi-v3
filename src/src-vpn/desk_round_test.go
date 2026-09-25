@@ -97,8 +97,11 @@ func TestDAUTH_TokenAndAllowlist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "allow.json")
 	a := NewExitAuth(path)
 	now := time.Now().Unix()
-	if err := a.Admit(npub, token, now+60, hexSig(sig), now); err != nil {
+	if err := a.Issue(token, now+60, npub); err != nil {
 		t.Fatal(err)
+	}
+	if err := a.Admit(npub, token, now-10, hexSig(sig), now); err != nil {
+		t.Fatal("wire exp must be ignored", err)
 	}
 	if err := a.Admit(npub, token, now+60, hexSig(sig), now); err == nil {
 		t.Fatal("spent token must fail")
@@ -112,8 +115,8 @@ func TestDAUTH_TokenAndAllowlist(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := NewExitAuth(path)
-	if err := b.Admit(npub, "other", now-10, hexSig(sig2), now); err != nil {
-		t.Fatal("allowlist must skip expiry", err)
+	if err := b.Admit(npub, "other", now+60, hexSig(sig2), now); err == nil {
+		t.Fatal("allowlist must not admit an unissued token")
 	}
 }
 
