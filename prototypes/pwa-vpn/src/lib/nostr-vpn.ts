@@ -197,8 +197,10 @@ export class NostrVPNSignaling {
   }
 
   async inviteFriend(toPubkey: string, wtAddr: string, wtCertHash: string, onion?: string): Promise<string> {
-    // P0: one leg only. Plaintext kind 30090 leaked wtAddr to the relay.
+    if (!toPubkey) throw new Error('invite needs recipient')
+    if (!wtAddr && !onion) throw new Error('invite endpoint empty')
     const { seckey, pubkey } = signingIdentity()
+    const now = Math.floor(Date.now() / 1000)
     const payload: VpnInvitePayload = {
       type: 'vpn_invite',
       from: pubkey,
@@ -207,17 +209,18 @@ export class NostrVPNSignaling {
       wtAddr: wtAddr || undefined,
       wtCertHash: wtCertHash || undefined,
       token: crypto.randomUUID().replace(/-/g, ''),
-      exp: Date.now() + 15 * 60 * 1000,
-      ts: Date.now(),
+      exp: now + 15 * 60,
+      ts: now,
       v: 1,
     }
+    const url = encodeInviteURL(payload)
     const { wrap } = wrapVpnInvite(payload, seckey, toPubkey)
     if (wrap.kind !== 1059) throw new Error('invite must be gift-wrap 1059')
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(['EVENT', wrap]))
     }
     publishGiftWrap(wrap)
-    return wrap.id
+    return url
   }
 
   async requestVPN(fromPubkey: string): Promise<string> {
@@ -269,6 +272,24 @@ export class NostrVPNSignaling {
     this.ws = null
     this.handlers = []
   }
+}
+
+
+export function encodeInviteURL(payload: VpnInvitePayload): string {
+  const raw = JSON.stringify(payload)
+  const b64 = btoa(unescape(encodeURIComponent(raw))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+  return 'proxi+vpn://v1?' + b64
+}
+
+export function decodeInviteURL(url: string): VpnInvitePayload {
+  const q = url.split('?')[1] || ''
+  const pad = q.replace(/-/g, '+').replace(/_/g, '/')
+  const raw = decodeURIComponent(escape(atob(pad + '==='.slice((pad.length + 3) % 4))))
+  const payload = JSON.parse(raw) as VpnInvitePayload
+  if (!payload.to || !payload.token) throw new Error('invite missing to or token')
+  if (!payload.wtAddr && !payload.onion) throw new Error('invite endpoint empty')
+  if (payload.exp > payload.ts + 24 * 3600) throw new Error('invite exp too far')
+  return payload
 }
 
 export const nostrVPN = new NostrVPNSignaling()

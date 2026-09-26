@@ -41,7 +41,7 @@ func verifyEventSig(e *Event) error {
 // containsSensitiveKind reports whether the filter asks for private kinds.
 func containsSensitiveKind(kinds []int) bool {
 	for _, k := range kinds {
-		if k == 4 || k == 30090 {
+		if k == 4 || k == 30090 || k == 1059 || k == 30091 {
 			return true
 		}
 	}
@@ -50,13 +50,14 @@ func containsSensitiveKind(kinds []int) bool {
 
 // deliveryAllowed: private-kind events reach only the author and p-tag peers.
 func deliveryAllowed(c *Client, e *Event) bool {
-	if e.Kind != 4 && e.Kind != 30090 {
+	if e.Kind != 4 && e.Kind != 30090 && e.Kind != 1059 && e.Kind != 30091 {
 		return true
 	}
 	if c.AuthPubkey == "" {
 		return false
 	}
-	if strings.EqualFold(e.PubKey, c.AuthPubkey) {
+	// 1059 author is ephemeral. Match #p only.
+	if e.Kind != 1059 && strings.EqualFold(e.PubKey, c.AuthPubkey) {
 		return true
 	}
 	for _, t := range e.Tags {

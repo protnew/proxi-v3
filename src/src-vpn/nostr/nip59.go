@@ -101,6 +101,12 @@ func OpenGiftWrap(recipient *btcec.PrivateKey, ev Event) (InvitePayload, error) 
 	if err := json.Unmarshal([]byte(rumor), &payload); err != nil {
 		return InvitePayload{}, err
 	}
+	if payload.From != seal.PubKey {
+		return InvitePayload{}, fmt.Errorf("forged from")
+	}
+	if payload.Ts > 0 && payload.Exp > payload.Ts+24*3600 {
+		return InvitePayload{}, fmt.Errorf("exp too far")
+	}
 	return payload, nil
 }
 

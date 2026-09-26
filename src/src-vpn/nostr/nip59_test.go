@@ -1,6 +1,7 @@
 package nostr
 
 import (
+	"encoding/hex"
 	"strings"
 	"testing"
 
@@ -16,8 +17,9 @@ func TestR26b_GiftWrapHidesWtAddr(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	from := hex.EncodeToString(sender.PubKey().SerializeCompressed()[1:])
 	payload := InvitePayload{
-		Type: "vpn_invite", From: "aa", To: "bb",
+		Type: "vpn_invite", From: from, To: "bb",
 		WtAddr: "203.0.113.9:4433", Token: "tok", Exp: 99, Ts: 1, V: 1,
 	}
 	ev, err := GiftWrapInvite(sender, recipient.PubKey(), payload)
@@ -40,5 +42,27 @@ func TestR26b_GiftWrapHidesWtAddr(t *testing.T) {
 	_, err = OpenGiftWrap(sender, ev)
 	if err == nil {
 		t.Fatal("third party must not open the wrap")
+	}
+}
+
+func TestOpenGiftWrap_RejectsForgedFrom(t *testing.T) {
+	sender, err := btcec.NewPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	recipient, err := btcec.NewPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := InvitePayload{
+		Type: "vpn_invite", From: "aa", To: "bb",
+		WtAddr: "203.0.113.9:4433", Token: "tok", Exp: 99, Ts: 1, V: 1,
+	}
+	ev, err := GiftWrapInvite(sender, recipient.PubKey(), payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := OpenGiftWrap(recipient, ev); err == nil {
+		t.Fatal("forged from accepted")
 	}
 }

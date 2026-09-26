@@ -217,24 +217,14 @@ async function startVPNSignaling(targetPubkey: string) {
         statusText = 'Раздаю VPN · жду WebRTC offer'
         addLog('Запрос принят, готов как exit node (WebRTC)')
       } else if (ev.type === 'vpn-invite') {
-        addLog('WebRTC: создаю offer для exit node ' + ev.from.slice(0, 12) + '…')
-        const { sdp, gatherIce } = await rtcVPN.createOffer()
-        const iceCandidates: string[] = []
-        await gatherIce((c) => { if (c !== 'END') iceCandidates.push(c) })
-        await nostrVPN.sendRTCOffer(ev.from, sdp, iceCandidates)
-        addLog('WebRTC offer отправлен (' + iceCandidates.length + ' ICE candidates)')
-        vpnStatus = 'connecting'
-        statusText = 'WebRTC connecting…'
-        const answerTimeout = setTimeout(() => {
-          if (vpnStatus === 'connecting') {
-            addLog('WebRTC: таймаут ожидания answer')
-            vpnStatus = 'error'
-            statusText = 'Не удалось подключить VPN'
-          }
-        }, 30000)
-        rtcAnswerResolver = (sdp: string, ice: string[]) => {
-          clearTimeout(answerTimeout)
-          applyRTCAnswer(sdp, ice, ev.from)
+        if (!ev.wtAddr && !ev.wtCertHash) {
+          vpnStatus = 'error'
+          statusText = 'Ошибка: инвайт без endpoint'
+          addLog('Инвайт без endpoint, WebRTC не запускаю')
+        } else {
+          vpnStatus = 'connecting'
+          statusText = 'Инвайт принят · ' + (ev.wtAddr || 'cert')
+          addLog('Инвайт принят, WebRTC-ветка не используется')
         }
       }
       dismissedFrom = { ...dismissedFrom, [ev.from]: Date.now() }
