@@ -75,7 +75,7 @@ func main() {
 			os.Exit(0)
 		case "--killswitch-remove":
 			if err := removeKillSwitch(); err != nil {
-				emit("ROLLBACK: helper.exe --killswitch-remove")
+				emit("ROLLBACK: proxi04-vpn-helper.exe --killswitch-remove")
 				emit("ROLLBACK: netsh wfp show filters")
 				fail(err)
 			}

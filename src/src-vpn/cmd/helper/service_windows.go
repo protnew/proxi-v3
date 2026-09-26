@@ -21,7 +21,7 @@ func installHelperService(exe string) error {
 	s, err := m.OpenService(helperServiceName)
 	if err != nil {
 		s, err = m.CreateService(helperServiceName, exe, mgr.Config{
-			DisplayName:      "Proxi Helper",
+			DisplayName:      "Proxi VPN Helper (project 04)",
 			Description:      "Proxi elevated helper (wintun + WFP)",
 			StartType:        mgr.StartAutomatic,
 			ServiceStartName: "LocalSystem",

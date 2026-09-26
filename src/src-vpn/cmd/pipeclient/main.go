@@ -9,7 +9,7 @@ import (
 )
 
 func main() {
-	conn, err := winio.DialPipe(`\\.\pipe\ProxiHelper`, nil)
+	conn, err := winio.DialPipe(`\\.\pipe\Proxi04VpnHelper`, nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

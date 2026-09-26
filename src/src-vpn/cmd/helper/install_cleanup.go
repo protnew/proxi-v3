@@ -22,7 +22,7 @@ func installDir() string {
 
 func removeInstallArtifacts(dir string) {
 	var stuck []string
-	for _, name := range []string{"helper.exe", "pipeclient.exe", "wintun.dll", "proxi-core.exe"} {
+	for _, name := range []string{"proxi04-vpn-helper.exe", "proxi04-pipe-client.exe", "wintun.dll", "proxi04-core.exe"} {
 		p := filepath.Join(dir, name)
 		if _, err := os.Stat(p); err != nil {
 			continue

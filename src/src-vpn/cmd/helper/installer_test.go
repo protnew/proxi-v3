@@ -23,7 +23,7 @@ func TestStageInstall_WritesManifestAndRefusesBadDest(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dest, "install-manifest.json")); err != nil {
 		t.Fatal(err)
 	}
-	if pathUnderAdminDir(filepath.Join(dir, "Downloads", "helper.exe"), []string{filepath.Join(dir, "Program Files")}) {
+	if pathUnderAdminDir(filepath.Join(dir, "Downloads", "proxi04-vpn-helper.exe"), []string{filepath.Join(dir, "Program Files")}) {
 		t.Fatal("downloads accepted")
 	}
 }

@@ -11,7 +11,7 @@ import (
 )
 
 func TestClientImage_MatchesDialer(t *testing.T) {
-	path := `\\.\pipe\ProxiHelperTestA3`
+	path := `\\.\pipe\Proxi04VpnHelperTestA3`
 	ln, err := winio.ListenPipe(path, &winio.PipeConfig{})
 	if err != nil {
 		t.Fatal(err)

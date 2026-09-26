@@ -29,7 +29,7 @@ func TestD6_ExecutorAssigned(t *testing.T) {
 }
 
 func TestD8_ServiceName(t *testing.T) {
-	if helperServiceName != "ProxiHelper" {
+	if helperServiceName != "Proxi04VpnHelper" {
 		t.Fatal(helperServiceName)
 	}
 	err := probeSCM()

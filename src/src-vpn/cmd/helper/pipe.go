@@ -9,7 +9,7 @@ import (
 	"sync"
 )
 
-const pipeName = `\\.\pipe\ProxiHelper`
+const pipeName = `\\.\pipe\Proxi04VpnHelper`
 
 type pipeCmd struct {
 	Verb       string `json:"verb"`

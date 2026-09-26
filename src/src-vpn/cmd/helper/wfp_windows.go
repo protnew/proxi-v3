@@ -231,7 +231,7 @@ func armRollbackNote() {
 	if path == "" {
 		return
 	}
-	_ = os.WriteFile(path, []byte("helper.exe --killswitch-remove\nnetsh wfp show filters\n"), 0600)
+	_ = os.WriteFile(path, []byte("proxi04-vpn-helper.exe --killswitch-remove\nnetsh wfp show filters\n"), 0600)
 }
 
 func clearRollbackNote() {
@@ -243,7 +243,7 @@ func clearRollbackNote() {
 }
 
 func printRollback() {
-	emit("ROLLBACK: helper.exe --killswitch-remove")
+	emit("ROLLBACK: proxi04-vpn-helper.exe --killswitch-remove")
 	emit("ROLLBACK: netsh wfp show filters")
 }
 

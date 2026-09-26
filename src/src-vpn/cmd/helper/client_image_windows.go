@@ -35,7 +35,7 @@ func clientImageFromConn(c net.Conn) (string, error) {
 }
 
 func installedCorePath() string {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi`, registry.QUERY_VALUE)
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi04`, registry.QUERY_VALUE)
 	if err == nil {
 		defer k.Close()
 		if v, _, e := k.GetStringValue("CorePath"); e == nil && v != "" {
@@ -46,12 +46,12 @@ func installedCorePath() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(filepath.Dir(exe), "proxi-core.exe")
+	return filepath.Join(filepath.Dir(exe), "proxi04-core.exe")
 }
 
 func rememberCorePath(helperExe string) error {
-	core := filepath.Join(filepath.Dir(helperExe), "proxi-core.exe")
-	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi`, registry.SET_VALUE)
+	core := filepath.Join(filepath.Dir(helperExe), "proxi04-core.exe")
+	k, _, err := registry.CreateKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi04`, registry.SET_VALUE)
 	if err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ func emit(line string) {
 		paths = append(paths, helperLogPath)
 	}
 	if exe, err := os.Executable(); err == nil {
-		paths = append(paths, filepath.Join(filepath.Dir(exe), "helper-run.log"))
+		paths = append(paths, filepath.Join(filepath.Dir(exe), "proxi04-helper-run.log"))
 	}
 	for _, path := range paths {
 		if path == "" || seen[path] {

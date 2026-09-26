@@ -10,6 +10,6 @@ import (
 
 func init() {
 	dialHelperPipe = func() (io.ReadWriteCloser, error) {
-		return winio.DialPipe(`\\.\pipe\ProxiHelper`, nil)
+		return winio.DialPipe(`\\.\pipe\Proxi04VpnHelper`, nil)
 	}
 }

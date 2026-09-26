@@ -1,3 +1,3 @@
 package main
 
-const helperServiceName = "ProxiHelper"
+const helperServiceName = "Proxi04VpnHelper"

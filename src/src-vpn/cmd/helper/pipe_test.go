@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const testCore = `C:\Program Files\Proxi\proxi-core.exe`
+const testCore = `C:\Program Files\Proxi\proxi04-core.exe`
 
 func TestPipe_SecondConnSeesConnect(t *testing.T) {
 	st := newHelperState()
@@ -33,8 +33,8 @@ func TestPipe_ForeignJSONDoesNotAuthorize(t *testing.T) {
 	st := newHelperState()
 	st.corePath = testCore
 	var in, out bytes.Buffer
-	in.WriteString("{\"verb\":\"connect\",\"endpoint\":\"203.0.113.9:443\",\"client_exe\":\"C:\\\\Program Files\\\\Proxi\\\\proxi-core.exe\",\"token\":\"sek\"}\n")
-	in.WriteString("{\"verb\":\"disarm\",\"client_exe\":\"C:\\\\Program Files\\\\Proxi\\\\proxi-core.exe\"}\n")
+	in.WriteString("{\"verb\":\"connect\",\"endpoint\":\"203.0.113.9:443\",\"client_exe\":\"C:\\\\Program Files\\\\Proxi\\\\proxi04-core.exe\",\"token\":\"sek\"}\n")
+	in.WriteString("{\"verb\":\"disarm\",\"client_exe\":\"C:\\\\Program Files\\\\Proxi\\\\proxi04-core.exe\"}\n")
 	servePipeConn(&in, &out, st, `C:\evil\other.exe`)
 	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 	if len(lines) != 2 {

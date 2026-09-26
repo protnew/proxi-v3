@@ -186,13 +186,13 @@ func (s *tunnelSession) rollback() {
 	_ = clearTunDNS(s.name)
 	if routeErr != nil {
 		emit("ROLLBACK routes remain; WFP left engaged")
-		emit("ROLLBACK: helper.exe --killswitch-remove")
+		emit("ROLLBACK: proxi04-vpn-helper.exe --killswitch-remove")
 		printRollback()
 		return
 	}
 	if s.wfpOn {
 		if err := removeKillSwitch(); err != nil {
-			emit("ROLLBACK: helper.exe --killswitch-remove")
+			emit("ROLLBACK: proxi04-vpn-helper.exe --killswitch-remove")
 			printRollback()
 			return
 		}

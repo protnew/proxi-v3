@@ -9,12 +9,12 @@ import (
 )
 
 func forgetCorePath() error {
-	err := registry.DeleteKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi`)
+	err := registry.DeleteKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi04`)
 	if err == nil || errors.Is(err, registry.ErrNotExist) {
 		emit("corepath-gone")
 		return nil
 	}
-	k, oerr := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi`, registry.SET_VALUE)
+	k, oerr := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\Proxi04`, registry.SET_VALUE)
 	if oerr != nil {
 		if errors.Is(oerr, registry.ErrNotExist) {
 			emit("corepath-gone")

@@ -50,7 +50,7 @@ func copyFile(src, dst string) error {
 func stageInstall(dest, helperSrc, torSrc string) (installManifest, error) {
 	var man installManifest
 	man.Dest = dest
-	helperDst := filepath.Join(dest, "helper.exe")
+	helperDst := filepath.Join(dest, "proxi04-vpn-helper.exe")
 	if err := copyFile(helperSrc, helperDst); err != nil {
 		return man, err
 	}
@@ -95,7 +95,7 @@ func runInstaller(dest, torSrc string, roots []string) error {
 	if err != nil {
 		return err
 	}
-	if err := installHelperService(filepath.Join(dest, "helper.exe")); err != nil {
+	if err := installHelperService(filepath.Join(dest, "proxi04-vpn-helper.exe")); err != nil {
 		return err
 	}
 	emit(fmt.Sprintf("installed dest=%s sha256=%s", man.Dest, man.HelperSHA256))
