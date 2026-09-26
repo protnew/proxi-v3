@@ -60,7 +60,7 @@ export class WebRTCVPNClient {
     if (!this.isSupported()) throw new Error("WebRTC not supported")
     const ice = await getIceServers()
     this.pc = new RTCPeerConnection({ iceServers: ice, iceTransportPolicy: "all" })
-    this.dc = this.pc.createDataChannel("vpn-tunnel", { ordered: true })
+    this.dc = this.pc.createDataChannel("vpn-tunnel", { ordered: false, maxRetransmits: 0 })
     this.setupCallerDC(this.dc)
     const offer = await this.pc.createOffer()
     await this.pc.setLocalDescription(offer)
