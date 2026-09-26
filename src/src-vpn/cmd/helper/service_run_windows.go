@@ -20,6 +20,7 @@ func (helperSvc) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<- 
 	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPowerEvent | svc.AcceptSessionChange}
 	st := newHelperState()
 	go acceptPipe(ln, st)
+	reconcileOnStart()
 	for c := range r {
 		switch c.Cmd {
 		case svc.Stop, svc.Shutdown:
@@ -46,6 +47,7 @@ func acceptPipe(ln net.Listener, st *helperState) {
 		}
 		go func(conn net.Conn) {
 			defer conn.Close()
+			defer st.clientClosed()
 			img, _ := clientImageFromConn(conn)
 			servePipeConn(conn, conn, st, img)
 		}(c)

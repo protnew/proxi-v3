@@ -63,11 +63,7 @@ func killSwitchRules(tunLUID uint64) []*wf.Rule {
 			Weight:     12,
 			Action:     wf.ActionPermit,
 			Persistent: true,
-			Conditions: []*wf.Match{{
-				Field: wf.FieldIPRemotePort,
-				Op:    wf.MatchTypeEqual,
-				Value: uint16(67),
-			}},
+			Conditions: dhcpMatches(i),
 		})
 		if tunLUID != 0 {
 			rules = append(rules, &wf.Rule{

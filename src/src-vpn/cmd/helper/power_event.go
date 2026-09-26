@@ -22,5 +22,11 @@ func handlePowerEvent(control, eventType uint32) PowerAction {
 }
 
 func powerEvent() {
-	emit("power-resume TODO re-assert routes")
+	plan := planResume(tunnelEngaged(), tunAdapter)
+	for _, action := range plan.Actions {
+		emit("power-resume " + action)
+	}
+	if plan.ReassertRoutes {
+		reassertSplitRoutes()
+	}
 }

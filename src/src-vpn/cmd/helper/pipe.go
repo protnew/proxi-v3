@@ -27,7 +27,11 @@ type pipeCmd struct {
 type pipeStatus struct {
 	State     string `json:"state"`
 	Phase     string `json:"phase,omitempty"`
+	Attempt   int    `json:"attempt,omitempty"`
+	Max       int    `json:"max,omitempty"`
 	Code      string `json:"code,omitempty"`
+	Leg       string `json:"leg,omitempty"`
+	SelfExit  bool   `json:"selfExit,omitempty"`
 	Engaged   bool   `json:"engaged"`
 	ActiveLeg string `json:"active_leg,omitempty"`
 	Endpoint  string `json:"endpoint,omitempty"`
@@ -50,6 +54,10 @@ type helperState struct {
 	exp        int64
 	onion      string
 	wtCertHash string
+	selfExit   bool
+	attempt    int
+	attemptMax int
+	clients    int
 }
 
 func newHelperState() *helperState {
@@ -117,6 +125,9 @@ func (s *helperState) apply(cmd pipeCmd, clientImage string) pipeStatus {
 		s.npub = cmd.Npub
 		s.sig = cmd.Sig
 		s.exp = cmd.Exp
+		s.selfExit = cmd.SelfExit
+		s.attempt = 0
+		s.attemptMax = 0
 		if cmd.Onion != "" {
 			s.activeLeg = "tor"
 			s.endpoint = cmd.Onion
@@ -126,6 +137,11 @@ func (s *helperState) apply(cmd pipeCmd, clientImage string) pipeStatus {
 	case "disconnect", "disarm", "unlock":
 		s.engaged = false
 		s.state = "off"
+		s.phase = ""
+		s.code = ""
+		s.selfExit = false
+		s.attempt = 0
+		s.attemptMax = 0
 		s.activeLeg = ""
 		s.endpoint = ""
 		s.token = ""
@@ -146,15 +162,35 @@ func (s *helperState) snapshot() pipeStatus {
 	if state == "error" && code == "" {
 		code = s.lastErr
 	}
+	wire := wireFrom(state, s.phase, code, s.activeLeg, s.lastErr, s.endpoint, s.engaged, s.selfExit, s.attempt, s.attemptMax)
 	return pipeStatus{
-		State:     state,
-		Phase:     s.phase,
-		Code:      code,
-		Engaged:   s.engaged,
+		State:     wire.State,
+		Phase:     wire.Phase,
+		Attempt:   wire.Attempt,
+		Max:       wire.Max,
+		Code:      wire.Code,
+		Leg:       wire.Leg,
+		SelfExit:  wire.SelfExit,
+		Engaged:   wire.Engaged,
 		ActiveLeg: s.activeLeg,
 		Endpoint:  s.endpoint,
 		Error:     s.lastErr,
 	}
+}
+
+func (s *helperState) clientClosed() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.clients > 0 {
+		s.clients--
+	}
+	state, hold := onPipeClientGone(s.clients, s.engaged)
+	if !hold {
+		return
+	}
+	s.state = state
+	s.lastErr = ""
+	emit("pipe-client-gone hold engaged state=locked")
 }
 
 func servePipeConn(r io.Reader, w io.Writer, st *helperState, clientImage string) {
@@ -169,10 +205,14 @@ func servePipeConn(r io.Reader, w io.Writer, st *helperState, clientImage string
 		}
 		status := st.apply(cmd, clientImage)
 		if cmd.Verb == "connect" && status.State == "connecting" && engageTunnel != nil {
+			st.mu.Lock()
+			st.clients++
+			st.mu.Unlock()
 			go engageTunnel(cmd.Endpoint, cmd.SelfExit)
 		}
 		if cmd.Verb == "disconnect" && releaseTunnel != nil {
 			releaseTunnel()
+			status = st.apply(pipeCmd{Verb: "status"}, clientImage)
 		}
 		_ = enc.Encode(status)
 	}
