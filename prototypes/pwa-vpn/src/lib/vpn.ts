@@ -1,3 +1,4 @@
+import { phaseFromVpnUi } from './connection-status'
 /**
  * VPN client — Go /api/vpn/rpc
  * REAL mode = local SOCKS5 that carries app traffic (testable on Windows).
@@ -63,13 +64,12 @@ async function vpnRpc<T = unknown>(method: string, params?: Record<string, unkno
 }
 
 function mapState(state: string): VpnUiStatus {
-  switch (state) {
-    case 'connected': return 'connected'
-    case 'sharing': return 'sharing'
-    case 'connecting': return 'connecting'
-    case 'error': return 'error'
-    default: return 'disconnected'
-  }
+  if (state === 'sharing' || state === 'core_down' || state === 'locked') return state
+  const phase = phaseFromVpnUi(state)
+  if (phase === 'connected') return 'connected'
+  if (phase === 'connecting') return 'connecting'
+  if (phase === 'failed') return 'error'
+  return 'disconnected'
 }
 
 let pollFails = 0

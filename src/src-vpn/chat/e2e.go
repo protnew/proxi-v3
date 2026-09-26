@@ -36,6 +36,7 @@ type E2ESession struct {
 //   - senderKey: PreKeyBundle whose IdentityKey field holds the sender's
 //     X25519 private key (32 bytes).
 //   - recipientPubKey: hex-encoded X25519 public key of the recipient.
+// Kept for e2e_test.go only. X2 says the server is blind: production chat must not call this ECDH pair.
 func EncryptMessageForRecipient(plaintext string, senderPrivKey []byte, recipientPubKey string) (encrypted string, err error) {
 	recipientPub, err := hex.DecodeString(recipientPubKey)
 	if err != nil {

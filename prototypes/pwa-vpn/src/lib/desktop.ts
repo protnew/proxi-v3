@@ -1,3 +1,4 @@
+import { phaseFromDesktop } from './connection-status'
 /**
  * Tauri API bridge — desktop-specific features
  * Falls back gracefully when not running in Tauri
@@ -12,11 +13,12 @@ export function getIsDesktop(): boolean {
 /**
  * Get VPN status from Tauri backend
  */
-export async function getDesktopVpnStatus(): Promise<{ status: string; peers: number }> {
-  if (!isTauri) return { status: 'unavailable', peers: 0 }
+export async function getDesktopVpnStatus(): Promise<{ status: string; peers: number; phase: string }> {
+  if (!isTauri) return { status: 'unavailable', peers: 0, phase: phaseFromDesktop('unavailable') }
   const { invoke } = await import(/* @vite-ignore */ '@tauri-apps/api/core')
   const result = await (invoke as any)('get_vpn_status')
-  return JSON.parse(result)
+  const parsed = JSON.parse(result) as { status: string; peers: number }
+  return { status: parsed.status, peers: parsed.peers, phase: phaseFromDesktop(parsed.status) }
 }
 
 /**

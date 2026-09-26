@@ -1,3 +1,4 @@
+// LEGACY / dead — canon D8: base is prototypes/pwa-vpn/src-tauri. Do not extend this tree.
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

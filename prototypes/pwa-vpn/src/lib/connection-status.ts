@@ -41,3 +41,25 @@ export function makeStatus(phase: ConnPhase, opts?: { retryInSec?: number; detai
 export function nextRetrySeconds(attempt: number, base = 2, cap = 30): number {
   return Math.min(cap, base * Math.pow(2, Math.max(0, attempt)))
 }
+
+export function phaseFromVpnUi(status: string): ConnPhase {
+  switch (status) {
+    case 'connected':
+    case 'sharing':
+      return 'connected'
+    case 'connecting':
+      return 'connecting'
+    case 'error':
+    case 'core_down':
+      return 'failed'
+    case 'locked':
+      return 'peer_offline'
+    default:
+      return 'idle'
+  }
+}
+
+export function phaseFromDesktop(status: string): ConnPhase {
+  if (status === 'unavailable') return 'idle'
+  return phaseFromVpnUi(status)
+}

@@ -23,7 +23,9 @@
 - `filemeta:{json}` — вложение. Поля: `url` (ТОЛЬКО относительный `/api/files/...`; всё прочее получатель обязан отвергнуть — P11), `name` (basename), `size`, `mime`, `kind` (`file`|`voice`), `dur`.
 - `groupmeta:{json}` — инвайты/метаданные группы. Получатель: invite → подтверждение пользователем, не forced-join (P29).
 
-## 3. Сигналинг звонков (диалект `key_exchange`, де-факто до решения X3)
+## 3. Сигналинг звонков (`key_exchange`, X3 CONFIRMED)
+X3 подтверждён: `key_exchange` — канон звонка, не временный диалект. `wtAddr` и `wtCertHash` в открытом тексте инвайта ещё есть (grep 2026-09-26, 18 файлов). Ноль вне шифрованного конверта не достигнут.
+
 
 `type:"key_exchange"`, `publicKey` = JSON `{kind:"offer"|"answer"|"ice"|"hangup", ...}`.
 Получатель обязан роутить в call-менеджер (Android: `CallManager.handleSignal`; PWA: `calls.handleCallSignal` — реализация = P5, ждёт X3).

@@ -393,7 +393,7 @@ func (r *Relay) GetStats() map[string]interface{} {
 
 // InjectLocalEvent publishes a server-side event into the relay pipeline (INF-010).
 // Used for VPN signaling without a remote WS client. Skips ID/sig crypto verification
-// (local trust boundary). Still persists, broadcasts to subscribers, fires OnEvent.
+// (local trust boundary). Contract "local": the event was built in this process. It is not a client frame and must not be treated as wire input. Still persists, broadcasts to subscribers, fires OnEvent.
 func (r *Relay) InjectLocalEvent(event Event) {
 	// R11/SigLocal: local inject bypasses schnorr; Sig=="local" must never be treated as authenticated Nostr events.
 
