@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -32,25 +33,63 @@ type pipeStatus struct {
 }
 
 type helperState struct {
-	mu        sync.Mutex
-	state     string
-	engaged   bool
-	activeLeg string
-	endpoint  string
-	lastErr   string
-	coreExe   string
+	mu         sync.Mutex
+	state      string
+	engaged    bool
+	activeLeg  string
+	endpoint   string
+	lastErr    string
+	corePath   string
+	token      string
+	npub       string
+	sig        string
+	exp        int64
+	onion      string
+	wtCertHash string
 }
 
 func newHelperState() *helperState {
 	return &helperState{state: "off"}
 }
 
-func (s *helperState) apply(cmd pipeCmd) pipeStatus {
+func (s *helperState) expectedCore() string {
+	if s.corePath != "" {
+		return s.corePath
+	}
+	return installedCorePath()
+}
+
+func (s *helperState) controlAllowed(clientImage string) bool {
+	want := s.expectedCore()
+	if want == "" || clientImage == "" {
+		return false
+	}
+	return sameExe(clientImage, want)
+}
+
+func (s *helperState) denyForeign() pipeStatus {
+	snap := s.snapshot()
+	snap.State = "error"
+	snap.Error = "client_exe_denied"
+	return snap
+}
+
+func (s *helperState) apply(cmd pipeCmd, clientImage string) pipeStatus {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch cmd.Verb {
 	case "status":
 		return s.snapshot()
+	case "connect", "disconnect", "disarm", "unlock":
+		if !s.controlAllowed(clientImage) {
+			return s.denyForeign()
+		}
+	default:
+		s.lastErr = "unknown_verb"
+		s.state = "error"
+		return s.snapshot()
+	}
+	switch cmd.Verb {
 	case "connect":
 		if cmd.Endpoint == "" && cmd.Onion == "" && !cmd.SelfExit {
 			s.lastErr = "no_exit_peers"
@@ -66,28 +105,27 @@ func (s *helperState) apply(cmd pipeCmd) pipeStatus {
 		s.state = "connecting"
 		s.activeLeg = "userspace"
 		s.endpoint = cmd.Endpoint
+		s.onion = cmd.Onion
+		s.wtCertHash = cmd.WtCertHash
+		s.token = cmd.Token
+		s.npub = cmd.Npub
+		s.sig = cmd.Sig
+		s.exp = cmd.Exp
 		if cmd.Onion != "" {
 			s.activeLeg = "tor"
 			s.endpoint = cmd.Onion
 		}
 		s.lastErr = ""
 		return s.snapshot()
-	case "disconnect":
+	case "disconnect", "disarm", "unlock":
 		s.engaged = false
 		s.state = "off"
 		s.activeLeg = ""
 		s.endpoint = ""
-		s.lastErr = ""
-		return s.snapshot()
-	case "disarm", "unlock":
-		if s.coreExe != "" && cmd.ClientExe != "" && !sameExe(cmd.ClientExe, s.coreExe) {
-			s.lastErr = "client_exe_denied"
-			s.state = "error"
-			return s.snapshot()
-		}
-		s.engaged = false
-		s.state = "off"
-		s.activeLeg = ""
+		s.token = ""
+		s.npub = ""
+		s.sig = ""
+		s.exp = 0
 		s.lastErr = ""
 		return s.snapshot()
 	default:
@@ -107,7 +145,7 @@ func (s *helperState) snapshot() pipeStatus {
 	}
 }
 
-func servePipeConn(r io.Reader, w io.Writer, st *helperState) {
+func servePipeConn(r io.Reader, w io.Writer, st *helperState, clientImage string) {
 	sc := bufio.NewScanner(r)
 	enc := json.NewEncoder(w)
 	for sc.Scan() {
@@ -117,7 +155,7 @@ func servePipeConn(r io.Reader, w io.Writer, st *helperState) {
 			_ = enc.Encode(pipeStatus{State: "error", Error: "bad_json"})
 			continue
 		}
-		_ = enc.Encode(st.apply(cmd))
+		_ = enc.Encode(st.apply(cmd, clientImage))
 	}
 }
 
@@ -131,5 +169,7 @@ func privateEndpoint(ep string) bool {
 }
 
 func sameExe(a, b string) bool {
-	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+	a = strings.TrimPrefix(strings.TrimSpace(a), `\\?\`)
+	b = strings.TrimPrefix(strings.TrimSpace(b), `\\?\`)
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
 }

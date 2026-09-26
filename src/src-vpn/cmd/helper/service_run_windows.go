@@ -26,7 +26,7 @@ func (helperSvc) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<- 
 			changes <- svc.Status{State: svc.StopPending}
 			return false, 0
 		case svc.PowerEvent:
-			if c.EventType == powerEventResume {
+			if handlePowerEvent(uint32(c.Cmd), c.EventType).Reassert {
 				powerEvent()
 			}
 		}
@@ -43,7 +43,8 @@ func acceptPipe(ln net.Listener, st *helperState) {
 		}
 		go func(conn net.Conn) {
 			defer conn.Close()
-			servePipeConn(conn, conn, st)
+			img, _ := clientImageFromConn(conn)
+			servePipeConn(conn, conn, st, img)
 		}(c)
 	}
 }

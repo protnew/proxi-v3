@@ -21,7 +21,7 @@ func main() {
 	}
 	var st vpn.HelperStatus
 	if verb == "connect" {
-		st, err = vpn.ConnectHelper(conn, "", true)
+		st, err = vpn.ConnectHelper(conn, vpn.HelperConnect{SelfExit: true, Endpoint: "203.0.113.9:443", Token: "live", Npub: "np", Sig: "sg", Exp: 17})
 	} else {
 		st, err = vpn.QueryHelper(conn)
 	}

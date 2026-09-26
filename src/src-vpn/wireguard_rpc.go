@@ -13,7 +13,6 @@ import (
 
 // VPNState — состояние VPN
 
-
 // Peer — узел в mesh-сети
 
 // Config — конфигурация VPN
@@ -135,32 +134,7 @@ func (m *Manager) HandleRPC(request []byte) []byte {
 			result = map[string]string{"status": "stopped"}
 		}
 	case "connect_to_exit_node":
-		var params struct {
-			PublicKey string `json:"publicKey"`
-			Endpoint  string `json:"endpoint"`
-			Upstream  string `json:"upstream"` // optional SOCKS5 upstream host:port
-		}
-		json.Unmarshal(req.Params, &params)
-		// Prefer REAL SOCKS path when upstream SOCKS given (or endpoint is socks host:port without peer crypto).
-		up := params.Upstream
-		if up == "" && params.Endpoint != "" && (params.PublicKey == "" || params.PublicKey == "socks" || len(params.PublicKey) < 32) {
-			up = params.Endpoint
-		}
-		if up != "" {
-			err = m.StartRealTunnel("127.0.0.1:10808", up)
-			if err == nil {
-				st := m.GetStatus()
-				result = map[string]interface{}{"status": "connected", "socksAddr": st.SocksAddr, "mode": st.Mode, "realTraffic": true}
-			}
-		} else {
-			err = m.ConnectToExitNode(context.Background(), params.PublicKey, params.Endpoint)
-			if err == nil {
-				// Also expose local SOCKS so apps can send traffic even if kernel route not set.
-				_ = m.StartRealTunnel("127.0.0.1:10808", "")
-				st := m.GetStatus()
-				result = map[string]interface{}{"status": "connected", "socksAddr": st.SocksAddr, "mode": "exit", "realTraffic": st.RealTraffic}
-			}
-		}
+		result, err = connectExitViaPipe(req.Params)
 	case "start_local_tunnel":
 		err = m.StartLocalTunnel()
 		if err == nil {

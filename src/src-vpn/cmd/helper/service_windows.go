@@ -18,18 +18,17 @@ func installHelperService(exe string) error {
 		return err
 	}
 	defer m.Disconnect()
-	if s, err := m.OpenService(helperServiceName); err == nil {
-		s.Close()
-		return nil
-	}
-	s, err := m.CreateService(helperServiceName, exe, mgr.Config{
-		DisplayName:      "Proxi Helper",
-		Description:      "Proxi elevated helper (wintun + WFP)",
-		StartType:        mgr.StartAutomatic,
-		ServiceStartName: "LocalSystem",
-	}, "--service")
+	s, err := m.OpenService(helperServiceName)
 	if err != nil {
-		return err
+		s, err = m.CreateService(helperServiceName, exe, mgr.Config{
+			DisplayName:      "Proxi Helper",
+			Description:      "Proxi elevated helper (wintun + WFP)",
+			StartType:        mgr.StartAutomatic,
+			ServiceStartName: "LocalSystem",
+		}, "--service")
+		if err != nil {
+			return err
+		}
 	}
 	defer s.Close()
 	if err := s.SetRecoveryActions([]mgr.RecoveryAction{
@@ -38,6 +37,9 @@ func installHelperService(exe string) error {
 		{Type: mgr.ServiceRestart, Delay: 10 * time.Second},
 	}, 24*60*60); err != nil {
 		return err
+	}
+	if err := rememberCorePath(exe); err != nil {
+		emit("core-path-registry " + err.Error())
 	}
 	return nil
 }
@@ -59,6 +61,7 @@ func uninstallHelperService() error {
 	s, err := m.OpenService(helperServiceName)
 	if err != nil {
 		if serviceGone(err) {
+			removeInstallArtifacts(installDir())
 			return nil
 		}
 		return err
@@ -68,7 +71,9 @@ func uninstallHelperService() error {
 	if qerr == nil && st.State == svc.Running {
 		_, _ = s.Control(svc.Stop)
 	}
-	return s.Delete()
+	err = s.Delete()
+	removeInstallArtifacts(installDir())
+	return err
 }
 
 func serviceGone(err error) bool {

@@ -13,6 +13,17 @@ type HelperStatus struct {
 	Error   string `json:"error,omitempty"`
 }
 
+type HelperConnect struct {
+	Endpoint   string
+	Onion      string
+	WtCertHash string
+	Token      string
+	Npub       string
+	Sig        string
+	Exp        int64
+	SelfExit   bool
+}
+
 func QueryHelper(rw io.ReadWriter) (HelperStatus, error) {
 	if _, err := io.WriteString(rw, "{\"verb\":\"status\"}\n"); err != nil {
 		return HelperStatus{}, err
@@ -20,8 +31,18 @@ func QueryHelper(rw io.ReadWriter) (HelperStatus, error) {
 	return readHelperStatus(rw)
 }
 
-func ConnectHelper(rw io.ReadWriter, endpoint string, selfExit bool) (HelperStatus, error) {
-	body, err := json.Marshal(map[string]any{"verb": "connect", "endpoint": endpoint, "self_exit": selfExit})
+func ConnectHelper(rw io.ReadWriter, c HelperConnect) (HelperStatus, error) {
+	body, err := json.Marshal(map[string]any{
+		"verb":       "connect",
+		"endpoint":   c.Endpoint,
+		"onion":      c.Onion,
+		"wtCertHash": c.WtCertHash,
+		"token":      c.Token,
+		"npub":       c.Npub,
+		"sig":        c.Sig,
+		"exp":        c.Exp,
+		"self_exit":  c.SelfExit,
+	})
 	if err != nil {
 		return HelperStatus{}, err
 	}
