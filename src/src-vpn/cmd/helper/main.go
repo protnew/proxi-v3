@@ -7,6 +7,10 @@ import (
 )
 
 func main() {
+	if !tokenElevated() {
+		fmt.Fprintln(os.Stderr, "helper requires an elevated token")
+		os.Exit(2)
+	}
 	for i, a := range os.Args {
 		if a == "--log" && i+1 < len(os.Args) {
 			helperLogPath = os.Args[i+1]
@@ -47,6 +51,10 @@ func main() {
 			if err != nil {
 				fail(err)
 			}
+			roots := []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")}
+			if !pathUnderAdminDir(exe, roots) {
+				fail(fmt.Errorf("refusing install: helper is not under Program Files"))
+			}
 			if err := installHelperService(exe); err != nil {
 				fail(err)
 			}
@@ -76,11 +84,13 @@ func main() {
 		case "--service":
 			emit("helper-service")
 			os.Exit(0)
+		case "--elevated-spawn":
+			emit("elevated-spawn-ready")
+			os.Exit(0)
+		case "--disconnect":
+			emit("disconnect")
+			os.Exit(0)
 		}
-	}
-	if os.Getenv("PROXI_HELPER_ELEVATED") != "1" {
-		fmt.Fprintln(os.Stderr, "helper requires elevated spawn")
-		os.Exit(2)
 	}
 	emit("helper-up")
 }
