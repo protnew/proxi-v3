@@ -383,6 +383,9 @@ func (u *UserspaceVPN) handleHandshakeResponse(data []byte) {
 func (u *UserspaceVPN) sendHandshakeInit(session *peerSession) error {
 	packet := make([]byte, 56)
 	packet[0] = packetTypeHandshakeInit
+	if session.handshakeTimer != nil {
+		binary.BigEndian.PutUint32(packet[4:8], uint32(session.handshakeTimer.Attempts()))
+	}
 	copy(packet[8:], u.staticPublic[:])
 	mac1 := computeMAC1(session.peerStatic[:], packet[:40])
 	copy(packet[40:], mac1)
@@ -412,8 +415,11 @@ func (u *UserspaceVPN) sendHandshakeResponse(session *peerSession) error {
 func (u *UserspaceVPN) manageHandshake(session *peerSession) {
 	defer u.wg.Done()
 
-	// Send initial handshake
+	// Send initial handshake, then burn attempt 0 so a retry is a different packet.
 	_ = u.sendHandshakeInit(session)
+	if session.handshakeTimer != nil {
+		_, _ = session.handshakeTimer.RecordRetransmit()
+	}
 
 	for {
 		if session.handshakeTimer == nil {

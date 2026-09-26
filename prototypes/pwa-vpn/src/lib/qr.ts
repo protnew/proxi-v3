@@ -84,3 +84,8 @@ export function parseQRContent(text: string): QRData | null {
   }
   return null
 }
+
+export async function generateInviteQR(url: string): Promise<string> {
+  if (!url.startsWith('proxi+vpn://')) throw new Error('not an invite url')
+  return QRCode.toDataURL(url, { width: 256, margin: 1, errorCorrectionLevel: 'M' })
+}

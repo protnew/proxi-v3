@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	if !tokenElevated() {
+	if !tokenElevated() && !allowUnelevated() {
 		fmt.Fprintln(os.Stderr, "helper requires an elevated token")
 		os.Exit(2)
 	}
@@ -88,9 +88,44 @@ func main() {
 			emit("elevated-spawn-ready")
 			os.Exit(0)
 		case "--disconnect":
-			emit("disconnect")
+			if err := removeSplitRoutes("ProxiSmoke"); err != nil {
+				emit("disconnect-routes-failed " + err.Error())
+				os.Exit(1)
+			}
+			if err := removeKillSwitch(); err != nil {
+				emit("disconnect-wfp-failed " + err.Error())
+				os.Exit(1)
+			}
+			emit("disconnect-clean")
+			os.Exit(0)
+		case "--installer":
+			dest := `C:\Program Files\Proxi`
+			tor := ""
+			for i := 1; i < len(os.Args)-1; i++ {
+				if os.Args[i] == "--dest" {
+					dest = os.Args[i+1]
+				}
+				if os.Args[i] == "--tor" {
+					tor = os.Args[i+1]
+				}
+			}
+			if err := runInstaller(dest, tor, []string{`C:\Program Files`, `C:\Program Files (x86)`}); err != nil {
+				emit("installer-failed " + err.Error())
+				os.Exit(1)
+			}
 			os.Exit(0)
 		}
 	}
 	emit("helper-up")
+}
+
+func allowUnelevated() bool {
+	if len(os.Args) < 2 {
+		return false
+	}
+	switch os.Args[1] {
+	case "--self-test", "--netstack", "--diag":
+		return true
+	}
+	return false
 }

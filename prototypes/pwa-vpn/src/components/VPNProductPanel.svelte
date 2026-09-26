@@ -2,7 +2,9 @@
   import VPNGivePanel from "./VPNGivePanel.svelte"
   import VPNRequestPanel from "./VPNRequestPanel.svelte"
   import VPNTunnelPanel from "./VPNTunnelPanel.svelte"
-  import { nostrVPN, type VPNEvent } from '../lib/nostr-vpn'
+  import { nostrVPN, encodeInviteURL, type VPNEvent } from '../lib/nostr-vpn'
+  import type { VpnInvitePayload } from '../lib/nip59-giftwrap'
+  import { generateInviteQR } from '../lib/qr'
   import { rtcVPN } from '../lib/webrtc-vpn'
   import { getLocalTabP2P, type TabP2PStatus } from '../lib/local-tab-p2p'
   import { dataRelay } from '../lib/nostr-data-relay'
@@ -19,6 +21,7 @@ async function startVPNSignaling(targetPubkey: string) {
   }
 }
   let showInviteModal = $state(false)
+  let inviteQr = $state('')
   let showRequestModal = $state(false)
   let incomingEvent = $state<VPNEvent | null>(null)
   let friendId = $state('')
@@ -179,7 +182,11 @@ async function startVPNSignaling(targetPubkey: string) {
     try {
       await ensureNostr()
       const peer = normalizePeerId(friendId)
-      const id = await nostrVPN.inviteFriend(peer, '', '')
+      const now = Math.floor(Date.now() / 1000)
+      const payload: VpnInvitePayload = { type: 'vpn_invite', v: 1, from: mySigningPubkey(), to: peer, ts: now, exp: now + 3600, wtAddr: '127.0.0.1:1', token: 'local' }
+      const url = encodeInviteURL(payload)
+      inviteQr = await generateInviteQR(url)
+      const id = await nostrVPN.inviteFriend(peer, payload.wtAddr || '', '')
       vpnStatus = 'connecting'
       statusText = 'Раздаю VPN · жду подключения друга'
       addLog('Инвайт отправлен, готов как exit node (WebRTC)')
@@ -472,6 +479,7 @@ async function startVPNSignaling(targetPubkey: string) {
     </div>
   {/if}
 </div>
+{#if inviteQr}<img class="invite-qr" alt="invite qr" src={inviteQr} />{/if}
 {#if showInviteModal}
   <VPNGivePanel bind:friendId onCancel={() => showInviteModal = false} onConfirm={giveVPN} />
 {/if}
