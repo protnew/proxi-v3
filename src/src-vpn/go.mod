@@ -3,6 +3,7 @@ module github.com/unkillable-messenger/vpn
 go 1.25.0
 
 require (
+	github.com/Microsoft/go-winio v0.6.2
 	github.com/btcsuite/btcd/btcec/v2 v2.5.0
 	github.com/btcsuite/btcd/btcutil v1.2.0
 	github.com/getsentry/sentry-go v0.46.2

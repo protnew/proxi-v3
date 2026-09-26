@@ -82,7 +82,9 @@ func main() {
 			emit("killswitch-removed")
 			os.Exit(0)
 		case "--service":
-			emit("helper-service")
+			if err := runHelperService(); err != nil {
+				fail(err)
+			}
 			os.Exit(0)
 		case "--elevated-spawn":
 			emit("elevated-spawn-ready")
