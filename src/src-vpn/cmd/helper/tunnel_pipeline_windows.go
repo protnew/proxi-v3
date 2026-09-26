@@ -319,6 +319,7 @@ func waitHoldStop() {
 		dir = filepathDir(exe)
 	}
 	stop := dir + `\connect-smoke.stop`
+	_ = os.Remove(stop)
 	deadline := time.Now().Add(45 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(stop); err == nil {
