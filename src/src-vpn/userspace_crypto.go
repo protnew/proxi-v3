@@ -16,15 +16,16 @@
 package vpn
 
 import (
-	"log"
-	"net"
-	"encoding/binary"
-	"golang.org/x/crypto/chacha20poly1305"
+	"bytes"
 	crypto_sha256 "crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"golang.org/x/crypto/chacha20poly1305"
 	"hash"
+	"log"
+	"net"
 	"time"
 
 	"golang.org/x/crypto/blake2s"
@@ -32,7 +33,6 @@ import (
 )
 
 // ==================== Packet Constants (WireGuard-compatible) ====================
-
 
 // UserspaceVPN is a fully userspace WireGuard-compatible VPN transport.
 // It requires no kernel modules, TUN devices, or root privileges.
@@ -91,9 +91,12 @@ func (u *UserspaceVPN) sendKeepalives() {
 // deriveSessionKey derives a session encryption key from the shared secret
 // using HKDF with BLAKE2s (WireGuard uses BLAKE2s for hashing).
 func deriveSessionKey(sharedSecret [keySize]byte, localPub, peerPub []byte) []byte {
-	// Construct info string from both public keys for domain separation
-	info := append([]byte("UnkillableMessenger-VPN-Session-"), localPub...)
-	info = append(info, peerPub...)
+	a, b := localPub, peerPub
+	if bytes.Compare(a, b) > 0 {
+		a, b = b, a
+	}
+	info := append([]byte("UnkillableMessenger-VPN-Session-"), a...)
+	info = append(info, b...)
 
 	// HKDF with SHA256 (BLAKE2s doesn't cleanly implement hash.Hash for HKDF).
 	// This is cryptographically sound and widely vetted.
@@ -190,7 +193,7 @@ func (u *UserspaceVPN) encryptDataPacket(session *peerSession, plaintext []byte)
 	packet = append(packet, ciphertext...)
 
 	// MAC1: BLAKE2s of packet so far with peer's public key as key
-	mac1 := computeMAC1(u.staticPublic[:], packet)
+	mac1 := computeMAC1(session.peerStatic[:], packet)
 	packet = append(packet, mac1...)
 
 	return packet, nil
@@ -324,13 +327,6 @@ func (u *UserspaceVPN) handleHandshakeInit(data []byte) {
 		return
 	}
 
-	// [0-04] Cookie replay protection
-	if !u.replayWindow.Check(data) {
-		// Drop replayed handshake packet silently or log it
-		log.Printf("[VPN] Dropping replayed handshake init packet")
-		return
-	}
-
 	var peerPub [32]byte
 	copy(peerPub[:], data[8:40])
 
@@ -343,12 +339,16 @@ func (u *UserspaceVPN) handleHandshakeInit(data []byte) {
 	u.mu.RLock()
 	session, ok := u.peers[peerID]
 	u.mu.RUnlock()
-
-	if ok {
-		expectedMAC := computeMAC1(u.staticPublic[:], data[:40])
-		if constantTimeEqual(data[40:56], expectedMAC) {
-			u.sendHandshakeResponse(session)
-		}
+	if !ok {
+		return
+	}
+	if !u.replayWindow.Check(data) {
+		log.Printf("[VPN] Dropping replayed handshake init packet")
+		return
+	}
+	expectedMAC := computeMAC1(u.staticPublic[:], data[:40])
+	if constantTimeEqual(data[40:56], expectedMAC) {
+		u.sendHandshakeResponse(session)
 	}
 }
 

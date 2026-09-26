@@ -17,12 +17,12 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/crypto/curve25519"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
-	"golang.org/x/crypto/chacha20poly1305"
-	"golang.org/x/crypto/curve25519"
 )
 
 // ==================== Packet Constants (WireGuard-compatible) ====================
@@ -286,8 +286,19 @@ func (u *UserspaceVPN) AddPeer(info PeerInfo) error {
 	}
 	copy(session.sessionKey[:], sessionKey)
 
+	id := info.ID
+	prefix := hex.EncodeToString(peerPub[:])
+	if len(prefix) > 16 {
+		prefix = prefix[:16]
+	}
+	if id == "" {
+		id = prefix
+	}
 	u.mu.Lock()
-	u.peers[info.ID] = session
+	u.peers[id] = session
+	if id != prefix {
+		u.peers[prefix] = session
+	}
 	u.mu.Unlock()
 
 	// Resolve and cache the peer endpoint
