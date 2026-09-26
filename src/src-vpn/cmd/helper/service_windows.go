@@ -62,7 +62,7 @@ func uninstallHelperService() error {
 	if err != nil {
 		if serviceGone(err) {
 			removeInstallArtifacts(installDir())
-			return nil
+			return forgetCorePath()
 		}
 		return err
 	}
@@ -73,6 +73,9 @@ func uninstallHelperService() error {
 	}
 	err = s.Delete()
 	removeInstallArtifacts(installDir())
+	if ferr := forgetCorePath(); ferr != nil {
+		return ferr
+	}
 	return err
 }
 

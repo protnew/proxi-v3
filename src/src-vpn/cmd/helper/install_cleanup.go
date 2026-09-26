@@ -7,10 +7,17 @@ import (
 
 func installDir() string {
 	exe, err := os.Executable()
-	if err != nil {
-		return ""
+	roots := []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)")}
+	if err == nil && pathUnderAdminDir(exe, roots) {
+		return filepath.Dir(exe)
 	}
-	return filepath.Dir(exe)
+	if pf := os.Getenv("ProgramFiles"); pf != "" {
+		return filepath.Join(pf, "Proxi")
+	}
+	if err == nil {
+		return filepath.Dir(exe)
+	}
+	return ""
 }
 
 func removeInstallArtifacts(dir string) {

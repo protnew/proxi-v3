@@ -123,6 +123,9 @@ func installKillSwitch(tunLUID uint64) error {
 			return fmt.Errorf("rule %s: %w", rule.Name, err)
 		}
 	}
+	if err := addEngageExtras(session); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -138,6 +141,11 @@ func knownKillSwitchRuleIDs() []wf.RuleID {
 	ids := make([]wf.RuleID, 0, 16)
 	for i := uint32(0); i < 4; i++ {
 		for _, base := range []uint32{0x1000, 0x2000, 0x3000, 0x4000} {
+			ids = append(ids, wf.RuleID(windows.GUID{Data1: base + i, Data4: proxiSublayerGUID.Data4}))
+		}
+	}
+	for _, base := range []uint32{0x5100, 0x6100, 0x7100} {
+		for i := uint32(0); i < 16; i++ {
 			ids = append(ids, wf.RuleID(windows.GUID{Data1: base + i, Data4: proxiSublayerGUID.Data4}))
 		}
 	}

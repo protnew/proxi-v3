@@ -22,18 +22,26 @@ func assignTunAddr(name string) error {
 		return err
 	}
 	_ = runNetsh("interface", "ipv4", "set", "subinterface", name, "mtu=1280", "store=active")
-	_ = runNetsh("interface", "ipv6", "add", "address", name, "fd00:7::2/128")
+	_ = runNetsh("interface", "ipv6", "add", "address", name, "fd00:7072::2/128")
 	return nil
 }
 
 func setTunDNS(name string) error {
-	return runNetsh("interface", "ip", "set", "dns", "name="+name, "static", "10.7.0.1")
+	script := "Set-DnsClientServerAddress -InterfaceAlias '" + name + "' -ServerAddresses '10.7.0.1'"
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("Set-DnsClientServerAddress: %w (%s)", err, strings.TrimSpace(string(out)))
+	}
+	emit("dns-set 10.7.0.1")
+	return nil
 }
 
 func clearTunDNS(name string) error {
-	_ = runNetsh("interface", "ip", "set", "dns", "name="+name, "dhcp")
+	script := "Set-DnsClientServerAddress -InterfaceAlias '" + name + "' -ResetServerAddresses; Clear-DnsClientCache"
+	_ = exec.Command("powershell", "-NoProfile", "-Command", script).Run()
 	_ = runNetsh("interface", "ip", "delete", "address", "name="+name, "addr=10.7.0.2")
-	_ = runNetsh("interface", "ipv6", "delete", "address", name, "fd00:7::2")
+	_ = runNetsh("interface", "ipv6", "delete", "address", name, "fd00:7072::2")
 	return nil
 }
 
@@ -41,7 +49,6 @@ func installSplitRoutes(name string) error {
 	v4 := [][]string{
 		{"interface", "ipv4", "add", "route", "0.0.0.0/1", name, "10.7.0.1", "metric=1", "store=active"},
 		{"interface", "ipv4", "add", "route", "128.0.0.0/1", name, "10.7.0.1", "metric=1", "store=active"},
-		{"interface", "ipv4", "add", "route", "1.1.1.1/32", name, "10.7.0.1", "metric=1", "store=active"},
 	}
 	for _, a := range v4 {
 		if err := runNetsh(a...); err != nil {
@@ -75,4 +82,22 @@ func removeSplitRoutes(name string) error {
 		}
 	}
 	return first
+}
+
+func assertNoSplitRoutes(name string) error {
+	out, err := exec.Command("route", "print").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("route print: %w", err)
+	}
+	text := string(out)
+	for _, needle := range []string{"10.7.0.1", "10.7.0.2", "203.0.113.9"} {
+		if strings.Contains(text, needle) {
+			return fmt.Errorf("%s remains after teardown of %s", needle, name)
+		}
+	}
+	ip, ierr := exec.Command("ipconfig").CombinedOutput()
+	if ierr == nil && strings.Contains(string(ip), "10.7.0.2") {
+		return fmt.Errorf("ipconfig still has 10.7.0.2")
+	}
+	return nil
 }

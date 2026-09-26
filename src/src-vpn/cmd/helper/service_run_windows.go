@@ -36,6 +36,9 @@ func (helperSvc) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<- 
 }
 
 func acceptPipe(ln net.Listener, st *helperState) {
+	activeState = st
+	engageTunnel = startTunnelFromPipe
+	releaseTunnel = stopLiveTunnel
 	for {
 		c, err := ln.Accept()
 		if err != nil {

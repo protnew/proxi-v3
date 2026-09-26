@@ -26,6 +26,8 @@ type pipeCmd struct {
 
 type pipeStatus struct {
 	State     string `json:"state"`
+	Phase     string `json:"phase,omitempty"`
+	Code      string `json:"code,omitempty"`
 	Engaged   bool   `json:"engaged"`
 	ActiveLeg string `json:"active_leg,omitempty"`
 	Endpoint  string `json:"endpoint,omitempty"`
@@ -35,6 +37,8 @@ type pipeStatus struct {
 type helperState struct {
 	mu         sync.Mutex
 	state      string
+	phase      string
+	code       string
 	engaged    bool
 	activeLeg  string
 	endpoint   string
@@ -103,6 +107,8 @@ func (s *helperState) apply(cmd pipeCmd, clientImage string) pipeStatus {
 		}
 		s.engaged = true
 		s.state = "connecting"
+		s.phase = "service"
+		s.code = ""
 		s.activeLeg = "userspace"
 		s.endpoint = cmd.Endpoint
 		s.onion = cmd.Onion
@@ -136,8 +142,14 @@ func (s *helperState) apply(cmd pipeCmd, clientImage string) pipeStatus {
 }
 
 func (s *helperState) snapshot() pipeStatus {
+	state, code := mapWireState(s.state, s.code)
+	if state == "error" && code == "" {
+		code = s.lastErr
+	}
 	return pipeStatus{
-		State:     s.state,
+		State:     state,
+		Phase:     s.phase,
+		Code:      code,
 		Engaged:   s.engaged,
 		ActiveLeg: s.activeLeg,
 		Endpoint:  s.endpoint,
@@ -155,7 +167,14 @@ func servePipeConn(r io.Reader, w io.Writer, st *helperState, clientImage string
 			_ = enc.Encode(pipeStatus{State: "error", Error: "bad_json"})
 			continue
 		}
-		_ = enc.Encode(st.apply(cmd, clientImage))
+		status := st.apply(cmd, clientImage)
+		if cmd.Verb == "connect" && status.State == "connecting" && engageTunnel != nil {
+			go engageTunnel(cmd.Endpoint, cmd.SelfExit)
+		}
+		if cmd.Verb == "disconnect" && releaseTunnel != nil {
+			releaseTunnel()
+		}
+		_ = enc.Encode(status)
 	}
 }
 
