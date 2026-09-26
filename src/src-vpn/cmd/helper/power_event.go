@@ -20,3 +20,9 @@ func handlePowerEvent(control, eventType uint32) PowerAction {
 	}
 	return PowerAction{}
 }
+
+const powerEventResume uint32 = pbtApmResumeAutomatic
+
+func powerEvent() {
+	emit("power-resume TODO re-assert routes")
+}

@@ -5,60 +5,119 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
+	"sync"
 )
 
 const pipeName = `\\.\pipe\ProxiHelper`
 
 type pipeCmd struct {
-	Verb     string `json:"verb"`
-	Endpoint string `json:"endpoint,omitempty"`
-	SelfExit bool   `json:"self_exit,omitempty"`
+	Verb       string `json:"verb"`
+	Endpoint   string `json:"endpoint,omitempty"`
+	Onion      string `json:"onion,omitempty"`
+	WtCertHash string `json:"wtCertHash,omitempty"`
+	Token      string `json:"token,omitempty"`
+	Npub       string `json:"npub,omitempty"`
+	Sig        string `json:"sig,omitempty"`
+	Exp        int64  `json:"exp,omitempty"`
+	SelfExit   bool   `json:"self_exit,omitempty"`
+	ClientExe  string `json:"client_exe,omitempty"`
 }
 
 type pipeStatus struct {
-	State   string `json:"state"`
-	Engaged bool   `json:"engaged"`
-	Error   string `json:"error,omitempty"`
+	State     string `json:"state"`
+	Engaged   bool   `json:"engaged"`
+	ActiveLeg string `json:"active_leg,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
-func handlePipeLine(line string, engaged bool) pipeStatus {
-	var cmd pipeCmd
-	if err := json.Unmarshal([]byte(strings.TrimSpace(line)), &cmd); err != nil {
-		return pipeStatus{State: "error", Error: "bad_json"}
-	}
+type helperState struct {
+	mu        sync.Mutex
+	state     string
+	engaged   bool
+	activeLeg string
+	endpoint  string
+	lastErr   string
+	coreExe   string
+}
+
+func newHelperState() *helperState {
+	return &helperState{state: "off"}
+}
+
+func (s *helperState) apply(cmd pipeCmd) pipeStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	switch cmd.Verb {
 	case "status":
-		if engaged {
-			return pipeStatus{State: "connected", Engaged: true}
-		}
-		return pipeStatus{State: "off", Engaged: false}
+		return s.snapshot()
 	case "connect":
-		if cmd.Endpoint == "" && !cmd.SelfExit {
-			return pipeStatus{State: "error", Error: "no_exit_peers"}
+		if cmd.Endpoint == "" && cmd.Onion == "" && !cmd.SelfExit {
+			s.lastErr = "no_exit_peers"
+			s.state = "error"
+			return s.snapshot()
 		}
-		if !cmd.SelfExit && privateEndpoint(cmd.Endpoint) {
-			return pipeStatus{State: "error", Error: "private_endpoint"}
+		if !cmd.SelfExit && cmd.Endpoint != "" && privateEndpoint(cmd.Endpoint) {
+			s.lastErr = "private_endpoint"
+			s.state = "error"
+			return s.snapshot()
 		}
-		return pipeStatus{State: "connecting", Engaged: true}
-	case "disconnect", "disarm", "unlock":
-		return pipeStatus{State: "off", Engaged: false}
+		s.engaged = true
+		s.state = "connecting"
+		s.activeLeg = "userspace"
+		s.endpoint = cmd.Endpoint
+		if cmd.Onion != "" {
+			s.activeLeg = "tor"
+			s.endpoint = cmd.Onion
+		}
+		s.lastErr = ""
+		return s.snapshot()
+	case "disconnect":
+		s.engaged = false
+		s.state = "off"
+		s.activeLeg = ""
+		s.endpoint = ""
+		s.lastErr = ""
+		return s.snapshot()
+	case "disarm", "unlock":
+		if s.coreExe != "" && cmd.ClientExe != "" && !sameExe(cmd.ClientExe, s.coreExe) {
+			s.lastErr = "client_exe_denied"
+			s.state = "error"
+			return s.snapshot()
+		}
+		s.engaged = false
+		s.state = "off"
+		s.activeLeg = ""
+		s.lastErr = ""
+		return s.snapshot()
 	default:
-		return pipeStatus{State: "error", Error: "unknown_verb"}
+		s.lastErr = "unknown_verb"
+		s.state = "error"
+		return s.snapshot()
 	}
 }
 
-func servePipeConn(r io.Reader, w io.Writer, engaged *bool) {
+func (s *helperState) snapshot() pipeStatus {
+	return pipeStatus{
+		State:     s.state,
+		Engaged:   s.engaged,
+		ActiveLeg: s.activeLeg,
+		Endpoint:  s.endpoint,
+		Error:     s.lastErr,
+	}
+}
+
+func servePipeConn(r io.Reader, w io.Writer, st *helperState) {
 	sc := bufio.NewScanner(r)
 	enc := json.NewEncoder(w)
 	for sc.Scan() {
-		st := handlePipeLine(sc.Text(), *engaged)
-		if st.Error == "" && (st.State == "connecting" || st.State == "connected") {
-			*engaged = true
+		var cmd pipeCmd
+		line := strings.TrimSpace(sc.Text())
+		if err := json.Unmarshal([]byte(line), &cmd); err != nil {
+			_ = enc.Encode(pipeStatus{State: "error", Error: "bad_json"})
+			continue
 		}
-		if st.State == "off" {
-			*engaged = false
-		}
-		_ = enc.Encode(st)
+		_ = enc.Encode(st.apply(cmd))
 	}
 }
 
@@ -69,4 +128,8 @@ func privateEndpoint(ep string) bool {
 	}
 	host = strings.Trim(host, "[]")
 	return host == "127.0.0.1" || host == "::1" || strings.HasPrefix(host, "10.") || strings.HasPrefix(host, "192.168.") || strings.HasPrefix(host, "169.254.")
+}
+
+func sameExe(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }

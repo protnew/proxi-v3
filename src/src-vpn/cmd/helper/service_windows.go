@@ -5,6 +5,7 @@ package main
 import (
 	"errors"
 	"strings"
+	"time"
 
 	"golang.org/x/sys/windows"
 	"golang.org/x/sys/windows/svc"
@@ -31,6 +32,13 @@ func installHelperService(exe string) error {
 		return err
 	}
 	defer s.Close()
+	if err := s.SetRecoveryActions([]mgr.RecoveryAction{
+		{Type: mgr.ServiceRestart, Delay: 5 * time.Second},
+		{Type: mgr.ServiceRestart, Delay: 5 * time.Second},
+		{Type: mgr.ServiceRestart, Delay: 10 * time.Second},
+	}, 24*60*60); err != nil {
+		return err
+	}
 	return nil
 }
 

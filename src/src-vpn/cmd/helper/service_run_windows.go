@@ -17,18 +17,25 @@ func (helperSvc) Execute(_ []string, r <-chan svc.ChangeRequest, changes chan<- 
 		return false, 1
 	}
 	defer ln.Close()
-	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown}
-	go acceptPipe(ln)
+	changes <- svc.Status{State: svc.Running, Accepts: svc.AcceptStop | svc.AcceptShutdown | svc.AcceptPowerEvent | svc.AcceptSessionChange}
+	st := newHelperState()
+	go acceptPipe(ln, st)
 	for c := range r {
-		if c.Cmd == svc.Stop || c.Cmd == svc.Shutdown {
-			break
+		switch c.Cmd {
+		case svc.Stop, svc.Shutdown:
+			changes <- svc.Status{State: svc.StopPending}
+			return false, 0
+		case svc.PowerEvent:
+			if c.EventType == powerEventResume {
+				powerEvent()
+			}
 		}
 	}
 	changes <- svc.Status{State: svc.StopPending}
 	return false, 0
 }
 
-func acceptPipe(ln net.Listener) {
+func acceptPipe(ln net.Listener, st *helperState) {
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -36,8 +43,7 @@ func acceptPipe(ln net.Listener) {
 		}
 		go func(conn net.Conn) {
 			defer conn.Close()
-			engaged := false
-			servePipeConn(conn, conn, &engaged)
+			servePipeConn(conn, conn, st)
 		}(c)
 	}
 }
@@ -60,6 +66,6 @@ func runPipeForeground() error {
 	}
 	defer ln.Close()
 	emit("pipe-listening")
-	acceptPipe(ln)
+	acceptPipe(ln, newHelperState())
 	return nil
 }
