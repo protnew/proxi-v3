@@ -23,7 +23,8 @@ local.properties
 *.aab
 
 # Rust/Tauri build artifacts
-src-tauri/target/
+**/src-tauri/target/
+target/
 *.rlib
 *.rmeta
 
