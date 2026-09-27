@@ -30,8 +30,14 @@
       case 'connected': return stats.realTraffic ? 'ON · SOCKS' : 'Подключён'
       case 'sharing': return 'Раздаю'
       case 'connecting': return 'Подключение…'
+      case 'reconnecting': return 'Повтор…'
+      case 'locked': return 'Заблокирован'
+      case 'core_down': return 'Ядро недоступно'
+      case 'helper_missing': return 'Нет службы'
+      case 'disconnecting': return 'Отключение…'
       case 'error': return 'Ошибка'
-      default: return 'Отключён'
+      case 'off': return 'Отключён'
+      default: return 'Ошибка'
     }
   }
 

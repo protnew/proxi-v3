@@ -38,6 +38,25 @@ func TestExitAuth_DeniesUnissuedExpiredAndForeign(t *testing.T) {
 	}
 }
 
+func TestExitAuth_AdmitAddsAllowlist(t *testing.T) {
+	owner, err := btcec.NewPrivateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	npub := hexXOnly(owner)
+	now := time.Now().Unix()
+	a := NewExitAuth("")
+	if err := a.Issue("once", now+60, npub); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Admit(npub, "once", 0, signToken(t, owner, "once", npub), now); err != nil {
+		t.Fatal(err)
+	}
+	if a.Allow[npub] != now {
+		t.Fatalf("allowlist miss: %v", a.Allow)
+	}
+}
+
 func signToken(t *testing.T, priv *btcec.PrivateKey, token, npub string) string {
 	t.Helper()
 	sum := sha256Token(token, npub)

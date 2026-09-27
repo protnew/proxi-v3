@@ -12,7 +12,6 @@
     onlineUsers = next
   })
   import { searchMessages, type SearchResult } from '../lib/search'
-  import VpnPanel from './VpnPanel.svelte'
   const isDevMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('dev') === '1'
 
   let myId = $state(getPubkey() || '')
@@ -151,10 +150,6 @@
       </div>
     {/if}
   </div>
-
-  {#if isDevMode}
-    <VpnPanel />
-  {/if}
 </aside>
 
 <style>

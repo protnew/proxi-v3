@@ -111,6 +111,10 @@ func (a *ExitAuth) Admit(npub, token string, exp int64, sigHex string, now int64
 		return fmt.Errorf("token spent")
 	}
 	a.Used[token] = rec.Exp
+	if a.Allow == nil {
+		a.Allow = map[string]int64{}
+	}
+	a.Allow[npub] = now
 	return a.save()
 }
 

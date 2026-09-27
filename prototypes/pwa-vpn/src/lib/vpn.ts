@@ -1,4 +1,5 @@
 import { phaseFromVpnUi } from './connection-status'
+import { mapWireStatus, type VpnWireState } from './vpn-wire'
 /**
  * VPN client — Go /api/vpn/rpc
  * REAL mode = local SOCKS5 that carries app traffic (testable on Windows).
@@ -6,7 +7,7 @@ import { phaseFromVpnUi } from './connection-status'
 import { writable } from 'svelte/store'
 import { API_BASE } from './api'
 
-export type VpnUiStatus = 'disconnected' | 'connecting' | 'connected' | 'sharing' | 'error' | 'core_down' | 'locked'
+export type VpnUiStatus = VpnWireState
 
 export interface VpnBackendStatus {
   state: string
@@ -63,13 +64,9 @@ async function vpnRpc<T = unknown>(method: string, params?: Record<string, unkno
   return body.result as T
 }
 
-function mapState(state: string): VpnUiStatus {
-  if (state === 'sharing' || state === 'core_down' || state === 'locked') return state
-  const phase = phaseFromVpnUi(state)
-  if (phase === 'connected') return 'connected'
-  if (phase === 'connecting') return 'connecting'
-  if (phase === 'failed') return 'error'
-  return 'disconnected'
+function mapState(state: string, code?: string): VpnUiStatus {
+  const mapped = mapWireStatus({ state, code })
+  return mapped.state
 }
 
 let pollFails = 0

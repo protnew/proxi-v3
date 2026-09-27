@@ -368,8 +368,8 @@ if (initialView === 'newchat') {
     <NewChat />
     <GroupCreate />
     <CallOverlay />
+    <VpnPanel />
     {#if isDevMode}
-      <VpnPanel />
       <DemoPanel />
     {/if}
   </div>
