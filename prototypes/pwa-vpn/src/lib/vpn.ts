@@ -93,10 +93,15 @@ export async function refreshVPNStatus(): Promise<VpnBackendStatus | null> {
     }))
     return st
   } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes('Нужна авторизация')) {
+      vpnStats.update(s => ({ ...s, lastError: msg }))
+      return null
+    }
     pollFails++
-    const msg = pollFails >= 3 ? 'Ядро не отвечает' : (e instanceof Error ? e.message : String(e))
+    const shown = pollFails >= 3 ? 'Ядро не отвечает' : msg
     if (pollFails >= 3) vpnStatus.set('core_down')
-    vpnStats.update(s => ({ ...s, lastError: msg }))
+    vpnStats.update(s => ({ ...s, lastError: shown }))
     return null
   }
 }
@@ -247,5 +252,5 @@ export function formatUptime(seconds: number): string {
 }
 
 if (typeof window !== 'undefined') {
-  setTimeout(() => { void refreshVPNStatus() }, 800)
+  startPolling()
 }
