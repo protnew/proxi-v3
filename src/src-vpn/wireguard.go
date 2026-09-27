@@ -61,7 +61,9 @@ type Status struct {
 	SocksAddr   string   `json:"socksAddr,omitempty"`
 	Upstream    string   `json:"upstream,omitempty"`
 	Mode        string   `json:"mode,omitempty"` // local | real | exit | share
-	RealTraffic bool     `json:"realTraffic"`     // true when SOCKS accepts app traffic
+	RealTraffic bool     `json:"realTraffic"`    // true when SOCKS accepts app traffic
+	PeerLost    bool     `json:"peerLost"`
+	ActiveLeg   string   `json:"activeLeg,omitempty"`
 }
 
 // Manager — управление WireGuard VPN

@@ -231,7 +231,7 @@ export class NostrVPNSignaling {
         type: 'vpn_request',
         from: pubkey,
         to: fromPubkey,
-        ts: Date.now(),
+        ts: Math.floor(Date.now() / 1000),
         v: 1,
       }
       const { wrap } = wrapVpnInvite(payload, seckey, fromPubkey)

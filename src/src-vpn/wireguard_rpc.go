@@ -188,6 +188,8 @@ func (m *Manager) HandleRPC(request []byte) []byte {
 		if err == nil {
 			result = map[string]string{"status": "removed"}
 		}
+	case "start_egress_listener", "stop_egress", "create_invite", "connect_invite":
+		result, err = donorRPC(req.Method, req.Params)
 	default:
 		return rpcError(-32601, "method not found: "+req.Method)
 	}
