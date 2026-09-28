@@ -16,9 +16,10 @@ const (
 	logMaxFiles = 4       // live + .1 .. .3
 )
 
-// rotateLog shifts name → name.1 → … name.(logMaxFiles-2), drops the oldest.
+// rotateLog shifts name → name.1 → … → name.(logMaxFiles-1), drops the oldest,
+// keeping logMaxFiles files total (live + .1 … .3).
 func rotateLog(path string) {
-	for i := logMaxFiles - 2; i >= 1; i-- {
+	for i := logMaxFiles - 1; i >= 1; i-- {
 		older := fmt.Sprintf("%s.%d", path, i)
 		newer := path
 		if i > 1 {

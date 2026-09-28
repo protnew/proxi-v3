@@ -101,8 +101,8 @@ func runInstaller(dest, torSrc string, roots []string) error {
 		return err
 	}
 	// TZ-FINAL 2.1: C:\ProgramData\Proxi — SYSTEM+Admins RW, Users read-only.
-	pdDir := filepath.Join(os.Getenv("ProgramData"), "Proxi")
-	if pdDir != "" {
+	if programData := os.Getenv("ProgramData"); programData != "" {
+		pdDir := filepath.Join(programData, "Proxi")
 		if err := os.MkdirAll(pdDir, 0o755); err == nil {
 			if err := winac.ApplyProgramDataDACL(pdDir); err != nil {
 				emit("warn: programdata dacl: " + err.Error())

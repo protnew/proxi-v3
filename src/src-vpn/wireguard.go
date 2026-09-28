@@ -94,9 +94,9 @@ type Manager struct {
 	activeLeg string
 	lastErr   string
 
-	watchCancel context.CancelFunc // peer-lost watchdog cancel
+	watchCancel      context.CancelFunc // peer-lost watchdog cancel
 	reconnectAttempt int
-	egress     *egressState // donor egress listener state (P-G)
+	egress           *egressState // donor egress listener state (P-G)
 }
 
 // NewManager создаёт VPN менеджер
