@@ -255,6 +255,7 @@ fun MainScreen(
 
 /** Full-screen call UI driven by CallManager.state. */
 
+@Composable
 fun ChatArea(
     chat: Chat,
     messages: List<Message>,

@@ -1,5 +1,6 @@
 ﻿package com.indestructible.messenger.ui.navigation
 
+import com.indestructible.messenger.messenger.createGroupChat
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
