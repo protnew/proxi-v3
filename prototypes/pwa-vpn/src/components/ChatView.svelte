@@ -144,13 +144,20 @@
     try {
       if (isGroup) {
         const resp: any = await sendGroupMessage(peer, text)
-        if (resp?.status >= 400) console.error('[chatview] sendGroup failed', resp); try { toast('Не удалось отправить в группу', 'error'); updateMessageDelivery(currentChatId, localId, 'failed') } catch {}
+        if (resp?.status >= 400) {
+          console.error('[chatview] sendGroup failed', resp)
+          try { toast('Не удалось отправить в группу', 'error'); updateMessageDelivery(currentChatId, localId, 'failed') } catch {}
+        }
       } else {
         // P4: single DM factory — server /ws only (NostrChat is receive-only).
         let sent = false
         const resp: any = await sendDM(peer, text)
-        if (resp?.status >= 400) console.error('[chatview] sendDM failed', resp); try { toast('Не удалось отправить', 'error') } catch {}
-        else if (resp?.status) sent = true
+        if (resp?.status >= 400) {
+          console.error('[chatview] sendDM failed', resp)
+          try { toast('Не удалось отправить', 'error') } catch {}
+        } else if (resp?.status) {
+          sent = true
+        }
         if (!sent) {
           outboxEnqueue(peer, text); try { updateMessageDelivery(currentChatId, localId, 'pending'); toast('В очереди — отправится позже', 'warn') } catch {} /* P20-outbox-pending */
           console.log('[chatview] queued offline (outbox)')

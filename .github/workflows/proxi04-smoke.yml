@@ -54,7 +54,7 @@ jobs:
         working-directory: src/src-vpn/cmd/helper
         run: |
           Copy-Item wintun.dll "$env:OUT_DIR\wintun.dll"
-          $want = ((Get-Content wintun-0.14.1.sha256) -split 'sha256=')[1].Trim()
+          $want = (Select-String -Path wintun-0.14.1.sha256 -Pattern 'sha256=([0-9a-fA-F]{64})').Matches[0].Groups[1].Value.ToLower()
           $got = (Get-FileHash "$env:OUT_DIR\wintun.dll" -Algorithm SHA256).Hash.ToLower()
           if ($got -ne $want) { throw "wintun.dll hash $got != pinned $want" }
           Write-Output "wintun.dll sha256 verified: $got"
