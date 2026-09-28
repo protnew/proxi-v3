@@ -4,9 +4,29 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/unkillable-messenger/vpn/winac"
 )
 
 var helperLogPath string
+
+// TZ-FINAL 2.2: size-based rotation, keep logMaxFiles-1 backups.
+const (
+	logMaxBytes = 1 << 20 // 1 MB
+	logMaxFiles = 4       // live + .1 .. .3
+)
+
+// rotateLog shifts name → name.1 → … name.(logMaxFiles-2), drops the oldest.
+func rotateLog(path string) {
+	for i := logMaxFiles - 2; i >= 1; i-- {
+		older := fmt.Sprintf("%s.%d", path, i)
+		newer := path
+		if i > 1 {
+			newer = fmt.Sprintf("%s.%d", path, i-1)
+		}
+		_ = os.Rename(newer, older)
+	}
+}
 
 func emit(line string) {
 	fmt.Println(line)
@@ -23,12 +43,24 @@ func emit(line string) {
 			continue
 		}
 		seen[path] = true
+		// TZ-FINAL 2.2: rotate oversized logs before appending.
+		if st, err := os.Stat(path); err == nil && st.Size() >= logMaxBytes {
+			rotateLog(path)
+		}
+		created := false
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			created = true
+		}
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 		if err != nil {
 			continue
 		}
 		fmt.Fprintln(f, line)
 		f.Close()
+		if created {
+			// TZ-FINAL 2.2: machine logs are for SYSTEM/Admins only.
+			_ = winac.ApplyAdminOnlyACL(path)
+		}
 	}
 }
 

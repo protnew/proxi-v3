@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/unkillable-messenger/vpn/winac"
 	"time"
 
 	"golang.org/x/crypto/curve25519"
@@ -179,7 +181,15 @@ func (m *Manager) loadOrGenerateKeys() error {
 		return err
 	}
 
-	return os.WriteFile(keyFile, []byte(m.privKey), 0600)
+	if err := os.WriteFile(keyFile, []byte(m.privKey), 0600); err != nil {
+		return err
+	}
+	// TZ-FINAL 2.3: 0600 is a no-op on Windows — enforce a real user-only
+	// DACL (SYSTEM + Admins + owner) on the private key file.
+	if aclErr := winac.ApplyUserKeyACL(keyFile); aclErr != nil {
+		return fmt.Errorf("identity key acl %s: %w", keyFile, aclErr)
+	}
+	return nil
 }
 
 // generateKeyPair — генерация WireGuard ключевой пары (curve25519, без wg CLI)

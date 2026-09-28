@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/unkillable-messenger/vpn/winac"
 )
 
 type installManifest struct {
@@ -97,6 +99,15 @@ func runInstaller(dest, torSrc string, roots []string) error {
 	}
 	if err := installHelperService(filepath.Join(dest, "proxi04-vpn-helper.exe")); err != nil {
 		return err
+	}
+	// TZ-FINAL 2.1: C:\ProgramData\Proxi — SYSTEM+Admins RW, Users read-only.
+	pdDir := filepath.Join(os.Getenv("ProgramData"), "Proxi")
+	if pdDir != "" {
+		if err := os.MkdirAll(pdDir, 0o755); err == nil {
+			if err := winac.ApplyProgramDataDACL(pdDir); err != nil {
+				emit("warn: programdata dacl: " + err.Error())
+			}
+		}
 	}
 	emit(fmt.Sprintf("installed dest=%s sha256=%s", man.Dest, man.HelperSHA256))
 	return nil
