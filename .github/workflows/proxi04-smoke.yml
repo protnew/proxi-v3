@@ -74,6 +74,7 @@ jobs:
           go test . ./nostr/ ./cmd/helper/ ./cmd/webserver/
 
       - name: Start helper (elevated, hold 45s)
+        timeout-minutes: 2
         run: |
           Remove-Item $env:HELPER_LOG -ErrorAction SilentlyContinue
           $p = Start-Process -FilePath "$env:OUT_DIR\proxi04-vpn-helper.exe" `
@@ -83,6 +84,7 @@ jobs:
           Write-Output "helper pid $($p.Id) started"
 
       - name: Wait for hold marker, then FAST checks (45s window)
+        timeout-minutes: 3
         run: |
           $deadline = (Get-Date).AddSeconds(40)
           $hold = $false
@@ -113,6 +115,7 @@ jobs:
           Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses -contains '10.7.0.1' }
 
       - name: Stop helper via stop-file, verify clean exit
+        timeout-minutes: 2
         if: always()
         run: |
           New-Item -ItemType File -Force "$env:OUT_DIR\connect-smoke.stop" | Out-Null
