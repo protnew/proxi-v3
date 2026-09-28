@@ -63,7 +63,7 @@ jobs:
         working-directory: src/src-vpn
         run: |
           $bad = Select-String -Path .\cmd\helper\*.go -Pattern 'ProxiSmoke(?!"|_)|ProxiHelper|helper\.exe' -AllMatches |
-                 Where-Object { $_.Line -notmatch 'smokeTun\("ProxiSmoke"\)|ROLLBACK|comment' }
+                 Where-Object { $_.Line -notmatch 'smokeTun\("ProxiSmoke"\)|ROLLBACK|comment|proxi04-vpn-helper' }
           if ($bad) { $bad | ForEach-Object { Write-Output $_.Line }; throw "stale names found" }
           Write-Output "no stale service/adapter names"
 
