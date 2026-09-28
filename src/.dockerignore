@@ -1,0 +1,14 @@
+node_modules/
+dist-svelte/
+*.exe
+.git/
+.github/
+*.test
+mobile/
+flutter_sdk/
+frontend/node_modules/
+frontend/.svelte-kit/
+scripts/
+**/*_test.go
+nul
+messenger-server

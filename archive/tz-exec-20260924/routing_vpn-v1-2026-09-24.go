@@ -1,0 +1,354 @@
+// File: routing_vpn.go
+// P2-1 RESCUE 20260720: extracted from routing.go (God Object split).
+
+package main
+
+import (
+
+	"encoding/json"
+
+	"io"
+	"os"
+
+	"net/http"
+
+	"time"
+	"github.com/go-playground/validator/v10"
+	"github.com/unkillable-messenger/vpn"
+
+)
+
+func (s *Server) handleVpnRPC(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method != "POST" {
+		writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "POST only")
+		return
+	}
+
+	// P10: exit-node/SOCKS upstream/WG peer operations are server
+	// administration, not a tenant feature — admin-only when auth is enabled.
+	if s.authService != nil && !isAdminIdentity(r) {
+		writeError(w, http.StatusForbidden, "FORBIDDEN", "vpn rpc is admin-only (PROXI_ADMIN_NPUBS)")
+		return
+	}
+
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64*1024))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "READ_ERROR", "Failed to read body")
+		return
+	}
+	defer r.Body.Close()
+
+	resp := vpnMgr.HandleRPC(body)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write(resp)
+}
+
+// ========== Utils ==========
+
+var startTime time.Time
+
+var distDir string
+
+
+var validate = validator.New()
+
+
+func (s *Server) handleSplitTunnel(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Mode    string   `json:"mode"`
+		Targets []string `json:"targets"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if req.Mode != "all" && req.Mode != "split" && req.Mode != "exclude" {
+		writeError(w, 400, "BAD_REQUEST", "mode must be all, split or exclude")
+		return
+	}
+
+	cfg := vpn.SplitTunnelConfig{
+		Mode:    req.Mode,
+		Targets: req.Targets,
+	}
+	if err := vpnMgr.SetSplitTunnel(cfg); err != nil {
+		writeError(w, 500, "SPLIT_ERROR", err.Error())
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"status":  "configured",
+		"mode":    req.Mode,
+		"targets": len(req.Targets),
+	})
+}
+
+// handleDNSProxy — POST /api/vpn/dns
+
+
+func (s *Server) handleDNSProxy(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var req struct {
+		Enabled  bool   `json:"enabled"`
+		Listen   string `json:"listen"`
+		Upstream string `json:"upstream"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := validate.Struct(req); err != nil {
+		writeError(w, 400, "VALIDATION_ERROR", err.Error())
+		return
+	}
+
+	cfg := vpn.DNSConfig{
+		Enabled:  req.Enabled,
+		Listen:   req.Listen,
+		Upstream: req.Upstream,
+	}
+	if err := vpnMgr.StartDNSProxy(cfg); err != nil {
+		writeError(w, 500, "DNS_ERROR", err.Error())
+		return
+	}
+
+	status := "stopped"
+	if cfg.Enabled {
+		status = "running"
+	}
+	writeJSON(w, 200, map[string]interface{}{
+		"status":   status,
+		"listen":   cfg.Listen,
+		"upstream": cfg.Upstream,
+	})
+}
+
+// ==================== Nostr NIP-01 Handlers ====================
+
+// nhooyrWSConn adapts nhooyr.io/websocket.Conn to nostr.WebSocketConn.
+
+
+
+
+// ========== WebTransport ==========
+
+var wtServer *vpn.WTServer
+
+// handleWTStats returns WebTransport server statistics.
+func (s *Server) handleWTStats(w http.ResponseWriter, r *http.Request) {
+	if wtServer == nil {
+		writeJSON(w, 200, map[string]interface{}{
+			"transport": "webtransport",
+			"running":   false,
+		})
+		return
+	}
+	writeJSON(w, 200, wtServer.GetStats())
+}
+
+// handleWTStart starts the WebTransport server for PWA VPN.
+func (s *Server) handleWTStart(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+
+	if wtServer != nil {
+		stats := wtServer.GetStats()
+		stats["status"] = "already running"
+		writeJSON(w, 200, stats)
+		return
+	}
+
+	// Start WT server on port 4433 (QUIC default alt port)
+	srv, err := vpn.NewWTServer("0.0.0.0:4433")
+	if err != nil {
+		writeError(w, 500, "WT_INIT_ERROR", err.Error())
+		return
+	}
+	if err := srv.Start(); err != nil {
+		writeError(w, 500, "WT_START_ERROR", err.Error())
+		return
+	}
+	wtServer = srv
+	writeJSON(w, 200, srv.GetStats())
+}
+
+// handleWTStop stops the WebTransport server.
+func (s *Server) handleWTStop(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	if wtServer != nil {
+		wtServer.Stop()
+		wtServer = nil
+	}
+	writeJSON(w, 200, map[string]string{"status": "stopped"})
+}
+
+// ========== TURN Server Config (table 05_Relay_Architecture) ==========
+
+// handleTurnConfig returns TURN server credentials for WebRTC ICE fallback.
+// Reads from env TURN_URL, TURN_USER, TURN_PASS or returns empty (STUN-only mode).
+func (s *Server) handleTurnConfig(w http.ResponseWriter, r *http.Request) {
+	turnURL := getEnv("TURN_URL", "")
+	turnUser := getEnv("TURN_USER", "")
+	turnPass := getEnv("TURN_PASS", "")
+
+	if turnURL == "" {
+		writeJSON(w, 200, map[string]interface{}{
+			"status":  "not_configured",
+			"message": "TURN not configured. STUN-only (works for ~85% of NAT). Set TURN_URL/TURN_USER/TURN_PASS env vars.",
+		})
+		return
+	}
+
+	writeJSON(w, 200, map[string]interface{}{
+		"urls":       turnURL,
+		"username":   turnUser,
+		"credential": turnPass,
+	})
+}
+
+func getEnv(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// ========== AmneziaWG DPI Obfuscation (table 02_DPI_Fallback) ==========
+
+func (s *Server) handleAmneziaConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		writeJSON(w, 200, vpn.AmneziaStatus())
+		return
+	}
+	if r.Method == "POST" {
+		var cfg vpn.AmneziaConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			writeError(w, 400, "BAD_REQUEST", err.Error())
+			return
+		}
+		if err := vpn.SetAmneziaConfig(cfg); err != nil {
+			writeError(w, 400, "CONFIG_ERROR", err.Error())
+			return
+		}
+		writeJSON(w, 200, vpn.AmneziaStatus())
+		return
+	}
+	writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET or POST")
+}
+
+// ========== libp2p Circuit Relay (table 57_Global_P2P, Phase 2 Desktop) ==========
+
+func (s *Server) handleLibp2pConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		writeJSON(w, 200, vpn.Libp2pStatus())
+		return
+	}
+	if r.Method == "POST" {
+		var cfg vpn.Libp2pConfig
+		if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+			writeError(w, 400, "BAD_REQUEST", err.Error())
+			return
+		}
+		if err := vpn.SetLibp2pConfig(cfg); err != nil {
+			writeError(w, 400, "CONFIG_ERROR", err.Error())
+			return
+		}
+		writeJSON(w, 200, vpn.Libp2pStatus())
+		return
+	}
+	writeError(w, 405, "METHOD_NOT_ALLOWED", "Use GET or POST")
+}
+
+// handlePushConfig — GET /api/push/config (SL-051 Phase 2)
+func (s *Server) handlePushConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost && r.URL.Query().Get("dev") == "1" {
+		_, _ = vpn.EnsureDevVAPID()
+	}
+	writeJSON(w, 200, vpn.GetPushConfig())
+}
+
+// handleAmneziaConfBuild — POST /api/vpn/amnezia/conf  {privateKey, peerPublicKey, endpoint}
+func (s *Server) handleAmneziaConfBuild(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "Use POST")
+		return
+	}
+	var body struct {
+		PrivateKey    string `json:"privateKey"`
+		PeerPublicKey string `json:"peerPublicKey"`
+		Endpoint      string `json:"endpoint"`
+		AllowedIPs    string `json:"allowedIPs"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, 400, "BAD_REQUEST", err.Error())
+		return
+	}
+	if err := vpn.ValidateAmneziaEndpoint(body.Endpoint); err != nil {
+		writeError(w, 400, "BAD_ENDPOINT", err.Error())
+		return
+	}
+	cfg := vpn.GetAmneziaConfig()
+	cfg.Enabled = true
+	conf := vpn.BuildAmneziaWGConf(body.PrivateKey, body.PeerPublicKey, body.Endpoint, body.AllowedIPs, cfg)
+	writeJSON(w, 200, map[string]interface{}{
+		"phase":  "desktop_only",
+		"format": "amneziawg-conf",
+		"conf":   conf,
+	})
+}
+
+// handleAmneziaTunnel — GET status | POST start | DELETE stop
+func (s *Server) handleAmneziaTunnel(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, 200, vpn.GetTunnelStatus())
+	case http.MethodPost:
+		var req vpn.TunnelStartRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeError(w, 400, "BAD_REQUEST", err.Error())
+			return
+		}
+		st, err := vpn.StartAmneziaTunnel(req)
+		if err != nil && st.State != "driver_missing" {
+			writeError(w, 400, "TUNNEL_ERROR", err.Error())
+			return
+		}
+		// driver_missing still 200 — conf written is success for conf path
+		writeJSON(w, 200, st)
+	case http.MethodDelete:
+		writeJSON(w, 200, vpn.StopAmneziaTunnel())
+	default:
+		writeError(w, 405, "METHOD_NOT_ALLOWED", "GET/POST/DELETE")
+	}
+}
+
+// handlePushSend — POST /api/push/send
+func (s *Server) handlePushSend(w http.ResponseWriter, r *http.Request) {
+	vpn.HandlePushSend(w, r)
+}
+
+// handleAmneziaImport POST/GET /api/vpn/amnezia/import — copy conf + launch AmneziaVPN GUI
+func (s *Server) handleAmneziaImport(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, vpn.PrepareAmneziaImport())
+}

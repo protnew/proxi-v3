@@ -1,0 +1,22 @@
+{
+  "date": "2026-08-16",
+  "scan": "zero-point-physical",
+  "git": "dev@cc8aea91",
+  "go_unit_pct": 62.7,
+  "go_pkg_ok": 28,
+  "go_pkg_fail": 1,
+  "fe_unit_pct": 52.46,
+  "vitest_pass": 399,
+  "vitest_fail": 0,
+  "android_jvm_pass": 18,
+  "android_jvm_fail": 0,
+  "loc_violations_active": 0,
+  "pw_listed": 57,
+  "pw_pass": 13,
+  "pw_fail": 34,
+  "pw_skipped": 2,
+  "pw_did_not_run": 8,
+  "pw_source": "line-reporter-final",
+  "e2e_scenario_pct": null,
+  "readiness_pct": null
+}

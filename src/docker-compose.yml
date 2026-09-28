@@ -1,0 +1,65 @@
+version: "3.8"
+
+services:
+  server:
+    build:
+      context: ./src-vpn
+      dockerfile: Dockerfile
+    ports:
+      - "8787:8080"
+    environment:
+      - PORT=8080
+      - DIST_DIR=/app/dist
+      - DATA_DIR=/app/data
+      - JWT_SECRET
+      - REDIS_ADDR=redis:6379
+      # TLS (optional)
+      # - TLS_CERT=/app/certs/cert.pem
+      # - TLS_KEY=/app/certs/key.pem
+      # Sentry (optional)
+      # - SENTRY_DSN=https://xxx@sentry.io/123
+    volumes:
+      - server-data:/app/data
+      - ./dist:/app/dist:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Caddy reverse proxy (optional — provides HTTPS automatically)
+  # caddy:
+  #   image: caddy:2-alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy-data:/data
+  #     - caddy-config:/config
+  #   depends_on:
+  #     - server
+  #   restart: unless-stopped
+
+volumes:
+  server-data:
+  redis-data:
+  # caddy-data:
+  # caddy-config:

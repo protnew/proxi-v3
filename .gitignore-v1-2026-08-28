@@ -1,0 +1,69 @@
+# Go
+*.exe
+messenger-server
+coverage.out
+coverage/
+*.db
+*.db-wal
+*.db-shm
+
+# Node/Svelte
+node_modules/
+dist-svelte/
+*.bak
+fix_*.py
+
+# Android/Gradle
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+
+# Rust/Tauri build artifacts
+src-tauri/target/
+*.rlib
+*.rmeta
+
+# OS
+nul
+.env
+.DS_Store
+Thumbs.db
+
+# --- agent/runtime junk (gap-5) ---
+**/*.exe~
+**/auth_cov.out
+**/coverage.out
+**/*_cov.out
+**/server-dev.log
+**/server-critic.log
+**/vite-dev.log
+**/data-dev/
+src/src-vpn/data-dev/
+src/src-vpn/*.log
+src/src-vpn/messenger-server-dev.exe
+src/src-vpn/messenger-server-dev.exe~
+prototypes/pwa-vpn/vite-dev.log
+# accidental duplicate test path
+prototypes/pwa-vpn/tests/api-no-token.test.ts
+
+
+# coverage artifacts (do not commit)
+**/coverage/
+**/*.out
+07-QA-and-Testing/**/*.out
+07-QA-and-Testing/**/*_output.txt
+07-QA-and-Testing/**/vitest_*.txt
+07-QA-and-Testing/**/playwright_*.txt
+07-QA-and-Testing/**/r2_*.out
+07-QA-and-Testing/**/z3_*.out
+07-QA-and-Testing/**/cov_*.out
+
+# built frontend served by Go
+src/src-vpn/dist/
+
+# local runtime
+**/server_crit*.log
+**/data/vpn/private.key
+**/messenger.db

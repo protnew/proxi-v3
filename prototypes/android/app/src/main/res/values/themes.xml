@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.IndestructibleMessenger" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">#3A7BD5</item>
+        <item name="colorPrimaryVariant">#2B5278</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:windowBackground">#0E1621</item>
+        <item name="android:statusBarColor">#0E1621</item>
+        <item name="android:navigationBarColor">#0E1621</item>
+    </style>
+</resources>

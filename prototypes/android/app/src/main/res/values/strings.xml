@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Proxi</string>
+    <string name="vpn_notification_channel">VPN Connection</string>
+    <string name="messenger_notification_channel">Messages</string>
+    <string name="vpn_connected">VPN подключён</string>
+    <string name="vpn_disconnected">VPN отключён</string>
+    <string name="new_message">Новое сообщение</string>
+</resources>

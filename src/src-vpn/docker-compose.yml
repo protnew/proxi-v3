@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  messenger:
+    build: .
+    ports:
+      - "8080:8080"
+      - "9000:9000"
+    environment:
+      - PORT=8080
+      - DATA_DIR=/app/data
+      - MESH_PORT=9000
+    volumes:
+      - messenger_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  messenger_data:

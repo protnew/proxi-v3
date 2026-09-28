@@ -1,0 +1,200 @@
+{
+  "timestamp": "2026-08-15T11:20:00Z",
+  "scan": "zero-point-physical",
+  "project": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2",
+  "git_note": "dev only; main not touched",
+  "go": {
+    "packages_pass": 29,
+    "packages_fail": 0,
+    "test_funcs_in_source": 844,
+    "statement_coverage_pct": 62.5,
+    "seconds": 317.2,
+    "low": {
+      "cmd/webserver": 33.7,
+      "cmd/bridge": 0.0,
+      "economy": 0.0,
+      "root vpn": 57.1,
+      "store": 60.5
+    },
+    "high": {
+      "i18n": 100.0,
+      "integration": 100.0,
+      "analytics": 94.4,
+      "api": 94.2,
+      "middleware": 94.2
+    }
+  },
+  "vitest": {
+    "pass": 397,
+    "fail": 0,
+    "files": 49,
+    "seconds": 172.5,
+    "statements_pct": 53.4,
+    "lines_pct": 55.59,
+    "functions_pct": 56.34,
+    "branches_pct": 39.89,
+    "instrumented_files": 53,
+    "zero_pct_files": 8
+  },
+  "playwright": {
+    "listed_total": 57,
+    "files": 24,
+    "failed": 22,
+    "passed_inferred": 35,
+    "pass_rate_pct": 61.4,
+    "suite_wrapper_timeout_sec": 900,
+    "last_run_status": "failed",
+    "orphan_not_in_testMatch": [
+      "tests/vpn-e2e.spec.ts",
+      "tests/e2e.spec.ts",
+      "test/e2e-vpn-tab-p2p.spec.ts"
+    ],
+    "product_proof": {
+      "vpn_tab_p2p": "PASS — joiner IP 2.54.134.210 DataChannel open",
+      "msg101": "PASS — Bob sees MSG101-WS without reload",
+      "onb000": "screenshot exists (small 8KB)"
+    }
+  },
+  "android": {
+    "instrumented_tests_in_source": 14,
+    "unit_tests_in_source": 0,
+    "run": false,
+    "reason": "adb devices empty — emulator not attached"
+  },
+  "maestro": {
+    "files": 1,
+    "run": false,
+    "reason": "maestro CLI not installed"
+  },
+  "bats": {
+    "files": 6,
+    "at_test_count": 11,
+    "run": false,
+    "reason": "bats.cmd → WSL bash missing (WSL_E / execvpe /bin/bash)"
+  },
+  "loc": {
+    "active_source_files": 240,
+    "active_gt_500": 0,
+    "archive_gt_500": [
+      [
+        "src/src-vpn/archive/vpn-v1-2026-06-24.go",
+        823
+      ]
+    ],
+    "test_files_gt_500": [
+      [
+        "store/store_test.go",
+        768
+      ],
+      [
+        "store/extra_test.go",
+        738
+      ],
+      [
+        "nostr/relay_test.go",
+        736
+      ],
+      [
+        "stream/stream_test.go",
+        616
+      ],
+      [
+        "content/content_test.go",
+        572
+      ],
+      [
+        "tor/dialer_test.go",
+        571
+      ],
+      [
+        "chat/hub_test.go",
+        537
+      ],
+      [
+        "mesh/mesh_test.go",
+        515
+      ]
+    ],
+    "near_limit": [
+      [
+        "VPNProductPanel.svelte",
+        499
+      ],
+      [
+        "ChatView.svelte",
+        473
+      ]
+    ]
+  },
+  "inventory": {
+    "go_src_files": 147,
+    "go_test_files": 125,
+    "pwa_src_files": 75,
+    "pwa_unit_it_calls": 412,
+    "go_endpoints": 79,
+    "svelte_components": 15
+  },
+  "scenarios": {
+    "covered": 9,
+    "total": 22,
+    "pct": 40.9,
+    "strong_pass": [
+      "create identity (AuthScreen)",
+      "Alice→Bob DM WS (MSG-101)",
+      "WebRTC 2-tab tunnel + exit IP",
+      "in-app chat after login",
+      "VPN host exit-node DataChannel",
+      "mobile layout smoke",
+      "deep UI screens 8/10",
+      "LAN/phone URL helpers",
+      "P2P give/accept demo partners"
+    ],
+    "missing": [
+      "Nostr signaling E2E (not BroadcastChannel)",
+      "TURN fallback",
+      "Android system VPN T42-B",
+      "Desktop WG/Amnezia exit",
+      "Kill switch",
+      "Push subscribe",
+      "dual-network / same-wifi product",
+      "SW proxy (WT leftover)",
+      "groups",
+      "import seed",
+      "identity persist real keys",
+      "emoji/new-chat orphan messenger"
+    ]
+  },
+  "liveness": {
+    "vite_5173": 200,
+    "go_8090_health": 200,
+    "auth_ui": "Proxi / Создать новый аккаунт",
+    "go_warning": "content tables INDEX file_name missing column"
+  },
+  "zero_point_metrics": {
+    "unit_logic_coverage_pct": 62.5,
+    "frontend_unit_coverage_pct": 53.4,
+    "user_scenarios_e2e_pct": 40.9,
+    "infra_bats_pct": 0.0,
+    "loc_compliance_pct": 100.0,
+    "overall_test_readiness_pct": 51.4,
+    "formula": "go_unit*0.40 + scenarios*0.40 + infra*0.10 + loc*0.10"
+  },
+  "previous_2026_08_04": {
+    "unit_logic_coverage_pct": 65.3,
+    "frontend_unit_coverage_pct": 9.77,
+    "user_scenarios_e2e_pct": 55.0,
+    "infra_bats_pct": 15.0,
+    "loc_compliance_pct": 99.4,
+    "overall_test_readiness_pct": 56.2
+  },
+  "delta": {
+    "go_pp": -2.8,
+    "fe_pp": 43.6,
+    "scenarios_pp": -14.1,
+    "infra_pp": -15.0,
+    "loc_pp": 0.6,
+    "readiness_pp": -4.8,
+    "vitest_tests": "33→397",
+    "playwright": "20/0 claimed → 35/22 of 57 physical"
+  }
+}

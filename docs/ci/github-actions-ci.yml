@@ -1,0 +1,101 @@
+﻿name: CI (native)
+
+# Native Go + Node — NO Docker service containers required for unit path.
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: prototypes/pwa-vpn/package-lock.json
+
+      - name: Go tests (auth/store/chat)
+        working-directory: src/src-vpn
+        env:
+          GOMAXPROCS: "1"
+        run: |
+          go test ./auth/ -count=1 -timeout 90s
+          go test ./store/ -count=1 -timeout 90s
+          go test ./chat/ -count=1 -timeout 90s
+
+      - name: LOC gate
+        run: python scripts/loc-check.py
+
+      - name: Security gate
+        run: python scripts/security-gate.py
+
+      - name: Vitest
+        working-directory: prototypes/pwa-vpn
+        run: |
+          npm ci --no-audit --no-fund
+          npx vitest run
+
+  # Optional e2e: start native Go binary + vite (not Docker)
+  e2e:
+    runs-on: ubuntu-latest
+    needs: unit
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: prototypes/pwa-vpn/package-lock.json
+
+      - name: Build Go server
+        working-directory: src/src-vpn
+        run: go build -o messenger-server ./cmd/webserver/
+
+      - name: Start API
+        working-directory: src/src-vpn
+        run: |
+          mkdir -p data-ci
+          PORT=8080 DATA_DIR=$PWD/data-ci ./messenger-server > server.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:8090/api/health && break
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8090/api/health
+
+      - name: Install PWA + Playwright
+        working-directory: prototypes/pwa-vpn
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Start Vite
+        working-directory: prototypes/pwa-vpn
+        run: |
+          npm run dev -- --host 127.0.0.1 --port 5173 > vite.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -fsS http://127.0.0.1:5173/ >/dev/null && break
+            sleep 1
+          done
+
+      - name: Playwright e2e
+        working-directory: prototypes/pwa-vpn
+        env:
+          APP_URL: http://127.0.0.1:5173
+          API_URL: http://127.0.0.1:8090
+        run: npx playwright test --config=playwright.config.ts

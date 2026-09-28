@@ -1,0 +1,3 @@
+hev-socks5-tunnel 2.17.1 JNI ndk-build 2026-08-16
+PKGNAME=com/indestructible/messenger/vpn CLSNAME=HevSocks5Engine
+NOT github android-bin PIE

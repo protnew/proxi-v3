@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  go-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Build
+        working-directory: src/src-vpn
+        env:
+          CGO_ENABLED: '0'
+        run: go build ./...
+      - name: Test
+        working-directory: src/src-vpn
+        env:
+          CGO_ENABLED: '0'
+        run: go test ./... -timeout 5m
+
+  pwa-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install & Build PWA
+        working-directory: prototypes/pwa-vpn
+        run: |
+          npm ci || npm install
+          npx vite build

@@ -1,0 +1,133 @@
+{
+  "timestamp": "2026-08-15T14:21:13Z",
+  "scan": "zero-point-physical",
+  "project": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2",
+  "git": {
+    "branch": "dev",
+    "head": "cc8aea91"
+  },
+  "honesty": {
+    "do_not_publish": [
+      "e2e_pass_rate",
+      "scenario_pct",
+      "readiness_pct"
+    ],
+    "reason": "no completed json-reporter this scan; no product journey inventory with N; last-run was orphan 45B",
+    "previous_scan_retracted": {
+      "file": "ZERO_POINT_SCAN-BEFORE-2026-08-15-1700.json",
+      "fabricated": [
+        "passed_inferred 35",
+        "9/22=40.9",
+        "readiness 51.4",
+        "844 Test* as run"
+      ]
+    }
+  },
+  "go": {
+    "command": "go test ./... -count=1 -timeout 180s -cover  (cwd src-vpn, GOMAXPROCS=1)",
+    "packages_ok": 27,
+    "packages_fail": 0,
+    "packages_no_test": 2,
+    "packages_total": 29,
+    "statement_coverage_pct": 62.7,
+    "coverage_source": "go tool cover -func zp_go_cover.out total (statements)",
+    "unweighted_package_mean_pct": 73.63,
+    "unweighted_note": "NOT the unit metric; do not substitute for 62.7",
+    "low": {
+      "cmd/bridge": 0.0,
+      "economy": 0.0,
+      "cmd/webserver": 33.7
+    },
+    "high": {
+      "i18n": 100.0,
+      "integration": 100.0,
+      "analytics": 94.4
+    },
+    "test_funcs_in_source_grep": 850,
+    "test_funcs_note": "grep func Test*, not a run count"
+  },
+  "vitest": {
+    "command": "npx vitest run --coverage --reporter=json --reporter=default",
+    "pass": 397,
+    "fail": 0,
+    "files": 49,
+    "seconds": 39.03,
+    "statements_pct": 53.4,
+    "lines_pct": 55.59,
+    "functions_pct": 56.34,
+    "branches_pct": 39.89,
+    "source": "coverage/coverage-summary.json + json numPassedTests=397",
+    "zero_pct_live_files": [
+      "src/lib/amnezia-tunnel.ts",
+      "src/lib/nostr-data-relay.ts",
+      "src/lib/nostr-vpn.ts",
+      "src/lib/update-check.ts",
+      "src/lib/vpn-utils.svelte.ts",
+      "src/lib/web-push.ts"
+    ]
+  },
+  "playwright": {
+    "listed_total": 57,
+    "listed_files": 24,
+    "skip_in_source": 2,
+    "list_command": "npx playwright test --list",
+    "suite_this_scan": "STARTED pid in zp_pw_meta.json; json reporter not finished at report write",
+    "pass": null,
+    "fail": null,
+    "pass_rate_pct": null,
+    "last_run_before_suite": {
+      "bytes": 45,
+      "failedTests": [],
+      "note": "orphan No tests found — not SoT"
+    }
+  },
+  "android": {
+    "jvm_unit_this_scan": {
+      "pass": 8,
+      "fail": 0,
+      "xml_mtime": "2026-08-15T17:13:58",
+      "command": "gradlew :app:testDebugUnitTest --rerun-tasks"
+    },
+    "instrumented_in_source": 14,
+    "instrumented_run": false,
+    "reason": "adb not on PATH; emulator not used"
+  },
+  "maestro": {
+    "files": 0,
+    "run": false,
+    "reason": "maestro CLI not installed"
+  },
+  "bats": {
+    "files": 6,
+    "at_test_count": 11,
+    "run": false,
+    "reason": "bats.cmd → WSL bash missing"
+  },
+  "loc": {
+    "active_source_files": 300,
+    "active_source_loc": 44374,
+    "active_gt_500": 0,
+    "near_limit": [
+      [
+        "VPNProductPanel.svelte",
+        499
+      ]
+    ],
+    "test_files_gt_500": 8
+  },
+  "liveness": {
+    "vite_5173": 200,
+    "go_8090_health": 200,
+    "auth_ui": "Proxi / Создать новый аккаунт / Импортировать nsec",
+    "screenshot": "C:\\Obsidian\\New\\Projects\\04-Неубиваемый-контент V2\\.04-Src\\07-QA-and-Testing\\04-AI-Test-Reports\\zero-point\\zp-2026-08-15-auth.png"
+  },
+  "zero_point_metrics": {
+    "unit_logic_coverage_pct": 62.7,
+    "frontend_unit_coverage_pct": 53.4,
+    "user_scenarios_e2e_pct": null,
+    "infra_bats_pct": 0,
+    "loc_compliance_pct": 100.0,
+    "overall_test_readiness_pct": null,
+    "formula_not_applied": "need inventory N + live PW json"
+  }
+}

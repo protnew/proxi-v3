@@ -1,0 +1,14 @@
+appId: com.proximessenger.dev
+---
+- launchApp
+- tapOn: "Connect MQTT"
+- extendedWaitUntil:
+    visible: "Connected"
+    timeout: 10000
+# Симулируем уход в Doze Mode через shell-команды ADB
+- runFlow:
+    commands:
+      - adb shell dumpsys deviceidle force-idle
+- delay: 60000
+# Проверяем, что соединение не разорвано
+- assertVisible: "Connected"

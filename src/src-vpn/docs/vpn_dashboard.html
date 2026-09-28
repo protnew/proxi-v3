@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPN & WebSocket Monitoring Dashboard</title>
+    <style>
+        :root {
+            /* GitHub Dark Theme Palette */
+            --bg-body: #0a0e14;
+            --bg-card: #0d1117;
+            --bg-card-hover: #161b22;
+            --border: #30363d;
+            --text-main: #c9d1d9;
+            --text-dim: #8b949e;
+            --text-muted: #484f58;
+            
+            --accent-blue: #58a6ff;
+            --accent-green: #3fb950;
+            --accent-red: #f85149;
+            --accent-yellow: #d29922;
+            
+            /* Typography */
+            --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+            --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+        }
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            margin: 0;
+            padding: 24px;
+            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        h1, h2, h3 {
+            margin-top: 0;
+            font-weight: 600;
+        }
+
+        .header {
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 16px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 0;
+            color: var(--text-main);
+        }
+
+        .header .timestamp {
+            color: var(--text-dim);
+            font-size: 13px;
+        }
+
+        .stitle {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        
+        .cnt {
+            color: var(--text-dim);
+            font-size: 13px;
+            font-weight: 400;
+            background: var(--bg-card-hover);
+            padding: 2px 8px;
+            border-radius: 12px;
+        }
+
+        /* KPIs */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .card {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .kpi-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .kpi-value {
+            font-family: var(--font-mono);
+            font-size: 32px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+
+        /* Utilities */
+        .color-green { color: var(--accent-green); }
+        .color-blue { color: var(--accent-blue); }
+        .color-red { color: var(--accent-red); }
+        .color-yellow { color: var(--accent-yellow); }
+
+        /* Dashboard Layout */
+        .dashboard-section {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+        }
+
+        @media (min-width: 900px) {
+            .dashboard-section {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+
+        /* Bar Charts */
+        .chart-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+        }
+
+        .bar-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        
+        .bar-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .bar-label {
+            width: 110px;
+            font-size: 13px;
+            color: var(--text-main);
+            font-weight: 500;
+        }
+
+        .bar-track {
+            flex: 1;
+            background-color: var(--bg-card-hover);
+            height: 24px;
+            border-radius: 4px;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            padding-left: 8px;
+            font-size: 11px;
+            color: #fff;
+            font-weight: 600;
+            font-family: var(--font-mono);
+            transition: width 0.3s ease;
+        }
+
+        /* Tables */
+        .table-container {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background-color: var(--bg-card);
+            color: var(--text-dim);
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 11px;
+            letter-spacing: 0.5px;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: rgba(88, 166, 255, 0.06);
+        }
+
+        td {
+            color: var(--text-main);
+        }
+        
+        td.mono {
+            font-family: var(--font-mono);
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.active {
+            background: #0f2a0f;
+            color: #4ade80;
+        }
+
+        .badge.warning {
+            background: #2d2416;
+            color: #d29922;
+        }
+
+        .badge.error {
+            background: #3a1515;
+            color: #f85149;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 40px;
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            padding-top: 16px;
+            font-family: var(--font-mono);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>VPN & WebSocket Dashboard</h1>
+        <div class="timestamp">Live Monitoring &bull; Updated: <span style="color: var(--accent-green)">Just now</span></div>
+    </div>
+
+    <!-- VPN KPIs -->
+    <h2 class="stitle">VPN Metrics <span class="cnt">4 Nodes</span></h2>
+    <div class="grid">
+        <div class="card">
+            <div class="kpi-label">Active Tunnels</div>
+            <div class="kpi-value color-blue">1,204</div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Throughput IN</div>
+            <div class="kpi-value color-green">4.2<span style="font-size: 16px; color: var(--text-dim)"> Gbps</span></div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Throughput OUT</div>
+            <div class="kpi-value color-green">3.8<span style="font-size: 16px; color: var(--text-dim)"> Gbps</span></div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Avg Latency</div>
+            <div class="kpi-value color-yellow">42<span style="font-size: 16px; color: var(--text-dim)"> ms</span></div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Dropped Packets</div>
+            <div class="kpi-value color-red">0.05<span style="font-size: 16px; color: var(--text-dim)"> %</span></div>
+        </div>
+    </div>
+
+    <!-- WebSocket KPIs -->
+    <h2 class="stitle">WebSocket Metrics <span class="cnt">2 Clusters</span></h2>
+    <div class="grid">
+        <div class="card">
+            <div class="kpi-label">Active Connections</div>
+            <div class="kpi-value color-blue">84,592</div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Messages / Sec</div>
+            <div class="kpi-value color-green">12,450</div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Handshake Errors</div>
+            <div class="kpi-value color-red">14</div>
+        </div>
+        <div class="card">
+            <div class="kpi-label">Memory Usage</div>
+            <div class="kpi-value color-yellow">18.4<span style="font-size: 16px; color: var(--text-dim)"> GB</span></div>
+        </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="dashboard-section">
+        
+        <!-- VPN Traffic by Node -->
+        <div class="chart-container">
+            <h3 class="stitle">VPN Traffic by Node (Gbps) <span class="cnt">Top 5</span></h3>
+            
+            <div class="bar-row">
+                <div class="bar-label">fra-vpn-01</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 85%; background: var(--accent-blue);">1.8 Gbps</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">ams-vpn-02</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 70%; background: var(--accent-blue);">1.4 Gbps</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">lon-vpn-01</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 45%; background: var(--accent-blue);">0.9 Gbps</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">nyc-vpn-03</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 25%; background: var(--accent-blue);">0.5 Gbps</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">sgp-vpn-01</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 10%; background: var(--accent-blue);">0.2 Gbps</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- WebSocket Connections Load -->
+        <div class="chart-container">
+            <h3 class="stitle">WebSocket Connections <span class="cnt">By Region</span></h3>
+            
+            <div class="bar-row">
+                <div class="bar-label">Europe</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 60%; background: var(--accent-green);">50,755 (60%)</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Americas</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 25%; background: var(--accent-green);">21,148 (25%)</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Asia Pacific</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 10%; background: var(--accent-green);">8,459 (10%)</div>
+                </div>
+            </div>
+            <div class="bar-row">
+                <div class="bar-label">Other</div>
+                <div class="bar-track">
+                    <div class="bar-fill" style="width: 5%; background: var(--accent-yellow);">4,230 (5%)</div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Active Nodes Table -->
+    <h2 class="stitle">Active Nodes Status <span class="cnt">12 Total</span></h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Hostname</th>
+                    <th>Type</th>
+                    <th>IP Address</th>
+                    <th>Load</th>
+                    <th>Uptime</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="mono">fra-vpn-01</td>
+                    <td>OpenVPN</td>
+                    <td class="mono">192.168.10.45</td>
+                    <td>85%</td>
+                    <td class="mono">45d 12h</td>
+                    <td><span class="badge warning">High Load</span></td>
+                </tr>
+                <tr>
+                    <td class="mono">ams-vpn-02</td>
+                    <td>WireGuard</td>
+                    <td class="mono">192.168.10.46</td>
+                    <td>70%</td>
+                    <td class="mono">112d 04h</td>
+                    <td><span class="badge active">Healthy</span></td>
+                </tr>
+                <tr>
+                    <td class="mono">eu-ws-gateway</td>
+                    <td>WebSocket</td>
+                    <td class="mono">10.0.5.12</td>
+                    <td>42%</td>
+                    <td class="mono">14d 08h</td>
+                    <td><span class="badge active">Healthy</span></td>
+                </tr>
+                <tr>
+                    <td class="mono">us-ws-gateway</td>
+                    <td>WebSocket</td>
+                    <td class="mono">10.0.6.88</td>
+                    <td>25%</td>
+                    <td class="mono">2d 15h</td>
+                    <td><span class="badge active">Healthy</span></td>
+                </tr>
+                <tr>
+                    <td class="mono">sgp-vpn-01</td>
+                    <td>WireGuard</td>
+                    <td class="mono">192.168.20.12</td>
+                    <td>99%</td>
+                    <td class="mono">0d 01h</td>
+                    <td><span class="badge error">Critical</span></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        MONITORING UI v1.0 | Generated: 2026-06-24 22:01 | DB: sys_metrics.db
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,446 @@
+openapi: "3.0.3"
+info:
+  title: Unkillable Messenger API
+  version: "1.0.0"
+  description: REST API for the Unkillable Messenger platform.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /api/status:
+    get:
+      summary: Server status
+      operationId: getStatus
+      responses:
+        "200":
+          description: Server status info
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  version: { type: string }
+                  uptime: { type: integer }
+
+  /api/health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      responses:
+        "200":
+          description: Health check response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  healthy: { type: boolean }
+
+  /api/identity:
+    get:
+      summary: Get current identity
+      operationId: getIdentity
+      responses:
+        "200":
+          description: Identity info (npub, no nsec)
+    post:
+      summary: Create or restore identity
+      operationId: createIdentity
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                seedPhrase: { type: string }
+      responses:
+        "200":
+          description: Identity created
+
+  /api/peers:
+    get:
+      summary: List WireGuard peers
+      operationId: listPeers
+      responses:
+        "200":
+          description: List of peers
+    post:
+      summary: Add a peer
+      operationId: addPeer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                publicKey: { type: string }
+                endpoint: { type: string }
+
+  /api/channels:
+    get:
+      summary: List channels
+      operationId: listChannels
+      responses:
+        "200":
+          description: List of channels
+    post:
+      summary: Create channel
+      operationId: createChannel
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+
+  /api/messages:
+    get:
+      summary: Get recent messages
+      operationId: getMessages
+      parameters:
+        - name: since
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: List of messages
+    post:
+      summary: Send a message
+      operationId: sendMessage
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                to: { type: string }
+                text: { type: string }
+                encrypted: { type: boolean }
+      responses:
+        "200":
+          description: Message sent
+
+  /api/groups/list:
+    get:
+      summary: List groups
+      operationId: listGroups
+      responses:
+        "200":
+          description: List of groups
+
+  /api/files/upload:
+    post:
+      summary: Upload a file
+      operationId: uploadFile
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: File uploaded
+
+  /api/files/{id}:
+    get:
+      summary: Download a file
+      operationId: getFile
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: File data
+
+  /api/mesh/stats:
+    get:
+      summary: Mesh network stats
+      operationId: getMeshStats
+      responses:
+        "200":
+          description: Mesh statistics
+
+  /api/mesh/peers:
+    get:
+      summary: List mesh peers
+      operationId: getMeshPeers
+      responses:
+        "200":
+          description: Mesh peer list
+
+  /api/mesh/add:
+    post:
+      summary: Add mesh peer
+      operationId: addMeshPeer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                peerId: { type: string }
+                address: { type: string }
+      responses:
+        "200":
+          description: Peer added
+
+  /api/stream/create:
+    post:
+      summary: Create a stream
+      operationId: createStream
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channelName: { type: string }
+      responses:
+        "200":
+          description: Stream created
+
+  /api/stream/list:
+    get:
+      summary: List active streams
+      operationId: listStreams
+      responses:
+        "200":
+          description: Stream list
+
+  /api/stream/end:
+    post:
+      summary: End a stream
+      operationId: endStream
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                streamId: { type: string }
+      responses:
+        "200":
+          description: Stream ended
+
+  /api/bots/register:
+    post:
+      summary: Register a bot
+      operationId: registerBot
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                command: { type: string }
+      responses:
+        "200":
+          description: Bot registered
+
+  /api/bots/list:
+    get:
+      summary: List bots
+      operationId: listBots
+      responses:
+        "200":
+          description: Bot list
+
+  /api/stickers/packs:
+    get:
+      summary: List sticker packs
+      operationId: listStickerPacks
+      responses:
+        "200":
+          description: Sticker packs
+
+  /api/stickers/pack/{id}:
+    get:
+      summary: Get sticker pack
+      operationId: getStickerPack
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Sticker pack details
+
+  /api/nostr/stats:
+    get:
+      summary: Nostr relay stats
+      operationId: getNostrStats
+      responses:
+        "200":
+          description: Nostr statistics
+
+  /api/nat/discover:
+    post:
+      summary: NAT traversal discovery
+      operationId: discoverNAT
+      responses:
+        "200":
+          description: NAT type info
+
+  /api/tor/status:
+    get:
+      summary: Tor connection status
+      operationId: getTorStatus
+      responses:
+        "200":
+          description: Tor status
+
+  /api/ipfs/status:
+    get:
+      summary: IPFS node status
+      operationId: getIPFSStatus
+      responses:
+        "200":
+          description: IPFS status
+
+  /api/admin/stats:
+    get:
+      summary: Admin statistics
+      operationId: getAdminStats
+      responses:
+        "200":
+          description: Admin dashboard stats
+
+  /api/admin/users:
+    get:
+      summary: List users (admin)
+      operationId: listAdminUsers
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer }
+        - name: limit
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: User list
+
+  /api/admin/ban:
+    post:
+      summary: Ban a user
+      operationId: banUser
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: { type: string }
+                reason: { type: string }
+                duration: { type: integer }
+      responses:
+        "200":
+          description: User banned
+
+  /api/admin/reports:
+    get:
+      summary: List reports
+      operationId: listReports
+      responses:
+        "200":
+          description: Report list
+
+  /api/invite/create:
+    post:
+      summary: Create an invite
+      operationId: createInvite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                channel: { type: string }
+                maxUses: { type: integer }
+                expiresIn: { type: integer }
+      responses:
+        "200":
+          description: Invite created
+
+  /api/invite/{id}:
+    get:
+      summary: Get invite info
+      operationId: getInvite
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Invite details
+
+  /api/invite/redeem:
+    post:
+      summary: Redeem an invite
+      operationId: redeemInvite
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id: { type: string }
+      responses:
+        "200":
+          description: Invite redeemed
+
+  /api/federation/peer:
+    post:
+      summary: Add federation peer
+      operationId: addFederationPeer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url: { type: string }
+      responses:
+        "200":
+          description: Peer added
+
+  /api/federation/sync:
+    post:
+      summary: Sync with federation peers
+      operationId: syncFederation
+      responses:
+        "200":
+          description: Sync result
+
+  /api/push/subscribe:
+    post:
+      summary: Subscribe to push notifications
+      operationId: pushSubscribe
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                endpoint: { type: string }
+                p256dh: { type: string }
+                auth: { type: string }
+      responses:
+        "200":
+          description: Subscription saved

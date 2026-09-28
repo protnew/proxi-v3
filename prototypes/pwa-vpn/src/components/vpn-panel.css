@@ -1,0 +1,46 @@
+  .vpn-product { padding: 12px; }
+  .vpn-buttons { display: flex; flex-direction: column; gap: 8px; }
+  .vpn-btn { padding: 14px; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .vpn-btn.share { background: linear-gradient(135deg, var(--bg-secondary), color-mix(in srgb, var(--success) 30%, var(--bg))); color: var(--text-on-accent); }
+  .vpn-btn.request { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 35%, var(--bg)), var(--accent)); color: var(--text-on-accent); }
+  .vpn-status { display: flex; align-items: center; gap: 8px; padding: 14px; border-radius: 12px; font-size: 13px; font-weight: 600; flex-wrap: wrap; }
+  .vpn-status.connecting { background: color-mix(in srgb, var(--warn) 12%, var(--bg)); color: var(--warn); border: 1px solid var(--border); }
+  .vpn-status.connected { background: var(--bg); color: var(--accent-light); border: 1px solid var(--border); }
+  .vpn-status.error { background: color-mix(in srgb, var(--danger) 12%, var(--bg)); color: var(--danger); border: 1px solid var(--danger); }
+  .vpn-empty { margin: 0 0 8px; font-size: 13px; color: var(--text-muted); line-height: 1.35; }
+  .tab-p2p-status { font-size: 0.8rem; opacity: 0.85; margin: 8px 0; padding: 6px 8px; border-radius: 8px; background: var(--bg-secondary); }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; background: currentColor; }
+  .ip { font-family: monospace; opacity: 0.9; }
+  .disconnect-btn { margin-left: auto; background: rgba(255,107,107,0.2); border: 1px solid color-mix(in srgb, var(--danger) 20%, transparent); color: var(--danger); padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-family: inherit; }
+  .vpn-log { margin-top: 8px; max-height: 110px; overflow-y: auto; }
+  .log-entry { font-size: 12px; color: var(--text-muted); padding: 2px 0; font-family: monospace; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+  .modal { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 16px; padding: 24px; max-width: 400px; width: 100%; }
+  .modal h3 { margin: 0 0 8px; font-size: 18px; color: var(--text); }
+  .modal p { font-size: 13px; color: var(--text-muted); margin: 8px 0; }
+  .modal input { width: 100%; padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-size: 14px; font-family: monospace; box-sizing: border-box; }
+  .modal-buttons { display: flex; gap: 8px; margin-top: 16px; }
+  .modal-buttons button { flex: 1; padding: 10px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit; }
+  .modal-buttons .cancel { background: var(--bg-tertiary); color: var(--text-muted); }
+  .modal-buttons .confirm { background: var(--success); color: var(--text-on-accent); }
+  .ice-status { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .ice-badge { font-size: 12px; color: var(--accent-light); background: rgba(125,211,252,0.1); padding: 3px 8px; border-radius: 6px; border: 1px solid rgba(125,211,252,0.2); }
+  .ice-badge.amnezia { color: var(--warn); background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
+
+  .vpn-btn.engine { background: color-mix(in srgb, var(--success) 18%, var(--bg)); border: 1px solid var(--success); }
+  .vpn-btn.amnezia { background: color-mix(in srgb, var(--warn) 18%, var(--bg)); border: 1px solid var(--warn); }
+  .advanced { margin: 6px 0; font-size: 12px; opacity: 0.85; }
+  .advanced summary { cursor: pointer; }
+  .adv-note { margin: 6px 0; line-height: 1.35; opacity: 0.9; }
+  .lan-hint { font-size: 12px; opacity: 0.9; margin: 4px 0; word-break: break-all; }
+  .lan-hint code { font-size: 12px; color: var(--accent-light); }
+  .vpn-btn.push { background: color-mix(in srgb, var(--accent) 18%, var(--bg)); border: 1px solid var(--accent); }
+  .phase2-status {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    font-size: 12px; opacity: 0.9; margin: 6px 0 4px;
+  }
+  .phase2-status .conf-path { color: var(--success); }
+  .phase2-status .linkish {
+    background: transparent; border: 1px solid var(--text-muted); color: inherit;
+    border-radius: 6px; padding: 2px 8px; cursor: pointer;
+  }

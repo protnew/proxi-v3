@@ -1,0 +1,106 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64
+          args: --timeout=5m
+
+  vet:
+    name: Vet
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.24", "1.25"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc musl-dev
+          go mod download
+
+      - name: go vet
+        run: go vet ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: ["1.24", "1.25"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc musl-dev
+          go mod download
+
+      - name: Run tests (race detector)
+        run: go test -race -count=1 -timeout=10m ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, vet, test]
+    strategy:
+      matrix:
+        go: ["1.24", "1.25"]
+        include:
+          - go: "1.24"
+            binary: messenger-server-1.24
+          - go: "1.25"
+            binary: messenger-server-1.25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update && sudo apt-get install -y gcc musl-dev
+          go mod download
+
+      - name: Build binary
+        env:
+          CGO_ENABLED: 1
+        run: |
+          go build -ldflags="-s -w" -o ${{ matrix.binary }} ./cmd/webserver/
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.binary }}
+          path: ${{ matrix.binary }}
+          retention-days: 7

@@ -1,0 +1,14 @@
+﻿node_modules/
+dist/
+test-results/
+*.log
+
+
+
+e2e-shots/
+
+
+# secrets (P23)
+.env
+.env.*
+!.env.example

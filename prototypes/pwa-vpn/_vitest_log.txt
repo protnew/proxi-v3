@@ -1,0 +1,269 @@
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.10 [39m[90mC:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn[39m
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted true by default
+[22m[39m[api] initIdentityAsync: local pubkey=fe645abae7004edd...
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted true by default
+[22m[39m[api] initIdentityAsync: Go signup status=0 — local identity only
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted false when E2E disabled
+[22m[39m[api] initIdentityAsync: local pubkey=fc2cd29833a334bf...
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mbuildChatPayload.encrypted false when E2E disabled
+[22m[39m[api] initIdentityAsync: Go signup status=0 — local identity only
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mtoggling E2E flips subsequent payloads
+[22m[39m[api] initIdentityAsync: local pubkey=91d2c5a9b2c4981b...
+
+[90mstdout[2m | test/e2e-flag.test.ts[2m > [22m[2mMSG-009 isE2EEnabled on send path[2m > [22m[2mtoggling E2E flips subsequent payloads
+[22m[39m[api] initIdentityAsync: Go signup status=0 — local identity only
+
+ [32m✓[39m test/e2e-flag.test.ts [2m([22m[2m3 tests[22m[2m)[22m[33m 350[2mms[22m[39m
+     [33m[2m✓[22m[39m buildChatPayload.encrypted true by default [33m 331[2mms[22m[39m
+ [32m✓[39m test/nip-e2e.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 209[2mms[22m[39m
+ [32m✓[39m test/nip59-giftwrap.test.ts [2m([22m[2m2 tests[22m[2m)[22m[33m 342[2mms[22m[39m
+[90mstdout[2m | test/api.test.ts[2m > [22m[2mAPI client[2m > [22m[2mshould initIdentity synchronously returning a hex string
+[22m[39m[api] initIdentityAsync: local pubkey=24ab7c36faff10b3...
+
+[90mstdout[2m | test/api.test.ts[2m > [22m[2mAPI client[2m > [22m[2mshould initIdentity synchronously returning a hex string
+[22m[39m[api] initIdentityAsync: Go signup status=0 — local identity only
+
+ [32m✓[39m test/api.test.ts [2m([22m[2m13 tests[22m[2m)[22m[32m 291[2mms[22m[39m
+[90mstdout[2m | test/giftwrap-offline-relay.test.ts[2m > [22m[2mOFF-001 dual offline gift-wrap pickup (real relay)[2m > [22m[2mAlice publish offline → Bob fetch+unwrap later
+[22m[39m[OFF-001] published to wss://nos.lol id 522e7b5e6afb
+
+[90mstdout[2m | test/webrtc-peer-extra.test.ts[2m > [22m[2mWebRTCTunnel deep[2m > [22m[2mconnect creates offer and reaches connecting
+[22m[39m[Tunnel] Data channel open!
+
+[90mstdout[2m | test/webrtc-peer-extra.test.ts[2m > [22m[2mWebRTCTunnel deep[2m > [22m[2mhandleSignal answer + ice
+[22m[39m[Tunnel] Data channel open!
+
+[90mstdout[2m | test/webrtc-peer-extra.test.ts[2m > [22m[2mWebRTCTunnel deep[2m > [22m[2mon message + send + close
+[22m[39m[Tunnel] Data channel open!
+
+[90mstdout[2m | test/nostr-chat-relay.test.ts[2m > [22m[2mNostrChat relay + transport[2m > [22m[2mconnect returns count of connected relays
+[22m[39m[Nostr] Connected to wss://relay.test.com (1 total)
+
+[90mstdout[2m | test/webrtc-peer-extra.test.ts[2m > [22m[2mpeer-manager datachannel file path[2m > [22m[2mconnectToPeer + sendFile full path
+[22m[39m[P2P] Connected to remote-p
+
+[90mstdout[2m | test/nostr-chat-relay.test.ts[2m > [22m[2mNostrChat relay + transport[2m > [22m[2msendDM encrypts and returns boolean
+[22m[39m[Nostr] Connected to wss://relay.test.com (1 total)
+
+[90mstdout[2m | test/nostr-chat-relay.test.ts[2m > [22m[2mNostrChat relay + transport[2m > [22m[2mdisconnect closes all connections
+[22m[39m[Nostr] Connected to wss://relay.test.com (1 total)
+
+[90mstdout[2m | test/nostr-chat-relay.test.ts[2m > [22m[2mNostrChat relay + transport[2m > [22m[2mconnectedRelays returns number
+[22m[39m[Nostr] Connected to wss://relay.test.com (1 total)
+
+ [32m✓[39m test/nostr-chat-relay.test.ts [2m([22m[2m7 tests[22m[2m)[22m[33m 686[2mms[22m[39m
+ [32m✓[39m test/nip04-encrypt.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 393[2mms[22m[39m
+ [32m✓[39m test/desktop-tauri-deep.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 91[2mms[22m[39m
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2mconnectRelays opens WS and sends join
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2msendDM via WS when open + REST dual-write
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2msendGroupMessage via WS
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2msendTyping + sendPresence via WS
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+ [32m✓[39m test/nostr-chat.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 278[2mms[22m[39m
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2msendCallSignal via WS OPEN
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2msendBinaryVoice via WS binary frame
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/remaining-deep.test.ts[2m > [22m[2mexit-node.ts[2m > [22m[2mhandleMessage fetches URL and sends response
+[22m[39m[ExitNode] Fetching: https://example.com
+
+[90mstdout[2m | test/effector-settings.test.ts[2m > [22m[2mNostrSignaling[2m > [22m[2mstop() closes all connections
+[22m[39m[Nostr] Connected to wss://test.relay.com
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2mhandleWsMessage routes chat/typing/join/leave/voice/file
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+ [32m✓[39m test/identity-full.test.ts [2m([22m[2m5 tests[22m[2m)[22m[33m 390[2mms[22m[39m
+[90mstdout[2m | test/effector-settings.test.ts[2m > [22m[2mNostrSignaling[2m > [22m[2msendRequest publishes VPN request event
+[22m[39m[Nostr] Connected to wss://test.relay.com
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2mconnectRelays reconnect closes previous
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/remaining-deep.test.ts[2m > [22m[2mexit-node.ts[2m > [22m[2mhandleMessage returns 502 on fetch error
+[22m[39m[ExitNode] Fetching: https://fail.example
+
+[90mstdout[2m | test/effector-settings.test.ts[2m > [22m[2mNostrSignaling[2m > [22m[2msendRequest publishes VPN request event
+[22m[39m[Nostr] Connected to wss://test.relay.com
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2mconnectRelays reconnect closes previous
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+ [32m✓[39m test/bip39-seed.test.ts [2m([22m[2m6 tests[22m[2m)[22m[33m 364[2mms[22m[39m
+[90mstdout[2m | test/effector-settings.test.ts[2m > [22m[2mNostrSignaling[2m > [22m[2msendOffer publishes offer
+[22m[39m[Nostr] Connected to wss://test.relay.com
+
+[90mstdout[2m | test/api-ws-path.test.ts[2m > [22m[2mapi.ts WS OPEN paths[2m > [22m[2mchatApi.sendDM WS path returns via:ws
+[22m[39m[api] connectRelays: token=jwt-abc..., pubkey=aaaaaaaaaaaaaaaa
+
+[90mstdout[2m | test/effector-settings.test.ts[2m > [22m[2mNostrSignaling[2m > [22m[2msendAnswer publishes answer
+[22m[39m[Nostr] Connected to wss://test.relay.com
+
+ [32m✓[39m test/api-ws-path.test.ts [2m([22m[2m15 tests[22m[2m)[22m[33m 366[2mms[22m[39m
+ [32m✓[39m test/qr-generate.test.ts [2m([22m[2m6 tests[22m[2m)[22m[32m 89[2mms[22m[39m
+[90mstdout[2m | test/effector-settings.test.ts[2m > [22m[2mNostrSignaling[2m > [22m[2msendIceCandidate publishes ICE candidate
+[22m[39m[Nostr] Connected to wss://test.relay.com
+
+ [32m✓[39m test/effector-settings.test.ts [2m([22m[2m19 tests[22m[2m)[22m[33m 511[2mms[22m[39m
+ [32m✓[39m test/remaining-deep.test.ts [2m([22m[2m37 tests[22m[2m)[22m[33m 344[2mms[22m[39m
+ [32m✓[39m test/vpn-theme-extra.test.ts [2m([22m[2m17 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+ [32m✓[39m test/chat-utils.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 45[2mms[22m[39m
+[90mstdout[2m | test/ipfs-outbox.test.ts[2m > [22m[2moffline-outbox[2m > [22m[2menqueue and list
+[22m[39m[outbox] queued 09194388 to peer1
+
+[90mstdout[2m | test/ipfs-outbox.test.ts[2m > [22m[2moffline-outbox[2m > [22m[2mflush removes successful items
+[22m[39m[outbox] queued 3ac0c3f4 to p1
+[outbox] queued fa264bda to p2
+
+[90mstdout[2m | test/ipfs-outbox.test.ts[2m > [22m[2moffline-outbox[2m > [22m[2mflush removes successful items
+[22m[39m[outbox] flushed 3ac0c3f4 via test
+
+[90mstdout[2m | test/ipfs-outbox.test.ts[2m > [22m[2moffline-outbox[2m > [22m[2mflush removes successful items
+[22m[39m[outbox] flushed fa264bda via test
+
+[90mstdout[2m | test/ipfs-outbox.test.ts[2m > [22m[2moffline-outbox[2m > [22m[2mflush keeps failed items and bumps attempts
+[22m[39m[outbox] queued 4c7d4396 to p1
+
+[90mstdout[2m | test/ipfs-outbox.test.ts[2m > [22m[2moffline-outbox[2m > [22m[2mremove deletes by id
+[22m[39m[outbox] queued d8ec1e39 to p
+
+ [32m✓[39m test/ipfs-outbox.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 26[2mms[22m[39m
+[90mstdout[2m | test/media-mock.test.ts[2m > [22m[2mSounds[2m > [22m[2minitSounds initializes without throwing
+[22m[39m[sounds] Ready (buffers will generate on first play)
+
+ [32m✓[39m test/media-mock.test.ts [2m([22m[2m12 tests[22m[2m)[22m[32m 87[2mms[22m[39m
+[90mstdout[2m | test/api-deep.test.ts[2m > [22m[2midentity paths[2m > [22m[2minitIdentityAsync signs up and stores token
+[22m[39m[api] initIdentityAsync: local pubkey=cccccccccccccccc...
+
+[90mstdout[2m | test/api-deep.test.ts[2m > [22m[2midentity paths[2m > [22m[2minitIdentityAsync signs up and stores token
+[22m[39m[api] initIdentityAsync: Go JWT stored, user_id=uid-1
+
+[90mstdout[2m | test/api-deep.test.ts[2m > [22m[2midentity paths[2m > [22m[2minitIdentityAsync handles signup failure
+[22m[39m[api] initIdentityAsync: local pubkey=eeeeeeeeeeeeeeee...
+
+[90mstdout[2m | test/api-deep.test.ts[2m > [22m[2midentity paths[2m > [22m[2minitIdentityAsync handles signup failure
+[22m[39m[api] initIdentityAsync: Go signup status=400 — local identity only
+
+ [32m✓[39m test/api-deep.test.ts [2m([22m[2m32 tests[22m[2m)[22m[32m 60[2mms[22m[39m
+ [32m✓[39m test/api-payload.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 9[2mms[22m[39m
+ [32m✓[39m test/fetch-mock.test.ts [2m([22m[2m37 tests[22m[2m)[22m[32m 39[2mms[22m[39m
+ [32m✓[39m test/file-transfer.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 18[2mms[22m[39m
+ [32m✓[39m test/voice.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m test/theme.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 13[2mms[22m[39m
+[90mstdout[2m | test/sounds.test.ts[2m > [22m[2msounds[2m > [22m[2minitSounds does not crash
+[22m[39m[sounds] Ready (buffers will generate on first play)
+
+ [32m✓[39m test/sounds.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 21[2mms[22m[39m
+ [32m✓[39m test/api-no-token.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 11[2mms[22m[39m
+ [32m✓[39m test/qr-parse.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/search.test.ts [2m([22m[2m7 tests[22m[2m)[22m[32m 15[2mms[22m[39m
+ [32m✓[39m test/calls.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 17[2mms[22m[39m
+ [32m✓[39m test/exit-node.test.ts [2m([22m[2m4 tests[22m[2m)[22m[32m 12[2mms[22m[39m
+ [32m✓[39m test/api-extended.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 38[2mms[22m[39m
+[90mstdout[2m | test/webrtc-peer-extra.test.ts[2m > [22m[2mpeer-manager datachannel file path[2m > [22m[2mhandleSignal offer creates answerer PC and datachannel messages
+[22m[39m[P2P] Connected to from-pee
+
+ [32m✓[39m test/webrtc-peer-extra.test.ts [2m([22m[2m8 tests[22m[2m)[22m[33m 6086[2mms[22m[39m
+     [33m[2m✓[22m[39m connectToPeer + sendFile full path [33m 3016[2mms[22m[39m
+     [33m[2m✓[22m[39m handleSignal offer creates answerer PC and datachannel messages [33m 3009[2mms[22m[39m
+ [32m✓[39m test/webrtc-mock.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 6059[2mms[22m[39m
+     [33m[2m✓[22m[39m connectToPeer returns DataChannel or null [33m 3019[2mms[22m[39m
+     [33m[2m✓[22m[39m handleSignal routes offer without throwing [33m 3014[2mms[22m[39m
+ [32m✓[39m test/desktop.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m test/webrtc-tunnel.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 8[2mms[22m[39m
+ [32m✓[39m test/ipc.test.ts [2m([22m[2m3 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m test/peer-manager.test.ts [2m([22m[2m1 test[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m test/vpn.test.ts [2m([22m[2m5 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m test/nostr-signaling.test.ts [2m([22m[2m2 tests[22m[2m)[22m[32m 5[2mms[22m[39m
+ [32m✓[39m test/giftwrap-offline-relay.test.ts [2m([22m[2m1 test[22m[2m)[22m[33m 13480[2mms[22m[39m
+     [33m[2m✓[22m[39m Alice publish offline → Bob fetch+unwrap later [33m 13477[2mms[22m[39m
+ [32m✓[39m test/calls-peer-deep.test.ts [2m([22m[2m22 tests[22m[2m)[22m[33m 24063[2mms[22m[39m
+     [33m[2m✓[22m[39m startCall transitions state and gets media [33m 3011[2mms[22m[39m
+     [33m[2m✓[22m[39m startCall video mode requests video [33m 3005[2mms[22m[39m
+     [33m[2m✓[22m[39m acceptCall with sdp [33m 3016[2mms[22m[39m
+     [33m[2m✓[22m[39m handleCallSignal answer [33m 3000[2mms[22m[39m
+     [33m[2m✓[22m[39m handleCallSignal ice [33m 3006[2mms[22m[39m
+     [33m[2m✓[22m[39m connectToPeer creates PC and returns DC [33m 3002[2mms[22m[39m
+     [33m[2m✓[22m[39m handleSignal offer/answer/ice paths [33m 3007[2mms[22m[39m
+     [33m[2m✓[22m[39m setOnFileComplete + sendFile with open DC [33m 3004[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m41 passed[39m[22m[90m (41)[39m
+[2m      Tests [22m [1m[32m355 passed[39m[22m[90m (355)[39m
+[2m   Start at [22m 17:26:06
+[2m   Duration [22m 30.90s[2m (transform 3.91s, setup 832ms, import 7.49s, tests 54.91s, environment 119.69s)[22m
+
+
+---STDERR---
+17:26:06 [vite-plugin-svelte] invalid plugin options "hot" in inline config
+{ hot: false }
+Warning: A vi.unmock("@tauri-apps/api/core") call in "C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/desktop-tauri-deep.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+Warning: A vi.unmock("@tauri-apps/plugin-notification") call in "C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/desktop-tauri-deep.test.ts" is not at the top level of the module. Although it appears nested, it will be hoisted and executed before any tests run. Move it to the top level to reflect its actual execution order. This will become an error in a future version.
+See: https://vitest.dev/guide/mocking/modules#how-it-works
+[90mstderr[2m | test/remaining-deep.test.ts[2m > [22m[2mexit-node.ts[2m > [22m[2mhandleMessage ignores non-JSON and unknown types
+[22m[39m[ExitNode] Error handling message: SyntaxError: Unexpected token 'o', "not-json" is not valid JSON
+    at JSON.parse (<anonymous>)
+    at ExitNode.handleMessage (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/src/lib/archive/exit-node.ts:27:24)
+    at Object.message (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/src/lib/archive/exit-node.ts:18:12)
+    at Object._emit (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/remaining-deep.test.ts:114:53)
+    at C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/remaining-deep.test.ts:175:12
+    at [90mfile:///C:/Obsidian/New/Projects/04-%D0%9D%D0%B5%D1%83%D0%B1%D0%B8%D0%B2%D0%B0%D0%B5%D0%BC%D1%8B%D0%B9-%D0%BA%D0%BE%D0%BD%D1%82%D0%B5%D0%BD%D1%82%20V2/.04-Src/prototypes/pwa-vpn/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:302:11
+    at [90mfile:///C:/Obsidian/New/Projects/04-%D0%9D%D0%B5%D1%83%D0%B1%D0%B8%D0%B2%D0%B0%D0%B5%D0%BC%D1%8B%D0%B9-%D0%BA%D0%BE%D0%BD%D1%82%D0%B5%D0%BD%D1%82%20V2/.04-Src/prototypes/pwa-vpn/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:1903:26
+    at [90mfile:///C:/Obsidian/New/Projects/04-%D0%9D%D0%B5%D1%83%D0%B1%D0%B8%D0%B2%D0%B0%D0%B5%D0%BC%D1%8B%D0%B9-%D0%BA%D0%BE%D0%BD%D1%82%D0%B5%D0%BD%D1%82%20V2/.04-Src/prototypes/pwa-vpn/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2326:20
+    at new Promise (<anonymous>)
+    at runWithCancel [90m(file:///C:/Obsidian/New/Projects/04-%D0%9D%D0%B5%D1%83%D0%B1%D0%B8%D0%B2%D0%B0%D0%B5%D0%BC%D1%8B%D0%B9-%D0%BA%D0%BE%D0%BD%D1%82%D0%B5%D0%BD%D1%82%20V2/.04-Src/prototypes/pwa-vpn/[39mnode_modules/[4m@vitest/runner[24m/dist/chunk-artifact.js:2323:10[90m)[39m
+
+[90mstderr[2m | test/vpn-theme-extra.test.ts[2m > [22m[2mvpn error + mapState branches[2m > [22m[2mrefreshVPNStatus body.error path
+[22m[39mError: rpc fail
+    at vpnRpc (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/src/lib/vpn.ts:61:26)
+[90m    at processTicksAndRejections (node:internal/process/task_queues:103:5)[39m
+    at disconnectVPN (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/src/lib/vpn.ts:197:9)
+    at C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/vpn-theme-extra.test.ts:56:3
+
+[90mstderr[2m | test/vpn-theme-extra.test.ts[2m > [22m[2mvpn error + mapState branches[2m > [22m[2mdisconnectVPN swallows errors
+[22m[39mError: VPN API HTTP 500
+    at vpnRpc (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/src/lib/vpn.ts:59:22)
+    at disconnectVPN (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/src/lib/vpn.ts:197:9)
+    at C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/vpn-theme-extra.test.ts:142:5
+
+Not implemented: HTMLMediaElement's play() method
+[90mstderr[2m | test/sounds.test.ts[2m > [22m[2msounds[2m > [22m[2mplayIncoming creates AudioContext and plays
+[22m[39m[vitest] The vi.fn() mock did not use 'function' or 'class' in its implementation, see https://vitest.dev/api/vi#vi-spyon for examples.
+
+[90mstderr[2m | test/sounds.test.ts[2m > [22m[2msounds[2m > [22m[2mplayOutgoing does not crash
+[22m[39m[vitest] The vi.fn() mock did not use 'function' or 'class' in its implementation, see https://vitest.dev/api/vi#vi-spyon for examples.
+
+[90mstderr[2m | test/sounds.test.ts[2m > [22m[2msounds[2m > [22m[2mmultiple playIncoming calls are safe
+[22m[39m[vitest] The vi.fn() mock did not use 'function' or 'class' in its implementation, see https://vitest.dev/api/vi#vi-spyon for examples.
+[vitest] The vi.fn() mock did not use 'function' or 'class' in its implementation, see https://vitest.dev/api/vi#vi-spyon for examples.
+[vitest] The vi.fn() mock did not use 'function' or 'class' in its implementation, see https://vitest.dev/api/vi#vi-spyon for examples.
+
+[90mstderr[2m | test/giftwrap-offline-relay.test.ts[2m > [22m[2mOFF-001 dual offline gift-wrap pickup (real relay)[2m > [22m[2mAlice publish offline → Bob fetch+unwrap later
+[22m[39m[OFF-001] bob fetch fail wss://relay.nostr.band Error: err wss://relay.nostr.band
+    at WebSocket.ws.onerror (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/giftwrap-offline-relay.test.ts:36:50)
+[90m    at WebSocket.[nodejs.internal.kHybridDispatch] (node:internal/event_target:843:20)[39m
+[90m    at WebSocket.dispatchEvent (node:internal/event_target:776:26)[39m
+[90m    at fireEvent (node:internal/deps/undici/undici:11883:14)[39m
+[90m    at failWebsocketConnection (node:internal/deps/undici/undici:11964:9)[39m
+[90m    at closeWebSocketConnection (node:internal/deps/undici/undici:12239:9)[39m
+[90m    at WebSocket.close (node:internal/deps/undici/undici:12942:9)[39m
+    at Timeout.<anonymous> (C:/Obsidian/New/Projects/04-Неубиваемый-контент V2/.04-Src/prototypes/pwa-vpn/test/giftwrap-offline-relay.test.ts:32:16)
+[90m    at listOnTimeout (node:internal/timers:585:17)[39m
+[90m    at processTimers (node:internal/timers:521:7)[39m
+[OFF-001] relay did not return event in time — unwrap verified on published object
+

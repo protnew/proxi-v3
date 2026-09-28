@@ -1,0 +1,61 @@
+package main
+
+import (
+	"log"
+	"net/http"
+
+	"github.com/unkillable-messenger/vpn/ipfs"
+
+	"nhooyr.io/websocket"
+)
+
+var ipfsClient *ipfs.Client
+
+type nhooyrWSConn struct {
+	c *websocket.Conn
+}
+
+func (s *Server) handleNostrWS(w http.ResponseWriter, r *http.Request) {
+	if origin := r.Header.Get("Origin"); origin != "" && !wsOriginAllowed(origin) {
+		http.Error(w, `{"error":"FORBIDDEN","message":"origin not allowed"}`, http.StatusForbidden)
+		return
+	}
+	// P9: /nostr требует JWT (Bearer или ?token=) когда auth включён —
+	// анонимная запись в relay закрыта; подписи событий проверяет сам relay (NIP-01).
+	authPubkey := ""
+	noteQueryTokenDeprecated("/nostr", r)
+	if s.authService != nil {
+		tok, tokErr := wsToken(r)
+		if tokErr != nil {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"bad subprotocol"}`, http.StatusUnauthorized)
+			return
+		}
+		if tok == "" {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"token required"}`, http.StatusUnauthorized)
+			return
+		}
+		claims, err := s.authService.ValidateToken(tok)
+		if err != nil {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"invalid token"}`, http.StatusUnauthorized)
+			return
+		}
+		// P1: bind the connection to the JWT identity (x-only hex).
+		if hex, err := npubToXOnlyHex(claims.Npub); err == nil {
+			authPubkey = hex
+		} else {
+			http.Error(w, `{"error":"UNAUTHORIZED","message":"token has no valid npub"}`, http.StatusUnauthorized)
+			return
+		}
+	}
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: acceptOriginPatterns(r),
+		Subprotocols:   wsAcceptProtocols(r),
+	})
+	if err != nil {
+		log.Printf("[nostr] upgrade error: %v", err)
+		return
+	}
+	nostrRelay.HandleClientAuth(&nhooyrWSConn{c: conn}, authPubkey)
+}
+
+// handleNostrStats returns relay statistics.

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8"><title>Backlog Dashboard — Indestructible VPN</title>
+<style>
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; margin: 20px; }
+h1 { color: #58a6ff; }
+h2 { color: #8b949e; font-size: 14px; text-transform: uppercase; }
+.card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; text-align: center; }
+.stat .num { font-size: 32px; font-weight: 700; }
+.stat .lbl { font-size: 12px; color: #8b949e; }
+.green { color: #3fb950; } .yellow { color: #d29922; } .blue { color: #58a6ff; } .red { color: #f85149; }
+table { width: 100%; border-collapse: collapse; }
+th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #21262d; font-size: 13px; }
+th { color: #8b949e; font-size: 11px; text-transform: uppercase; }
+.epic-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600; }
+.Phase1-PWA { background: #1f6feb33; color: #58a6ff; }
+.Phase1-Fallback { background: #d2992233; color: #d29922; }
+.VPN-Product { background: #3fb95033; color: #3fb950; }
+.arch { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 12px 16px; margin-bottom: 8px; }
+.arch strong { color: #58a6ff; }
+</style></head><body>
+
+<h1>🛡️ Indestructible VPN — Backlog Dashboard</h1>
+<p style="color:#8b949e">Updated 2026-08-06 · Backlog v3 aligned with architecture tables</p>
+
+<div class="grid">
+  <div class="stat"><div class="num green">72</div><div class="lbl">DONE</div></div>
+  <div class="stat"><div class="num yellow">33</div><div class="lbl">TODO</div></div>
+  <div class="stat"><div class="num blue">43</div><div class="lbl">ICEBOX</div></div>
+  <div class="stat"><div class="num">148</div><div class="lbl">Total</div></div>
+</div>
+
+<div class="card">
+<h2>Канонический стек (из таблиц выбора)</h2>
+<div class="arch"><strong>VPN транспорт:</strong> WebTransport (QUIC) ← Т2: 166 баллов. WireGuard проиграл (0/10 браузер). <span class="red">НЕ SOCKS5, НЕ WireGuard в PWA</span></div>
+<div class="arch"><strong>DPI Fallback:</strong> AmneziaWG ← таблица 02: 195 баллов. Obfuscation когда QUIC блокирован</div>
+<div class="arch"><strong>Signaling:</strong> Nostr NIP-01 ← таблицы 26, 53. Обмен ключами, VPN invites, ICE candidates</div>
+<div class="arch"><strong>E2E:</strong> Double Ratchet (Signal) ← таблицы 22, 56. НЕ чистый NIP-44</div>
+<div class="arch"><strong>Offline:</strong> NIP-59 Gift Wrap ← таблица 30</div>
+<div class="arch"><strong>UI:</strong> Svelte 5 + Nano Stores + Tinro ← таблицы 34, 55, 52</div>
+<div class="arch"><strong>Desktop (Фаза 2):</strong> Tauri 2 + WireGuard (Netbird) ← таблицы 40, 41. WG уместен здесь</div>
+</div>
+
+<div class="card">
+<h2>TODO tasks — top 15 by priority</h2>
+<table>
+<tr><th>ID</th><th>Task</th><th>Score</th><th>Epic</th></tr>
+<tr><td><code>SL-055</code></td><td>Mobile PWA install test (Add to Home Screen)</td><td>1.60</td><td><span class="epic-tag F-Serverless">F-Serverless</span></td></tr>
+<tr><td><code>SL-054</code></td><td>Final CF Pages deploy: full serverless stack</td><td>1.25</td><td><span class="epic-tag F-Serverless">F-Serverless</span></td></tr>
+<tr><td><code>SL-043</code></td><td>Image preview from IPFS in chat</td><td>0.88</td><td><span class="epic-tag F-Serverless">F-Serverless</span></td></tr>
+<tr><td><code>VPN-028</code></td><td>АРХИТЕКТУРНОЕ: PWA=WebTransport (Т2), Desktop/Mobile=WireGuard (Ф</td><td>0.80</td><td><span class="epic-tag VPN-Product">VPN-Product</span></td></tr>
+<tr><td><code>SL-041</code></td><td>Upload file → CID → Nostr file event</td><td>0.75</td><td><span class="epic-tag F-Serverless">F-Serverless</span></td></tr>
+<tr><td><code>SL-042</code></td><td>Download by CID → decrypt → display</td><td>0.75</td><td><span class="epic-tag F-Serverless">F-Serverless</span></td></tr>
+<tr><td><code>VPN-025</code></td><td>Скрыть ручные SOCKS5 настройки из UI — продукт-режим только WebTr</td><td>0.70</td><td><span class="epic-tag VPN-Product">VPN-Product</span></td></tr>
+<tr><td><code>MVP-002</code></td><td>Human smoke 2 browser profiles Alice→Bob on :5173</td><td>0.67</td><td><span class="epic-tag D-UserExperience">D-UserExperience</span></td></tr>
+<tr><td><code>VPN-020</code></td><td>UI: кнопка 'Дать VPN другу' → Nostr DM инвайт (без ручных настрое</td><td>0.67</td><td><span class="epic-tag VPN-Product">VPN-Product</span></td></tr>
+<tr><td><code>VPN-021</code></td><td>UI: кнопка 'Запросить VPN' → отправка vpn-request через Nostr</td><td>0.67</td><td><span class="epic-tag VPN-Product">VPN-Product</span></td></tr>
+<tr><td><code>VPN-022</code></td><td>UI: accept/reject VPN-инвайт — модалка 'друг предлагает интернет'</td><td>0.67</td><td><span class="epic-tag VPN-Product">VPN-Product</span></td></tr>
+<tr><td><code>SIG-001</code></td><td>Go: Nostr relay — подписка на kind:30090 VPN events (vpn-invite/r</td><td>0.67</td><td><span class="epic-tag Phase1-PWA">Phase1-PWA</span></td></tr>
+<tr><td><code>SIG-003</code></td><td>E2E: Alice 'Дать VPN' → Nostr event → Bob видит за 2 сек → accept</td><td>0.67</td><td><span class="epic-tag Phase1-PWA">Phase1-PWA</span></td></tr>
+<tr><td><code>SL-044</code></td><td>File size limits + progress bar</td><td>0.60</td><td><span class="epic-tag F-Serverless">F-Serverless</span></td></tr>
+<tr><td><code>VPN-023</code></td><td>Backend: Nostr event kind:30090 vpn-invite → отправка через relay</td><td>0.60</td><td><span class="epic-tag VPN-Product">VPN-Product</span></td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>Phase 1 (PWA VPN) — tasks by area</h2>
+<table>
+<tr><th>Area</th><th>TODO count</th></tr>
+<tr><td>Phase1-Fallback</td><td>1</td></tr>
+<tr><td>Phase1-PWA</td><td>11</td></tr>
+</table>
+</div>
+</body></html>

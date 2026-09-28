@@ -1,0 +1,32 @@
+{
+  "total": 770,
+  "by_pkg": {
+    "./auth/": 10,
+    "./chat/": 82,
+    "./store/": 60,
+    "./middleware/": 18,
+    "./cmd/webserver/": 60,
+    ".": 61,
+    "./identity/": 31,
+    "./crypto/": 34,
+    "./content/": 87,
+    "./mesh/": 42,
+    "./storage/": 25,
+    "./tor/": 42,
+    "./bot/": 16,
+    "./federation/": 19,
+    "./ipfs/": 16,
+    "./push/": 21,
+    "./admin/": 7,
+    "./analytics/": 8,
+    "./api/": 13,
+    "./i18n/": 4,
+    "./media/": 7,
+    "./msgops/": 8,
+    "./nat/": 14,
+    "./social/": 3,
+    "./stream/": 34,
+    "./nostr/": 35,
+    "./integration/": 13
+  }
+}
