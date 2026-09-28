@@ -63,4 +63,6 @@ jobs:
         working-directory: prototypes/pwa-vpn
         run: |
           test -f dist/index.html && echo "PWA build OK"
-          test -s dist/assets/*.js && echo "JS bundle OK"
+          # glob expands to many files — check the first exists and is non-empty
+          set -- dist/assets/*.js
+          if [ "$#" -ge 1 ] && [ -f "$1" ] && [ -s "$1" ]; then echo "JS bundle OK ($# files)"; else echo "no JS bundle" >&2; exit 1; fi
