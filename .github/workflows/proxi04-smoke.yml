@@ -85,21 +85,25 @@ jobs:
           $p.Id | Out-File "$env:OUT_DIR\helper.pid"
           Write-Output "helper pid $($p.Id) started"
 
-      - name: Wait for hold marker, then FAST checks (45s window)
+      - name: Wait for hold marker, assert P-A markers (45s window)
         timeout-minutes: 3
         run: |
+          # Pure file I/O — no WMI/netsh here: those can wedge on a runner with
+          # a live TUN adapter and eat the whole job budget without a verdict.
           $deadline = (Get-Date).AddSeconds(40)
           $hold = $false
           while ((Get-Date) -lt $deadline) {
             if (Test-Path $env:HELPER_LOG) {
-              if (Select-String -Path $env:HELPER_LOG -Pattern 'hold' -Quiet) { $hold = $true; break }
-              if (Select-String -Path $env:HELPER_LOG -Pattern 'ERROR|ROLLBACK' -Quiet) { break }
+              foreach ($line in [System.IO.File]::ReadLines($env:HELPER_LOG)) {
+                if ($line -match 'hold') { $hold = $true; break }
+                if ($line -match 'ERROR|ROLLBACK') { break }
+              }
             }
+            if ($hold) { break }
             Start-Sleep -Milliseconds 500
           }
           if (-not $hold) { Get-Content $env:HELPER_LOG -ErrorAction SilentlyContinue; throw "no hold marker in 40s" }
           Write-Output "hold marker seen — fast checks inside window"
-          # 8 P-A markers — assert all
           $markers = @(
             'adapter created LUID=', 'wfp-engaged', 'dns-set 10.7.0.1',
             'host-route', 'routes-installed', 'dns-listen 10.7.0.1:53',
@@ -109,7 +113,12 @@ jobs:
           foreach ($m in $markers) {
             if (-not ($log | Select-String -Pattern [regex]::Escape($m) -Quiet)) { throw "missing marker: $m" }
           }
-          # Fast live inspection
+          Write-Output "all P-A markers present"
+
+      - name: Live inspection (netsh/route/WMI — may be slow, own budget)
+        timeout-minutes: 2
+        continue-on-error: true
+        run: |
           netsh wfp show filters file="$env:TEMP\wfp.xml" | Out-Null
           Select-String -Path "$env:TEMP\wfp.xml" -Pattern 'proxi04|Proxi0' | Select-Object -First 5
           route print | Select-String -Pattern '10\.7\.0\.' | Select-Object -First 8
