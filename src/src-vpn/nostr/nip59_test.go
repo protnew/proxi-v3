@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 )
@@ -18,9 +19,11 @@ func TestR26b_GiftWrapHidesWtAddr(t *testing.T) {
 		t.Fatal(err)
 	}
 	from := hex.EncodeToString(sender.PubKey().SerializeCompressed()[1:])
+	to := hex.EncodeToString(recipient.PubKey().SerializeCompressed()[1:])
+	now := time.Now().Unix()
 	payload := InvitePayload{
-		Type: "vpn_invite", From: from, To: "bb",
-		WtAddr: "203.0.113.9:4433", Token: "tok", Exp: 99, Ts: 1, V: 1,
+		Type: "vpn_invite", From: from, To: to,
+		WtAddr: "203.0.113.9:4433", Token: "tok", Exp: now + 900, Ts: now, V: 1,
 	}
 	ev, err := GiftWrapInvite(sender, recipient.PubKey(), payload)
 	if err != nil {

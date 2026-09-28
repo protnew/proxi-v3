@@ -14,7 +14,7 @@ import (
 	"golang.zx2c4.com/wireguard/tun"
 )
 
-const tunAdapter = "Proxi0"
+// tunAdapter is declared in service_name.go (shared with non-windows stubs).
 const smokeExit = "203.0.113.9"
 
 type tunnelOpt struct {

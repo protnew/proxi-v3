@@ -42,7 +42,11 @@
     "windows": {
       "certificateThumbprint": null,
       "digestAlgorithm": "sha256",
-      "timestampUrl": ""
+      "timestampUrl": "",
+      "nsis": {
+        "installMode": "perMachine",
+        "include": "installer-hooks.nsh"
+      }
     }
   },
   "plugins": {

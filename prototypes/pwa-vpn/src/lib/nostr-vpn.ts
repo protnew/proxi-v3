@@ -35,6 +35,9 @@ export interface VPNEvent {
   wtPort?: number
   wtCertHash?: string
   wtAddr?: string
+  onion?: string
+  token?: string
+  exp?: number
   timestamp: number
   // WebRTC fields (architecture table 26_Signaling_Protocol)
   rtcSdp?: string
@@ -120,6 +123,11 @@ export class NostrVPNSignaling {
                 type: payload.type === 'vpn_request' ? 'vpn-request' : 'vpn-invite',
                 from: payload.from,
                 to: payload.to,
+                wtAddr: payload.wtAddr,
+                wtCertHash: payload.wtCertHash,
+                onion: payload.onion,
+                token: payload.token,
+                exp: payload.exp,
                 timestamp: Math.floor((payload.ts || Date.now()) / 1000),
                 rtcSdp: payload.sdp,
                 iceCandidates: payload.ice ? JSON.parse(payload.ice) : undefined,

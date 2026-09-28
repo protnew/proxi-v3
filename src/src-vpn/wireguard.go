@@ -22,6 +22,8 @@ const (
 	StateConnecting   VPNState = "connecting"
 	StateConnected    VPNState = "connected"
 	StateSharing      VPNState = "sharing"
+	StateReconnecting VPNState = "reconnecting"
+	StateLocked       VPNState = "locked"
 	StateError        VPNState = "error"
 )
 
@@ -64,6 +66,10 @@ type Status struct {
 	RealTraffic bool     `json:"realTraffic"`    // true when SOCKS accepts app traffic
 	PeerLost    bool     `json:"peerLost"`
 	ActiveLeg   string   `json:"activeLeg,omitempty"`
+	Code        string   `json:"code,omitempty"`
+	Phase       string   `json:"phase,omitempty"`
+	Attempt     int      `json:"attempt,omitempty"`
+	Max         int      `json:"max,omitempty"`
 }
 
 // Manager — управление WireGuard VPN
@@ -81,9 +87,27 @@ type Manager struct {
 	userspace *UserspaceVPN // userspace transport when kernel WG unavailable
 	socks     *SOCKS5Server // real local SOCKS5 (app traffic path)
 	mode      string        // local | real | exit | share
+	auth      *ExitAuth
+	peerLost  bool
+	activeLeg string
+	lastErr   string
+
+	watchCancel context.CancelFunc // peer-lost watchdog cancel
+	reconnectAttempt int
+	egress     *egressState // donor egress listener state (P-G)
 }
 
 // NewManager создаёт VPN менеджер
+func (m *Manager) exitAuth() *ExitAuth {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.auth == nil {
+		// Persistent token state so donor restart does not void invites (BAG-55).
+		m.auth = NewExitAuth(filepath.Join(m.config.DataDir, "exitauth.json"))
+	}
+	return m.auth
+}
+
 func NewManager(dataDir string) (*Manager, error) {
 	if dataDir == "" {
 		home, _ := os.UserHomeDir()
@@ -135,17 +159,21 @@ func (m *Manager) loadOrGenerateKeys() error {
 	keyFile := filepath.Join(m.config.DataDir, "private.key")
 
 	data, err := os.ReadFile(keyFile)
-	if err == nil && len(data) > 0 {
+	switch {
+	case err == nil && len(data) > 0:
 		m.privKey = string(data)
 		// Derive public key from private key
 		m.pubKey, err = m.derivePublicKey(m.privKey)
 		if err != nil {
-			return err
+			return fmt.Errorf("identity key %s undecodable: %w", keyFile, err)
 		}
 		return nil
+	case err != nil && !os.IsNotExist(err):
+		// P-C: permission/IO errors must NOT silently mint a new identity.
+		return fmt.Errorf("read identity key %s: %w", keyFile, err)
 	}
 
-	// Generate new keys
+	// Generate new keys (only when file absent or empty).
 	m.privKey, m.pubKey, err = m.generateKeyPair()
 	if err != nil {
 		return err
@@ -337,6 +365,15 @@ func (m *Manager) ConnectToExitNode(ctx context.Context, peerPubKey, endpoint st
 
 	m.state = StateConnected
 	m.startTime = time.Now()
+	m.activeLeg = endpoint
+	m.peerLost = false
+	m.lastErr = ""
+	if m.watchCancel != nil {
+		m.watchCancel()
+	}
+	wctx, cancel := context.WithCancel(context.Background())
+	m.watchCancel = cancel
+	go m.watchPeer(wctx, endpoint)
 	return nil
 }
 
@@ -387,6 +424,14 @@ func (m *Manager) Disconnect() error {
 		m.cancel()
 		m.cancel = nil
 	}
+	if m.watchCancel != nil {
+		m.watchCancel()
+		m.watchCancel = nil
+	}
+	m.peerLost = false
+	m.activeLeg = ""
+	m.lastErr = ""
+	m.reconnectAttempt = 0
 	if m.socks != nil {
 		_ = m.socks.Stop()
 		m.socks = nil
@@ -438,7 +483,7 @@ func (m *Manager) GetStatus() Status {
 		realTraffic = true
 	}
 
-	return Status{
+	st := Status{
 		State:       m.state,
 		MyIP:        m.myIP,
 		MyPubKey:    m.pubKey,
@@ -451,7 +496,26 @@ func (m *Manager) GetStatus() Status {
 		Upstream:    upstream,
 		Mode:        m.mode,
 		RealTraffic: realTraffic,
+		PeerLost:    m.peerLost,
+		ActiveLeg:   m.activeLeg,
+		Code:        m.lastErr,
+		Attempt:     m.reconnectAttempt,
+		Max:         maxReconnectTries,
 	}
+	// Merge helper pipe status (locked/reconcile/code) when helper is present.
+	// Best-effort: absent helper or non-windows leaves fields zero.
+	if st.State == StateDisconnected {
+		if hs, err := queryHelperStatus(); err == nil {
+			st.Code = hs.Code
+			st.Phase = hs.Phase
+			st.Attempt = hs.Attempt
+			st.Max = hs.Max
+			if hs.State == "locked" || hs.Engaged {
+				st.State = StateLocked
+			}
+		}
+	}
+	return st
 }
 
 // AddPeer — добавить друга (ручной exchange)

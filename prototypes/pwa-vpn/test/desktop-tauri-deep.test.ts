@@ -30,7 +30,7 @@ describe('desktop.ts Tauri path', () => {
     }));
     const d = await import('../src/lib/desktop');
     const r = await d.getDesktopVpnStatus();
-    expect(r).toEqual({ status: 'connected', peers: 3 });
+    expect(r).toEqual({ status: 'connected', peers: 3, phase: 'connected' });
   });
 
   it('startDesktopVpn / stopDesktopVpn invoke', async () => {

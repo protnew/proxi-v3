@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
@@ -104,7 +105,16 @@ func OpenGiftWrap(recipient *btcec.PrivateKey, ev Event) (InvitePayload, error) 
 	if payload.From != seal.PubKey {
 		return InvitePayload{}, fmt.Errorf("forged from")
 	}
-	if payload.Ts > 0 && payload.Exp > payload.Ts+24*3600 {
+	// BAG-57: bind to actual recipient and require a fresh timestamp.
+	myPub := hex.EncodeToString(recipient.PubKey().SerializeCompressed()[1:])
+	if payload.To != myPub {
+		return InvitePayload{}, fmt.Errorf("invite addressed to another npub")
+	}
+	now := time.Now().Unix()
+	if payload.Ts <= 0 || now-payload.Ts > 24*3600 || payload.Ts-now > 3600 {
+		return InvitePayload{}, fmt.Errorf("stale invite")
+	}
+	if payload.Exp > payload.Ts+24*3600 {
 		return InvitePayload{}, fmt.Errorf("exp too far")
 	}
 	return payload, nil

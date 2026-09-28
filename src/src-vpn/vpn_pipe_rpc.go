@@ -8,6 +8,36 @@ import (
 
 var dialHelperPipe func() (io.ReadWriteCloser, error)
 
+// queryHelperStatus is a best-effort pipe status read (nil-safe).
+func queryHelperStatus() (HelperStatus, error) {
+	if dialHelperPipe == nil {
+		return HelperStatus{}, fmt.Errorf("helper_unavailable")
+	}
+	rw, err := dialHelperPipe()
+	if err != nil {
+		return HelperStatus{}, err
+	}
+	defer rw.Close()
+	return QueryHelper(rw)
+}
+
+// helperVerbViaPipe sends disconnect/disarm/unlock to the helper.
+func helperVerbViaPipe(verb string) (any, error) {
+	if dialHelperPipe == nil {
+		return nil, fmt.Errorf("helper_unavailable")
+	}
+	rw, err := dialHelperPipe()
+	if err != nil {
+		return nil, err
+	}
+	defer rw.Close()
+	st, err := HelperVerb(rw, verb)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{"state": st.State, "engaged": st.Engaged, "code": st.Code, "error": st.Error}, nil
+}
+
 func connectExitViaPipe(params json.RawMessage) (any, error) {
 	var p struct {
 		Endpoint   string `json:"endpoint"`

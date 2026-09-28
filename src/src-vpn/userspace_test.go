@@ -7,6 +7,14 @@ import (
 	"time"
 )
 
+// peerPrefix returns the canonical peer map key (16-char pubkey prefix).
+func peerPrefix(pubHex string) string {
+	if len(pubHex) > 16 {
+		return pubHex[:16]
+	}
+	return pubHex
+}
+
 // TestNewUserspaceVPN tests creation of a userspace VPN instance.
 func TestNewUserspaceVPN(t *testing.T) {
 	u, err := NewUserspaceVPN(UserspaceConfig{
@@ -126,11 +134,11 @@ func TestEncryptDecrypt(t *testing.T) {
 
 	// Test encryption/decryption cycle through internal methods
 	u1.mu.RLock()
-	sessionU1toU2 := u1.peers["u2"]
+	sessionU1toU2 := u1.peers[peerPrefix(pub2)]
 	u1.mu.RUnlock()
 
 	u2.mu.RLock()
-	sessionU2toU1 := u2.peers["u1"]
+	sessionU2toU1 := u2.peers[peerPrefix(pub1)]
 	u2.mu.RUnlock()
 
 	if sessionU1toU2 == nil {
@@ -165,13 +173,13 @@ func TestEncryptDecrypt(t *testing.T) {
 	_ = sessionU1toU2
 	_ = sessionU2toU1
 
-	// Test: encrypt and decrypt with the SAME session
+	// Real round-trip: u1 encrypts (MAC1 keyed to recipient u2), u2 decrypts.
 	encrypted2, err := u1.encryptDataPacket(sessionU1toU2, plaintext)
 	if err != nil {
 		t.Fatalf("encryptDataPacket (2): %v", err)
 	}
 
-	decrypted, err := u1.decryptDataPacket(sessionU1toU2, encrypted2)
+	decrypted, err := u2.decryptDataPacket(sessionU2toU1, encrypted2)
 	if err != nil {
 		t.Fatalf("decryptDataPacket: %v", err)
 	}
@@ -198,7 +206,7 @@ func TestPacketFormat(t *testing.T) {
 	})
 
 	u.mu.RLock()
-	session := u.peers["test-peer"]
+	session := u.peers[peerPrefix(hex.EncodeToString(peerPub[:]))]
 	u.mu.RUnlock()
 
 	if session == nil {
@@ -287,7 +295,7 @@ func TestRemovePeer(t *testing.T) {
 		t.Fatalf("peerCount = %v, want 1", stats["peerCount"])
 	}
 
-	u.RemovePeer("peer1")
+	u.RemovePeer(peerPrefix(hex.EncodeToString(peerPub[:])))
 
 	stats = u.GetStats()
 	if stats["peerCount"] != 0 {
@@ -311,7 +319,7 @@ func TestSendToPeerNoEndpoint(t *testing.T) {
 		// No Endpoint — should fail
 	})
 
-	err = u.SendToPeer("peer1", []byte("test"))
+	err = u.SendToPeer(peerPrefix(hex.EncodeToString(peerPub[:])), []byte("test"))
 	if err == nil {
 		t.Error("expected error when sending to peer without endpoint")
 	}

@@ -286,19 +286,14 @@ func (u *UserspaceVPN) AddPeer(info PeerInfo) error {
 	}
 	copy(session.sessionKey[:], sessionKey)
 
-	id := info.ID
-	prefix := hex.EncodeToString(peerPub[:])
-	if len(prefix) > 16 {
-		prefix = prefix[:16]
-	}
-	if id == "" {
-		id = prefix
+	// Peer ID is the pubkey prefix — a caller-supplied info.ID must not
+	// create a second map entry (BAG: AddPeer double-registration).
+	id := hex.EncodeToString(peerPub[:])
+	if len(id) > 16 {
+		id = id[:16]
 	}
 	u.mu.Lock()
 	u.peers[id] = session
-	if id != prefix {
-		u.peers[prefix] = session
-	}
 	u.mu.Unlock()
 
 	// Resolve and cache the peer endpoint

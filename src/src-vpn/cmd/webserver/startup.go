@@ -27,6 +27,25 @@ import (
 )
 
 func main() {
+	// Data-safety CLI (P-C): --backup / --wipe-data run before .env load.
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--backup":
+			dst, err := cliBackup()
+			if err != nil {
+				log.Fatalf("backup: %v", err)
+			}
+			log.Printf("backup written: %s", dst)
+			return
+		case "--wipe-data":
+			if err := cliWipeData(); err != nil {
+				log.Fatalf("wipe: %v", err)
+			}
+			log.Println("data wiped")
+			return
+		}
+	}
+
 	// Load environment variables from .env file if it exists
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found or error loading it, relying on system env vars")
@@ -102,6 +121,9 @@ func run() error {
 
 	// Initialize SQLite store — one path, not process cwd
 	dbPath, dataDir := resolveDBPath()
+	if dataDir == "" {
+		return fmt.Errorf("DATA_DIR unset and no project marker (go.mod) found — refusing silent data dir")
+	}
 	if err := os.MkdirAll(dataDir, 0755); err != nil {
 		return fmt.Errorf("data dir %s: %w", dataDir, err)
 	}
@@ -253,6 +275,10 @@ func run() error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	port = portFromListener(ln)
+	if err := writeCoreEndpoint(dataDir, port); err != nil {
+		log.Printf("⚠️  core-endpoint.json: %v", err)
+	}
+	defer removeCoreEndpoint(dataDir)
 
 	// Register all HTTP routes (extracted to startup_routes.go)
 	srv.registerRoutes(authSvc, distDir, port)

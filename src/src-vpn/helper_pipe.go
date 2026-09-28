@@ -8,9 +8,16 @@ import (
 )
 
 type HelperStatus struct {
-	State   string `json:"state"`
-	Engaged bool   `json:"engaged"`
-	Error   string `json:"error,omitempty"`
+	State     string `json:"state"`
+	Phase     string `json:"phase,omitempty"`
+	Attempt   int    `json:"attempt,omitempty"`
+	Max       int    `json:"max,omitempty"`
+	Code      string `json:"code,omitempty"`
+	Leg       string `json:"leg,omitempty"`
+	SelfExit  bool   `json:"selfExit,omitempty"`
+	Engaged   bool   `json:"engaged"`
+	ActiveLeg string `json:"active_leg,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 type HelperConnect struct {
@@ -26,6 +33,14 @@ type HelperConnect struct {
 
 func QueryHelper(rw io.ReadWriter) (HelperStatus, error) {
 	if _, err := io.WriteString(rw, "{\"verb\":\"status\"}\n"); err != nil {
+		return HelperStatus{}, err
+	}
+	return readHelperStatus(rw)
+}
+
+// HelperVerb sends a control verb (disconnect|disarm|unlock) to the helper.
+func HelperVerb(rw io.ReadWriter, verb string) (HelperStatus, error) {
+	if _, err := io.WriteString(rw, "{\"verb\":\""+verb+"\"}\n"); err != nil {
 		return HelperStatus{}, err
 	}
 	return readHelperStatus(rw)

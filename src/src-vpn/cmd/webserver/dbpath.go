@@ -41,5 +41,8 @@ func findModuleDataDir() string {
 			dir = parent
 		}
 	}
-	return "data"
+	// P-C: no project marker -> fail closed. A silent cwd-relative data dir
+	// made two messenger.db files once; an installed exe must get DATA_DIR
+	// (ProgramData) explicitly.
+	return ""
 }

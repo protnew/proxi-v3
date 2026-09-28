@@ -52,8 +52,11 @@ func TestExitAuth_AdmitAddsAllowlist(t *testing.T) {
 	if err := a.Admit(npub, "once", 0, signToken(t, owner, "once", npub), now); err != nil {
 		t.Fatal(err)
 	}
-	if a.Allow[npub] != now {
+	if !a.IsAllowed(npub, now) {
 		t.Fatalf("allowlist miss: %v", a.Allow)
+	}
+	if a.Allow[npub] <= now {
+		t.Fatal("allow entry must be an expiry in the future")
 	}
 }
 

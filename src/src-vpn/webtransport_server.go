@@ -14,6 +14,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -31,12 +32,16 @@ import (
 
 const (
 	wtMsgConnect   = 0x01
+	wtMsgAuth      = 0x02
 	wtMsgConnectOK = 0x81
 	wtMsgError     = 0xFF
 )
 
 // WTServer is a WebTransport exit-node.
 type WTServer struct {
+	// Auth, when set, requires a first-frame {npub,token,sig,exp} on the
+	// first bidi stream (≤3s implicit via session context). Fail-closed.
+	Auth      *ExitAuth
 	addr      string
 	tlsConfig *tls.Config
 	certDER   []byte
@@ -190,6 +195,34 @@ func (s *WTServer) handleStream(sessionID uint64, stream *webtransport.Stream) {
 	if _, err := io.ReadFull(stream, hdr); err != nil {
 		return
 	}
+	// First-frame auth: when Auth is set, the first frame MUST be wtMsgAuth
+	// carrying {"npub","token","sig","exp"}. Deny -> close. BAG-54/P-G.
+	if s.Auth != nil {
+		if hdr[0] != wtMsgAuth {
+			s.writeFrame(stream, wtMsgError, []byte("auth required"))
+			return
+		}
+		an := binary.BigEndian.Uint32(hdr[1:5])
+		if an == 0 || an > 2048 {
+			s.writeFrame(stream, wtMsgError, []byte("bad auth len"))
+			return
+		}
+		raw := make([]byte, an)
+		if _, err := io.ReadFull(stream, raw); err != nil {
+			return
+		}
+		var f authFrame
+		if json.Unmarshal(raw, &f) != nil || admitFrame(s.Auth, f) != nil {
+			auditDonor("deny (wt auth)", f.Npub)
+			s.writeFrame(stream, wtMsgError, []byte("deny"))
+			return
+		}
+		auditDonor("admit (wt)", f.Npub)
+		// Next frame must be CONNECT.
+		if _, err := io.ReadFull(stream, hdr); err != nil {
+			return
+		}
+	}
 	if hdr[0] != wtMsgConnect {
 		s.writeFrame(stream, wtMsgError, []byte("unknown type"))
 		return
@@ -205,9 +238,13 @@ func (s *WTServer) handleStream(sessionID uint64, stream *webtransport.Stream) {
 	}
 	targetStr := string(target)
 	log.Printf("[WT] session %d CONNECT %s", sessionID, targetStr)
-	if targetDenied(targetStr) {
+	pinned, denied := aclResolveTarget(targetStr)
+	if denied {
 		s.writeFrame(stream, wtMsgError, []byte("target denied"))
 		return
+	}
+	if pinned != nil {
+		targetStr = pinnedTarget(targetStr, pinned)
 	}
 
 	conn, err := net.DialTimeout("tcp", targetStr, 10*time.Second)

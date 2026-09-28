@@ -14,6 +14,25 @@ pub fn spawn_go_core(bin: &str, jwt: &str) -> Result<CoreSpawn, String> {
         return Err("per-boot jwt required".into());
     }
     let mut cmd = Command::new(bin);
+    // P-C: clear inherited environment, then re-add only an allowlist.
+    cmd.env_clear();
+    for key in [
+        "PATH",
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "TEMP",
+        "TMP",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "PROGRAMDATA",
+        "DATA_DIR",
+        "IND_DATA",
+        "USERPROFILE",
+    ] {
+        if let Ok(v) = std::env::var(key) {
+            cmd.env(key, v);
+        }
+    }
     cmd.env("JWT_SECRET_PIN", "1")
         .env("JWT_SECRET", jwt)
         .env("PORT", "0")

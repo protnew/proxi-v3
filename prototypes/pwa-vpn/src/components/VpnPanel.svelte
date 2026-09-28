@@ -2,9 +2,10 @@
   import {
     vpnStatus, vpnStats,
     connectRealVPN, connectLocalVPN, connectExitVPN, shareExitNode,
-    disconnectVPN, refreshVPNStatus, checkEgressIP,
+    disconnectVPN, refreshVPNStatus, checkEgressIP, unlockVPN,
     formatBytes, formatUptime,
   } from '../lib/vpn'
+  import { ERROR_LABELS, type VpnErrorCode } from '../lib/vpn-wire'
 
   let expanded = $state(true)
   let mode = $state<'real' | 'exit' | 'share' | 'local'>('real')
@@ -18,7 +19,13 @@
     bytesIn: 0, bytesOut: 0, uptime: 0, peers: 0,
     myIP: '', myPublicKey: '', transport: '', socksAddr: '', upstream: '',
     mode: '', realTraffic: false, lastError: '', egressIP: '',
+    lastErrorCode: '', phase: '', attempt: 0, max: 0,
   })
+
+  function errLabel(code: string): string {
+    const e = ERROR_LABELS[code as VpnErrorCode]
+    return e ? e.ru : ''
+  }
 
   vpnStatus.subscribe(v => { status = v })
   vpnStats.subscribe(v => { stats = v as typeof stats })
@@ -30,7 +37,7 @@
       case 'connected': return stats.realTraffic ? 'ON · SOCKS' : 'Подключён'
       case 'sharing': return 'Раздаю'
       case 'connecting': return 'Подключение…'
-      case 'reconnecting': return 'Повтор…'
+      case 'reconnecting': return stats.max ? `Повтор ${stats.attempt}/${stats.max}…` : 'Повтор…'
       case 'locked': return 'Заблокирован'
       case 'core_down': return 'Ядро недоступно'
       case 'helper_missing': return 'Нет службы'
@@ -170,8 +177,17 @@
         {/if}
       {/if}
 
+      {#if status === 'locked'}
+        <div class="err-box">
+          ⚠️ Клиент упал — туннель удерживается (locked).
+          <button type="button" class="unlock-btn" onclick={unlockVPN}>Снять удержание туннеля</button>
+        </div>
+      {/if}
+
       {#if stats.lastError}
-        <div class="err-box">{stats.lastError}</div>
+        <div class="err-box">
+          {#if stats.lastErrorCode}<strong>{errLabel(stats.lastErrorCode)}</strong> · {/if}{stats.lastError}
+        </div>
       {/if}
 
       <button type="button" class="toggle-btn" class:on={active} disabled={busy || status === 'connecting'} onclick={primaryAction}>
@@ -229,6 +245,7 @@
   .hint code { font-size: 12px; color: var(--text); }
   .ip-box { background: color-mix(in srgb, var(--success) 12%, var(--bg)); color: var(--success); padding: 8px; border-radius: 6px; margin-bottom: 8px; font-size: 13px; }
   .err-box { background: color-mix(in srgb, var(--danger) 22%, var(--bg)); color: var(--danger); font-size: 12px; padding: 8px; border-radius: 6px; margin-bottom: 8px; word-break: break-word; }
+  .unlock-btn { display: block; margin-top: 6px; padding: 6px 10px; border: 1px solid var(--danger); border-radius: 6px; background: none; color: var(--danger); cursor: pointer; font-family: inherit; font-size: 12px; }
   .check-btn { width: 100%; margin-bottom: 8px; padding: 8px; border-radius: 8px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--bg)); background: var(--bg-secondary); color: var(--accent-light); font-weight: 600; cursor: pointer; font-family: inherit; }
   .check-btn:disabled { opacity: 0.6; }
   .toggle-btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; background: var(--bg-secondary); color: var(--accent-light); font-family: inherit; }

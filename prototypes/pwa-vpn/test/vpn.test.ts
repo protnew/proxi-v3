@@ -9,7 +9,7 @@ describe('VPN module', () => {
   it('vpnStatus store has initial state', () => {
     const s = get(vpnStatus);
     expect(typeof s).toBe('string');
-    expect(s).toBe('disconnected');
+    expect(s).toBe('off');
   });
 
   it('vpnStats store has initial values', () => {

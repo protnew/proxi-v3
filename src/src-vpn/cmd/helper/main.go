@@ -89,8 +89,13 @@ func main() {
 		case "--elevated-spawn":
 			emit("elevated-spawn-ready")
 			os.Exit(0)
+		case "--diag":
+			if _, err := runDiag(); err != nil {
+				fail(err)
+			}
+			os.Exit(0)
 		case "--disconnect":
-			if err := removeSplitRoutes("ProxiSmoke"); err != nil {
+			if err := removeSplitRoutes(tunAdapter); err != nil {
 				emit("disconnect-routes-failed " + err.Error())
 				os.Exit(1)
 			}

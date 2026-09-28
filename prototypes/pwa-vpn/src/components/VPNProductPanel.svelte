@@ -224,14 +224,25 @@ async function startVPNSignaling(targetPubkey: string) {
         statusText = 'Раздаю VPN · жду WebRTC offer'
         addLog('Запрос принят, готов как exit node (WebRTC)')
       } else if (ev.type === 'vpn-invite') {
-        if (!ev.wtAddr && !ev.wtCertHash) {
+        if (!ev.token || (!ev.onion && !ev.wtAddr)) {
           vpnStatus = 'error'
-          statusText = 'Ошибка: инвайт без endpoint'
-          addLog('Инвайт без endpoint, WebRTC не запускаю')
+          statusText = 'Ошибка: инвайт без endpoint/token'
+          addLog('Инвайт без endpoint/token')
         } else {
           vpnStatus = 'connecting'
-          statusText = 'Инвайт принят · ' + (ev.wtAddr || 'cert')
-          addLog('Инвайт принят, WebRTC-ветка не используется')
+          statusText = 'Подключаюсь к донору · ' + (ev.onion || ev.wtAddr || '')
+          addLog('Инвайт принят → connect_invite')
+          const ok = await connectInviteVPN({
+            onion: ev.onion, wtAddr: ev.wtAddr, certHash: ev.wtCertHash,
+            token: ev.token, exp: ev.exp,
+          })
+          if (!ok) {
+            vpnStatus = 'error'
+            statusText = 'Донор отклонил или недоступен'
+            addLog('connect_invite failed')
+          } else {
+            addLog('Подключено к донору')
+          }
         }
       }
       dismissedFrom = { ...dismissedFrom, [ev.from]: Date.now() }

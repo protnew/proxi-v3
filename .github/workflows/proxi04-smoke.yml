@@ -1,0 +1,175 @@
+# proxi04-smoke — TZ-04-20260928-01-v2 §3.2
+# Ephemeral Windows runner ONLY. The Alexey host is permanently excluded.
+# Manual trigger; one job; elevated helper test + optional two-core invite e2e.
+
+name: proxi04-smoke
+
+on:
+  workflow_dispatch:
+    inputs:
+      two_instances:
+        description: "Run two-core-process invite/connect e2e in this job"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: proxi04-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    env:
+      OUT_DIR: ${{ github.workspace }}\out
+      HELPER_LOG: ${{ github.workspace }}\helper.log
+    steps:
+      - name: Context
+        run: |
+          Write-Output "OS: $((Get-CimInstance Win32_OperatingSystem).Caption)"
+          Write-Output "Runner: $env:COMPUTERNAME  ref=${{ github.ref }}  sha=${{ github.sha }}"
+          go version
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: false
+
+      - name: Build helper / pipe-client / core
+        working-directory: src/src-vpn
+        run: |
+          New-Item -ItemType Directory -Force $env:OUT_DIR | Out-Null
+          go build -o "$env:OUT_DIR\proxi04-vpn-helper.exe" ./cmd/helper
+          go build -o "$env:OUT_DIR\proxi04-pipe-client.exe" ./cmd/pipeclient
+          go build -o "$env:OUT_DIR\proxi04-core.exe" ./cmd/webserver
+          Get-ChildItem $env:OUT_DIR | Select-Object Name, Length
+
+      - name: Place + verify wintun.dll (pinned sha256)
+        working-directory: src/src-vpn/cmd/helper
+        run: |
+          Copy-Item wintun.dll "$env:OUT_DIR\wintun.dll"
+          $want = ((Get-Content wintun-0.14.1.sha256) -split 'sha256=')[1].Trim()
+          $got = (Get-FileHash "$env:OUT_DIR\wintun.dll" -Algorithm SHA256).Hash.ToLower()
+          if ($got -ne $want) { throw "wintun.dll hash $got != pinned $want" }
+          Write-Output "wintun.dll sha256 verified: $got"
+
+      - name: Stale-name gate
+        working-directory: src/src-vpn
+        run: |
+          $bad = Select-String -Path .\cmd\helper\*.go -Pattern 'ProxiSmoke(?!"|_)|ProxiHelper|helper\.exe' -AllMatches |
+                 Where-Object { $_.Line -notmatch 'smokeTun\("ProxiSmoke"\)|ROLLBACK|comment' }
+          if ($bad) { $bad | ForEach-Object { Write-Output $_.Line }; throw "stale names found" }
+          Write-Output "no stale service/adapter names"
+
+      - name: Static gates (build/test/vet for touched pkgs)
+        working-directory: src/src-vpn
+        run: |
+          go vet ./... 
+          go test . ./nostr/ ./cmd/helper/ ./cmd/webserver/
+
+      - name: Start helper (elevated, hold 45s)
+        run: |
+          Remove-Item $env:HELPER_LOG -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath "$env:OUT_DIR\proxi04-vpn-helper.exe" `
+            -ArgumentList '--connect-smoke','--hold',"--log=$env:HELPER_LOG" `
+            -Verb RunAs -PassThru
+          $p.Id | Out-File "$env:OUT_DIR\helper.pid"
+          Write-Output "helper pid $($p.Id) started"
+
+      - name: Wait for hold marker, then FAST checks (45s window)
+        run: |
+          $deadline = (Get-Date).AddSeconds(40)
+          $hold = $false
+          while ((Get-Date) -lt $deadline) {
+            if (Test-Path $env:HELPER_LOG) {
+              if (Select-String -Path $env:HELPER_LOG -Pattern 'hold' -Quiet) { $hold = $true; break }
+              if (Select-String -Path $env:HELPER_LOG -Pattern 'ERROR|ROLLBACK' -Quiet) { break }
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $hold) { Get-Content $env:HELPER_LOG -ErrorAction SilentlyContinue; throw "no hold marker in 40s" }
+          Write-Output "hold marker seen — fast checks inside window"
+          # 8 P-A markers — assert all
+          $markers = @(
+            'adapter created LUID=', 'wfp-engaged', 'dns-set 10.7.0.1',
+            'host-route', 'routes-installed', 'dns-listen 10.7.0.1:53',
+            'phase=exit-probe'
+          )
+          $log = Get-Content $env:HELPER_LOG
+          foreach ($m in $markers) {
+            if (-not ($log | Select-String -Pattern [regex]::Escape($m) -Quiet)) { throw "missing marker: $m" }
+          }
+          # Fast live inspection
+          netsh wfp show filters file="$env:TEMP\wfp.xml" | Out-Null
+          Select-String -Path "$env:TEMP\wfp.xml" -Pattern 'proxi04|Proxi0' | Select-Object -First 5
+          route print | Select-String -Pattern '10\.7\.0\.' | Select-Object -First 8
+          Get-NetAdapter | Where-Object Name -match 'Proxi0'
+          Get-DnsClientServerAddress | Where-Object { $_.ServerAddresses -contains '10.7.0.1' }
+
+      - name: Stop helper via stop-file, verify clean exit
+        if: always()
+        run: |
+          New-Item -ItemType File -Force "$env:OUT_DIR\connect-smoke.stop" | Out-Null
+          $deadline = (Get-Date).AddSeconds(30)
+          $pidFile = "$env:OUT_DIR\helper.pid"
+          $procId = 0
+          if (Test-Path $pidFile) { $procId = [int](Get-Content $pidFile) }
+          while ((Get-Date) -lt $deadline) {
+            if ($procId -and -not (Get-Process -Id $procId -ErrorAction SilentlyContinue)) { break }
+            if ((Test-Path $env:HELPER_LOG) -and (Select-String $env:HELPER_LOG 'routes-clean' -Quiet)) { break }
+            Start-Sleep -Milliseconds 500
+          }
+          if (Test-Path $env:HELPER_LOG) {
+            if (-not (Select-String $env:HELPER_LOG 'routes-clean' -Quiet)) { Write-Warning "no routes-clean marker" }
+            if (-not (Select-String $env:HELPER_LOG 'hold-stop|hold-timeout' -Quiet)) { Write-Warning "no hold-stop marker" }
+          }
+          if ($procId -and (Get-Process -Id $procId -ErrorAction SilentlyContinue)) {
+            Write-Warning "helper still alive — fallback kill"
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+            & "$env:OUT_DIR\proxi04-vpn-helper.exe" --disconnect | Out-Null
+          }
+
+      - name: Post-clean state assertions
+        if: always()
+        run: |
+          $routes = route print | Select-String '10\.7\.0\.'
+          if ($routes) { $routes; throw "split routes remain" }
+          $ad = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object Name -match 'Proxi0'
+          if ($ad) { throw "Proxi0 adapter remains" }
+          netsh wfp show filters file="$env:TEMP\wfp2.xml" | Out-Null
+          $wfp = Select-String -Path "$env:TEMP\wfp2.xml" -Pattern 'proxi04|Proxi0' 
+          if ($wfp) { $wfp | Select-Object -First 5; throw "kill-switch filters remain" }
+          Write-Output "post-clean state OK"
+
+      - name: Secret hygiene gate (artifacts)
+        if: always()
+        run: |
+          $p = '(?i)(jwt|token|sig|nsec|secret|bearer|tailscale|tskey)[=:"'' ]+[A-Za-z0-9._+/=-]{16,}'
+          $hits = Get-Content $env:HELPER_LOG -ErrorAction SilentlyContinue | Select-String -Pattern $p
+          if ($hits) { $hits | Select-Object -First 10; throw "secrets in helper.log" }
+          Write-Output "no secrets in artifacts"
+
+      - name: Two-core-process invite/connect e2e
+        if: ${{ inputs.two_instances }}
+        working-directory: src/src-vpn
+        env:
+          PROXI_GHA_E2E: '1'
+          CORE_BIN: ${{ github.workspace }}\out\proxi04-core.exe
+        run: go test ./cmd/webserver/ -run TestGHA_TwoProcessInvite -v -timeout 120s
+
+      - name: Upload sanitized artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: proxi04-smoke-${{ github.run_id }}
+          path: |
+            helper.log
+            out/wintun.dll
+          retention-days: 14
+          if-no-files-found: warn

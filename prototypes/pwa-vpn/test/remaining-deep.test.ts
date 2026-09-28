@@ -70,7 +70,7 @@ describe('desktop.ts — browser fallbacks', () => {
 
   it('getDesktopVpnStatus returns unavailable outside Tauri', async () => {
     const r = await getDesktopVpnStatus();
-    expect(r).toEqual({ status: 'unavailable', peers: 0 });
+    expect(r).toEqual({ status: 'unavailable', peers: 0, phase: 'idle' });
   });
 
   it('startDesktopVpn throws outside Tauri', async () => {
