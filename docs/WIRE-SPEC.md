@@ -45,3 +45,17 @@ X3 подтверждён: `key_exchange` — канон звонка, не вр
 - Модель шифрования групп (pairwise/sender-key/MLS/Loro) — X4.
 - Транспорт DM и сигналинга — X1/X3.
 - Interop-тесты Android↔PWA по этой спеке — MSG-005 (TODO).
+
+## 7. Egress-транспорт (волна 25–28.09 — коммиты ef92f57…183ad8a)
+
+- **Onion + WT-листенеры** в egress.go/invite_connect.go: first-frame auth (окно 3с),
+  fail-closed, audit-запись попыток.
+- **webtransport_server.go**: wtMsgAuth на первом фрейме + streamBudget (анти-флуд).
+- **Named pipes (Windows)**: helper-канал управления с авторизацией по client-image
+  (0bcb2e2), share state, disconnect-teardown, orphan-reconcile.
+- **donor_rpc.go**: start_egress_listener / connect_invite — реальные (стабы сняты).
+- **nip59 (NIP-59 seal)**: To==recipient обязателен, Ts freshness ±окно, exp≤ts+24h (BAG-57).
+- **exit_auth.go**: персистент DATA_DIR/exitauth.json (admit/allowlist/TTL/revoke).
+- wtAddr/wtCertHash в VPNEvent остаются легаси-полями старых событий (22 живых вхождения) —
+  читаются, но новыми событиями не порождаются основным путём; чистка — после X5/MASQUE-спайка.
+- MASQUE endpoint отвечает честным 501 до безопасного bump quic-go (TZ-FINAL 2.9).
