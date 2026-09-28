@@ -77,9 +77,10 @@ jobs:
         timeout-minutes: 2
         run: |
           Remove-Item $env:HELPER_LOG -ErrorAction SilentlyContinue
+          # GH windows runner steps already run elevated; -Verb RunAs would
+          # hang on a UAC consent nobody can click.
           $p = Start-Process -FilePath "$env:OUT_DIR\proxi04-vpn-helper.exe" `
             -ArgumentList '--connect-smoke','--hold',"--log=$env:HELPER_LOG" `
-          # GH windows runner steps already run elevated; -Verb RunAs would hang on a UAC consent nobody can click.
             -WindowStyle Hidden -PassThru
           $p.Id | Out-File "$env:OUT_DIR\helper.pid"
           Write-Output "helper pid $($p.Id) started"
