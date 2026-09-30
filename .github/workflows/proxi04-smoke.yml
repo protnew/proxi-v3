@@ -79,8 +79,10 @@ jobs:
           Remove-Item $env:HELPER_LOG -ErrorAction SilentlyContinue
           # GH windows runner steps already run elevated; -Verb RunAs would
           # hang on a UAC consent nobody can click.
+          # §2.4 escalation: WFP alone severs the hosted-runner agent channel
+          # (proven 30.09: no-route run still wedged) — adapter+exit-probe only.
           $p = Start-Process -FilePath "$env:OUT_DIR\proxi04-vpn-helper.exe" `
-            -ArgumentList '--connect-smoke','--hold','--smoke-no-route',"--log=$env:HELPER_LOG" `
+            -ArgumentList '--connect-smoke','--hold','--smoke-adapter-only',"--log=$env:HELPER_LOG" `
             -WindowStyle Hidden -PassThru
           $p.Id | Out-File "$env:OUT_DIR\helper.pid"
           Write-Output "helper pid $($p.Id) started"
@@ -105,7 +107,7 @@ jobs:
           if (-not $hold) { Get-Content $env:HELPER_LOG -ErrorAction SilentlyContinue; throw "no hold marker in 40s" }
           Write-Output "hold marker seen — fast checks inside window"
           $markers = @(
-            'adapter created LUID=', 'wfp-engaged',
+            'adapter created LUID=', 'wfp-skipped(adapter-only)',
             'routes-skipped(smoke-no-route)',
             'phase=exit-probe'
           )
@@ -113,11 +115,11 @@ jobs:
           foreach ($m in $markers) {
             if (-not ($log | Select-String -Pattern [regex]::Escape($m) -Quiet)) { throw "missing marker: $m" }
           }
-          # Full-mode markers are intentionally absent in no-route mode.
-          foreach ($gone in @('host-route', 'routes-installed', 'dns-listen')) {
-            if ($log | Select-String -Pattern [regex]::Escape($gone) -Quiet) { throw "full-mode marker present in no-route run: $gone" }
+          # Full-mode markers are intentionally absent in adapter-only mode.
+          foreach ($gone in @('host-route', 'routes-installed', 'dns-listen', 'wfp-engaged')) {
+            if ($log | Select-String -Pattern [regex]::Escape($gone) -Quiet) { throw "full-mode marker present in adapter-only run: $gone" }
           }
-          Write-Output "all P-A markers present (no-route mode)"
+          Write-Output "all P-A markers present (adapter-only mode)"
 
       - name: Live inspection (netsh/route/WMI — may be slow, own budget)
         timeout-minutes: 2
