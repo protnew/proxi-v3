@@ -112,8 +112,11 @@ jobs:
             'phase=exit-probe'
           )
           $log = Get-Content $env:HELPER_LOG
-          foreach ($m in $markers) {
-            if (-not ($log | Select-String -Pattern [regex]::Escape($m) -Quiet)) { throw "missing marker: $m" }
+          $missing = @($markers | Where-Object { -not ($log | Select-String -Pattern [regex]::Escape($_) -Quiet) })
+          if ($missing.Count -gt 0) {
+            Write-Output "--- helper.log (first 40 lines) ---"
+            $log | Select-Object -First 40 | Write-Output
+            throw "missing markers: $($missing -join ', ')"
           }
           # Full-mode markers are intentionally absent in adapter-only mode.
           foreach ($gone in @('host-route', 'routes-installed', 'dns-listen', 'wfp-engaged')) {
@@ -154,6 +157,8 @@ jobs:
             Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
             & "$env:OUT_DIR\proxi04-vpn-helper.exe" --disconnect | Out-Null
           }
+          # Best-effort teardown: warnings above already carry the verdict.
+          exit 0
 
       - name: Post-clean state assertions
         if: always()
