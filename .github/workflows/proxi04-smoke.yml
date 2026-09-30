@@ -180,7 +180,7 @@ jobs:
         run: |
           $out = & "$env:OUT_DIR\proxi04-vpn-helper.exe" --selftest-acl 2>&1
           $out | Write-Output
-          if ($LASTEXITCODE -ne 0 -or -not ($out | Select-String 'selftest-acl all ok' -Quiet)) {
+          if ($LASTEXITCODE -ne 0 -or -not (@($out | Where-Object { $_ -match 'selftest-acl all ok' }).Count -gt 0)) {
             throw "ACL selftest failed"
           }
 
