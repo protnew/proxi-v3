@@ -234,10 +234,17 @@ export async function initIdentityAsync(): Promise<string> {
 type MessageCallback = (msg: Message) => void;
 type PresenceCallback = (pubkey: string, online: boolean) => void;
 type TypingCallback = (pubkey: string) => void;
+/** TZ-04-20260930 §3.2: wire tombstones/edits carry the id field (P15). */
+export type MessageEditPayload = { id: string; from: string; to: string; text?: string };
+export type MessageDeletePayload = { id: string; from: string; to: string };
+type MessageEditCallback = (p: MessageEditPayload) => void;
+type MessageDeleteCallback = (p: MessageDeletePayload) => void;
 
 const messageCallbacks: Set<MessageCallback> = new Set();
 const presenceCallbacks: Set<PresenceCallback> = new Set();
 const typingCallbacks: Set<TypingCallback> = new Set();
+const messageEditCallbacks: Set<MessageEditCallback> = new Set();
+const messageDeleteCallbacks: Set<MessageDeleteCallback> = new Set();
 
 let wsConnection: WebSocket | null = null;
 let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -304,6 +311,16 @@ function handleWsMessage(event: MessageEvent) {
   }
   if (kind === 'typing') {
     typingCallbacks.forEach(cb => cb(msg.from));
+    return;
+  }
+  // TZ §3.2 (P15 wire): tombstone/edit events keyed by the id FIELD —
+  // never render them as chat messages.
+  if (msg.type === 'message_edited') {
+    if (msg.id) messageEditCallbacks.forEach(cb => cb({ id: msg.id, from: msg.from || '', to: msg.to || '', text: msg.text || '' }));
+    return;
+  }
+  if (msg.type === 'message_deleted') {
+    if (msg.id) messageDeleteCallbacks.forEach(cb => cb({ id: msg.id, from: msg.from || '', to: msg.to || '' }));
     return;
   }
 
@@ -434,6 +451,8 @@ export function getName(pubkey: string): string {
 export function onMessage(cb: MessageCallback): void { messageCallbacks.add(cb); }
 export function onPresence(cb: PresenceCallback): void { presenceCallbacks.add(cb); }
 export function onTyping(cb: TypingCallback): void { typingCallbacks.add(cb); }
+export function onMessageEdit(cb: MessageEditCallback): void { messageEditCallbacks.add(cb); }
+export function onMessageDelete(cb: MessageDeleteCallback): void { messageDeleteCallbacks.add(cb); }
 export function getStatus(): Record<string, any> { return lastStatus; }
 
 

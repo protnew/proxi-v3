@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onPresence } from '../lib/api'
   let {
     currentChat,
     showSearch = false,
@@ -13,7 +14,7 @@
     onSearchInput,
     onAbout,
   }: {
-    currentChat: { avatar: string; name: string; typing?: unknown[] }
+    currentChat: { avatar: string; name: string; id?: string; typing?: unknown[] }
     showSearch?: boolean
     searchQ: string
     searchHits?: Array<{ chatName: string; message: { text: string } }>
@@ -26,6 +27,18 @@
     onSearchInput: () => void
     onAbout: () => void
   } = $props()
+
+  // TZ §3.3: live presence instead of the hardcoded «онлайн недавно».
+  let onlinePks = $state<Set<string>>(new Set())
+  onPresence((pk: string, online: boolean) => {
+    const next = new Set(onlinePks)
+    if (online) next.add(pk); else next.delete(pk)
+    onlinePks = next
+  })
+  let peerOnline = $derived(
+    !!currentChat.id && !currentChat.id.startsWith('group:') &&
+    onlinePks.has(currentChat.id.replace('dm:', ''))
+  )
 </script>
 <div class="chat-header">
   <button class="back-btn" onclick={onBack} title="Назад">‹ Назад</button>
@@ -36,8 +49,10 @@
     <span class="peer-status">
       {#if currentChat.typing && currentChat.typing.length > 0}
         <em>печатает...</em>
+      {:else if peerOnline}
+        🟢 в сети
       {:else}
-        онлайн недавно <!-- P31-presence -->
+        офлайн
       {/if}
     </span>
   </div>

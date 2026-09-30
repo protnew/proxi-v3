@@ -20,6 +20,14 @@ const smokeExit = "203.0.113.9"
 type tunnelOpt struct {
 	Exit string
 	Hold bool
+	// NoRoute (TZ-04-20260930 §2.1): adapter+WFP stay, but host/peer/split
+	// routes, TUN DNS and the DNS stub/relay are skipped — a hosted CI runner
+	// survives (route capture kills the runner agent's own uplink).
+	NoRoute bool
+	// AdapterOnly (§2.4 escalation): additionally skip the WFP kill-switch —
+	// proves adapter+exit-probe only, for runners where WFP alone severs the
+	// agent channel.
+	AdapterOnly bool
 }
 
 type tunnelSession struct {
@@ -52,7 +60,7 @@ func runTunnelPipeline(opt tunnelOpt) error {
 	if err != nil {
 		return stepErr("no_exit_peers", err)
 	}
-	sess, err := openTunnel(ip)
+	sess, err := openTunnel(ip, opt)
 	if err != nil {
 		return err
 	}
@@ -80,7 +88,7 @@ func preResolve(host string) (string, error) {
 	return ips[0].String(), nil
 }
 
-func openTunnel(exitIP string) (*tunnelSession, error) {
+func openTunnel(exitIP string, opt tunnelOpt) (*tunnelSession, error) {
 	s := &tunnelSession{exitIP: exitIP, name: tunAdapter}
 	alias, hop, idx, err := physicalDefault()
 	if err != nil {
@@ -104,55 +112,63 @@ func openTunnel(exitIP string) (*tunnelSession, error) {
 	luid := uint64(nt.LUID())
 	emit(fmt.Sprintf("adapter created LUID=%d name=%s", luid, s.name))
 	notePhase("tun")
-	if err = installKillSwitch(luid); err != nil {
-		s.rollback()
-		return nil, stepErr("access_denied", err)
-	}
-	s.wfpOn = true
-	emit("wfp-engaged")
-	if err = proveEngagedBlock(); err != nil {
-		s.rollback()
-		return nil, stepErr("access_denied", err)
+	if opt.AdapterOnly {
+		emit("wfp-skipped(adapter-only)")
+	} else {
+		if err = installKillSwitch(luid); err != nil {
+			s.rollback()
+			return nil, stepErr("access_denied", err)
+		}
+		s.wfpOn = true
+		emit("wfp-engaged")
+		if err = proveEngagedBlock(); err != nil {
+			s.rollback()
+			return nil, stepErr("access_denied", err)
+		}
 	}
 	if err = assignTunAddr(s.name); err != nil {
 		s.rollback()
 		return nil, stepErr("route_add_failed", err)
 	}
-	if err = setTunDNS(s.name); err != nil {
-		s.rollback()
-		return nil, stepErr("route_add_failed", err)
+	if opt.NoRoute || opt.AdapterOnly {
+		emit("routes-skipped(smoke-no-route)")
+	} else {
+		if err = setTunDNS(s.name); err != nil {
+			s.rollback()
+			return nil, stepErr("route_add_failed", err)
+		}
+		if err = addPeerRoute(s.name); err != nil {
+			s.rollback()
+			return nil, stepErr("route_add_failed", err)
+		}
+		s.peerOn = true
+		if err = addHostRoute(exitIP, s.physIf, s.physHop); err != nil {
+			s.rollback()
+			return nil, stepErr("route_add_failed", err)
+		}
+		s.hostOn = true
+		emit("host-route " + exitIP + "/32 via " + s.physHop)
+		if err = installSplitRoutes(s.name); err != nil {
+			s.rollback()
+			return nil, stepErr("route_add_failed", err)
+		}
+		s.routesOn = true
+		if s.routesOn && !s.wfpOn {
+			s.rollback()
+			return nil, stepErr("route_add_failed", fmt.Errorf("routes without wfp"))
+		}
+		notePhase("routes")
+		emit("routes-installed")
+		addr, stopStub, err := startLoopbackDNSStub()
+		if err != nil {
+			s.rollback()
+			return nil, stepErr("connect_timeout", err)
+		}
+		stopRelay := startTunRelay(dev, addr)
+		s.dnsStop = func() { stopRelay(); stopStub() }
+		emit("dns-listen 10.7.0.1:53 tun-relay upstream=" + addr)
+		notePhase("transport")
 	}
-	if err = addPeerRoute(s.name); err != nil {
-		s.rollback()
-		return nil, stepErr("route_add_failed", err)
-	}
-	s.peerOn = true
-	if err = addHostRoute(exitIP, s.physIf, s.physHop); err != nil {
-		s.rollback()
-		return nil, stepErr("route_add_failed", err)
-	}
-	s.hostOn = true
-	emit("host-route " + exitIP + "/32 via " + s.physHop)
-	if err = installSplitRoutes(s.name); err != nil {
-		s.rollback()
-		return nil, stepErr("route_add_failed", err)
-	}
-	s.routesOn = true
-	if s.routesOn && !s.wfpOn {
-		s.rollback()
-		return nil, stepErr("route_add_failed", fmt.Errorf("routes without wfp"))
-	}
-	notePhase("routes")
-	emit("routes-installed")
-	addr, stopStub, err := startLoopbackDNSStub()
-	if err != nil {
-		s.rollback()
-		return nil, stepErr("connect_timeout", err)
-	}
-	stopRelay := startTunRelay(dev, addr)
-	s.dnsStop = func() { stopRelay(); stopStub() }
-	emit("dns-listen 10.7.0.1:53 tun-relay upstream=" + addr)
-	notePhase("transport")
 	if err = probeExit(exitIP, s.physIdx); err != nil {
 		s.rollback()
 		return nil, stepErr("access_denied", err)
@@ -294,7 +310,7 @@ func startTunnelFromPipe(endpoint string, selfExit bool) {
 	if liveSess != nil {
 		return
 	}
-	sess, err := openTunnel(endpoint)
+	sess, err := openTunnel(endpoint, tunnelOpt{Exit: endpoint})
 	if err != nil {
 		emit("tunnel-error " + err.Error())
 		return

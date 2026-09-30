@@ -25,8 +25,9 @@ function syncMobile() {
 
   import { onMount } from 'svelte'
   import * as stores from './stores/messenger'
-  import { initIdentity, initIdentityAsync, connectRelays, sendPresence, getName, onMessage, onPresence, onTyping, getStatus } from './lib/api'
-  import { sendDM, getSeckey } from './lib/api'
+  import { initIdentity, initIdentityAsync, connectRelays, sendPresence, getName, onMessage, onMessageEdit, onMessageDelete, onPresence, onTyping, getStatus } from './lib/api'
+  import { sendDM, getSeckey, contentApi } from './lib/api'
+  import { parseFilemeta } from './lib/filemeta'
   import { decryptDM, isEncryptedPayload } from './lib/nip-e2e'
   import { startOutboxWatcher } from './lib/offline-outbox'
   import { getIdentity, type Identity } from './lib/identity'
@@ -126,18 +127,34 @@ if (initialView === 'newchat') {
       // HIGH audit fix: decrypt NIP-E2E payloads on receive
       void (async () => {
         const text = await maybeDecryptText(msg.from, msg.text || '')
-        stores.addMessage(chatId, { ...msg, text, read: false })
+        // TZ §3.4: a decrypted filemeta: descriptor becomes a real file/voice
+        // bubble (sanitized); anything hostile stays a plain text bubble.
+        const fm = parseFilemeta(text, rel => contentApi.download(rel.split('/').pop() || ''))
+        const patched = fm
+          ? { ...msg, type: (fm.kind === 'voice' ? 'voice' : (fm.mime.startsWith('image/') ? 'image' : 'file')) as Message['type'], text: fm.fileName, fileName: fm.fileName, fileSize: fm.fileSize, fileUrl: fm.fileUrl, voiceDuration: fm.voiceDuration, read: false }
+          : { ...msg, text, read: false }
+        stores.addMessage(chatId, patched)
         playIncoming()
         if (Notification.permission === 'granted' && document.hidden) {
           try {
             new Notification('Новое сообщение', {
-              body: `${peerName}: ${text.slice(0, 60)}`,
+              body: `${peerName}: ${(fm ? '📎 ' + fm.fileName : text).slice(0, 60)}`,
               icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg"><text y="32" font-size="32">🛡️</text></svg>'
             })
           } catch {}
         }
         updateTitle()
       })()
+    })
+
+    // TZ §3.2 (P15 wire): tombstones/edits arrive with the id FIELD.
+    onMessageEdit(p => {
+      const chatId = p.to.startsWith('group:') ? p.to : `dm:${p.from}`
+      stores.editMessage(chatId, p.id, p.text || '')
+    })
+    onMessageDelete(p => {
+      const chatId = p.to.startsWith('group:') ? p.to : `dm:${p.from}`
+      stores.deleteMessage(chatId, p.id)
     })
 
     onPresence((pk: string, online: boolean) => {
@@ -196,10 +213,13 @@ if (initialView === 'newchat') {
       stores.ensureDMChat(msg.from, peerName)
       void (async () => {
         const text = await maybeDecryptText(msg.from, msg.text || '')
-        stores.addMessage(`dm:${msg.from}`, {
-          id: msg.id, from: msg.from, to: msg.to, text,
-          timestamp: msg.timestamp, type: 'text', read: false,
-        })
+        // TZ §3.4: same filemeta contract on the nostr receive path.
+        const fm = parseFilemeta(text, rel => contentApi.download(rel.split('/').pop() || ''))
+        const base: Message = { id: msg.id, from: msg.from, to: msg.to, text, timestamp: msg.timestamp, type: 'text', read: false }
+        const patched = fm
+          ? { ...base, type: (fm.kind === 'voice' ? 'voice' : (fm.mime.startsWith('image/') ? 'image' : 'file')) as Message['type'], text: fm.fileName, fileName: fm.fileName, fileSize: fm.fileSize, fileUrl: fm.fileUrl, voiceDuration: fm.voiceDuration }
+          : base
+        stores.addMessage(`dm:${msg.from}`, patched)
         playIncoming()
       })()
     })

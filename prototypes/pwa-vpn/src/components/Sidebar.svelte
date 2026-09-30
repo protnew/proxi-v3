@@ -115,7 +115,8 @@
         </div>
         <div class="info">
           <div class="top-row">
-            <span class="name">{chat.name}</span>
+            <!-- TZ §3.3: presence dot wired to the live onPresence set (.c-name.online CSS) -->
+            <span class="name c-name" class:online={chat.type !== 'group' && onlineUsers.has(chat.id.replace('dm:', ''))}>{chat.name}</span>
             {#if chat.lastMessage}
               <span class="time">{formatTime(chat.lastMessage.timestamp)}</span>
             {/if}

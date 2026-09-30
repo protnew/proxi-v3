@@ -80,7 +80,7 @@ jobs:
           # GH windows runner steps already run elevated; -Verb RunAs would
           # hang on a UAC consent nobody can click.
           $p = Start-Process -FilePath "$env:OUT_DIR\proxi04-vpn-helper.exe" `
-            -ArgumentList '--connect-smoke','--hold',"--log=$env:HELPER_LOG" `
+            -ArgumentList '--connect-smoke','--hold','--smoke-no-route',"--log=$env:HELPER_LOG" `
             -WindowStyle Hidden -PassThru
           $p.Id | Out-File "$env:OUT_DIR\helper.pid"
           Write-Output "helper pid $($p.Id) started"
@@ -105,15 +105,19 @@ jobs:
           if (-not $hold) { Get-Content $env:HELPER_LOG -ErrorAction SilentlyContinue; throw "no hold marker in 40s" }
           Write-Output "hold marker seen — fast checks inside window"
           $markers = @(
-            'adapter created LUID=', 'wfp-engaged', 'dns-set 10.7.0.1',
-            'host-route', 'routes-installed', 'dns-listen 10.7.0.1:53',
+            'adapter created LUID=', 'wfp-engaged',
+            'routes-skipped(smoke-no-route)',
             'phase=exit-probe'
           )
           $log = Get-Content $env:HELPER_LOG
           foreach ($m in $markers) {
             if (-not ($log | Select-String -Pattern [regex]::Escape($m) -Quiet)) { throw "missing marker: $m" }
           }
-          Write-Output "all P-A markers present"
+          # Full-mode markers are intentionally absent in no-route mode.
+          foreach ($gone in @('host-route', 'routes-installed', 'dns-listen')) {
+            if ($log | Select-String -Pattern [regex]::Escape($gone) -Quiet) { throw "full-mode marker present in no-route run: $gone" }
+          }
+          Write-Output "all P-A markers present (no-route mode)"
 
       - name: Live inspection (netsh/route/WMI — may be slow, own budget)
         timeout-minutes: 2
@@ -157,9 +161,19 @@ jobs:
           $ad = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object Name -match 'Proxi0'
           if ($ad) { throw "Proxi0 adapter remains" }
           netsh wfp show filters file="$env:TEMP\wfp2.xml" | Out-Null
-          $wfp = Select-String -Path "$env:TEMP\wfp2.xml" -Pattern 'proxi04|Proxi0' 
+          $wfp = Select-String -Path "$env:TEMP\wfp2.xml" -Pattern 'proxi04|Proxi0'
           if ($wfp) { $wfp | Select-Object -First 5; throw "kill-switch filters remain" }
           Write-Output "post-clean state OK"
+
+      - name: winac ACL selftest (TZ §2.2 live proof)
+        if: always()
+        timeout-minutes: 2
+        run: |
+          $out = & "$env:OUT_DIR\proxi04-vpn-helper.exe" --selftest-acl 2>&1
+          $out | Write-Output
+          if ($LASTEXITCODE -ne 0 -or -not ($out | Select-String 'selftest-acl all ok' -Quiet)) {
+            throw "ACL selftest failed"
+          }
 
       - name: Secret hygiene gate (artifacts)
         if: always()

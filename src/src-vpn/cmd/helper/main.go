@@ -37,12 +37,25 @@ func main() {
 			os.Exit(0)
 		case "--connect-smoke":
 			hold := false
+			noRoute := false
+			adapterOnly := false
 			for _, a := range os.Args[2:] {
-				if a == "--hold" {
+				switch a {
+				case "--hold":
 					hold = true
+				case "--smoke-no-route":
+					noRoute = true
+				case "--smoke-adapter-only":
+					adapterOnly = true
+					noRoute = true
 				}
 			}
-			if err := runConnectSmoke(hold); err != nil {
+			if err := runConnectSmoke(hold, noRoute, adapterOnly); err != nil {
+				fail(err)
+			}
+			os.Exit(0)
+		case "--selftest-acl":
+			if err := selftestACL(); err != nil {
 				fail(err)
 			}
 			os.Exit(0)

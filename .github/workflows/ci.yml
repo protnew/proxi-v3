@@ -66,3 +66,16 @@ jobs:
           # glob expands to many files — check the first exists and is non-empty
           set -- dist/assets/*.js
           if [ "$#" -ge 1 ] && [ -f "$1" ] && [ -s "$1" ]; then echo "JS bundle OK ($# files)"; else echo "no JS bundle" >&2; exit 1; fi
+
+  # ─── TZ-04-20260930 §3.1: desktop (Tauri) compile gate ───
+  tauri-check:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: prototypes/pwa-vpn/src-tauri
+      - name: cargo check
+        working-directory: prototypes/pwa-vpn/src-tauri
+        run: cargo check --quiet

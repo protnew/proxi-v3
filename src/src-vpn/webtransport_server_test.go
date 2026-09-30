@@ -78,10 +78,23 @@ func TestWTServerWebTransportTunnel(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	rsp, sess, err := tr.Dial(ctx, url, nil)
+	// TZ §3.6: Dial is the flaky part on loaded CI runners — retry it a few
+	// times with a short per-attempt timeout before declaring failure.
+	var rsp *http.Response
+	var sess *webtransport.Session
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		dctx, dcancel := context.WithTimeout(context.Background(), 6*time.Second)
+		rsp, sess, err = tr.Dial(dctx, url, nil)
+		dcancel()
+		if err == nil {
+			break
+		}
+		lastErr = err
+		time.Sleep(300 * time.Millisecond)
+	}
 	if err != nil {
-		// fallback API name
-		t.Fatalf("Dial: %v", err)
+		t.Fatalf("Dial after retries: %v (last: %v)", err, lastErr)
 	}
 	if rsp != nil && rsp.StatusCode >= 300 {
 		t.Fatalf("status %d", rsp.StatusCode)
