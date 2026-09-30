@@ -112,7 +112,9 @@ jobs:
             'phase=exit-probe'
           )
           $log = Get-Content $env:HELPER_LOG
-          $missing = @($markers | Where-Object { -not ($log | Select-String -Pattern [regex]::Escape($_) -Quiet) })
+          # NB: pwsh Select-String -Quiet does NOT accept pipeline input —
+          # always query by -Path with named -Pattern.
+          $missing = @($markers | Where-Object { -not (Select-String -Path $env:HELPER_LOG -Pattern ([regex]::Escape($_)) -Quiet) })
           if ($missing.Count -gt 0) {
             Write-Output "--- helper.log (first 40 lines) ---"
             $log | Select-Object -First 40 | Write-Output
@@ -120,7 +122,7 @@ jobs:
           }
           # Full-mode markers are intentionally absent in adapter-only mode.
           foreach ($gone in @('host-route', 'routes-installed', 'dns-listen', 'wfp-engaged')) {
-            if ($log | Select-String -Pattern [regex]::Escape($gone) -Quiet) { throw "full-mode marker present in adapter-only run: $gone" }
+            if (Select-String -Path $env:HELPER_LOG -Pattern ([regex]::Escape($gone)) -Quiet) { throw "full-mode marker present in adapter-only run: $gone" }
           }
           Write-Output "all P-A markers present (adapter-only mode)"
 
@@ -145,12 +147,12 @@ jobs:
           if (Test-Path $pidFile) { $procId = [int](Get-Content $pidFile) }
           while ((Get-Date) -lt $deadline) {
             if ($procId -and -not (Get-Process -Id $procId -ErrorAction SilentlyContinue)) { break }
-            if ((Test-Path $env:HELPER_LOG) -and (Select-String $env:HELPER_LOG 'routes-clean' -Quiet)) { break }
+            if ((Test-Path $env:HELPER_LOG) -and (Select-String -Path $env:HELPER_LOG -Pattern 'routes-clean' -Quiet)) { break }
             Start-Sleep -Milliseconds 500
           }
           if (Test-Path $env:HELPER_LOG) {
-            if (-not (Select-String $env:HELPER_LOG 'routes-clean' -Quiet)) { Write-Warning "no routes-clean marker" }
-            if (-not (Select-String $env:HELPER_LOG 'hold-stop|hold-timeout' -Quiet)) { Write-Warning "no hold-stop marker" }
+            if (-not (Select-String -Path $env:HELPER_LOG -Pattern 'routes-clean' -Quiet)) { Write-Warning "no routes-clean marker" }
+            if (-not (Select-String -Path $env:HELPER_LOG -Pattern 'hold-stop|hold-timeout' -Quiet)) { Write-Warning "no hold-stop marker" }
           }
           if ($procId -and (Get-Process -Id $procId -ErrorAction SilentlyContinue)) {
             Write-Warning "helper still alive — fallback kill"
