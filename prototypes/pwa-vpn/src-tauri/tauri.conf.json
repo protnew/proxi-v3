@@ -45,7 +45,7 @@
       "timestampUrl": "",
       "nsis": {
         "installMode": "perMachine",
-        "include": "installer-hooks.nsh"
+        "installerHooks": "./installer-hooks.nsh"
       }
     }
   },
